@@ -1,0 +1,23 @@
+{
+  "slug": "SignalFunctionSet",
+  "name": "Signal Function Set",
+  "version": "2.0.0",
+  "license": "proprietary",
+  "brand": "Signal Function Set",
+  "author": "Stuart Frederich-Smith",
+  "authorEmail": "hello@signalfunctionset.com",
+  "authorUrl": "https://signalfunctionset.com/",
+  "pluginUrl": "https://signalfunctionset.com/",
+  "manualUrl": "https://signalfunctionset.com/quad-attenuating-lfo",
+  "sourceUrl": "",
+  "donateUrl": "",
+  "changelogUrl": "",
+  "modules": [
+    {
+      "slug": "QuadLFO",
+      "name": "Quad LFO",
+      "description": "Phase shifted LFO with offset, attenuation and stability controls",
+      "tags": ["LFO","chaos"]
+    }
+  ]
+}
