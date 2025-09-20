@@ -3,7 +3,7 @@
 
 
 using namespace rack;
-extern Model* modelQuadLFO;
+extern Model* modelDrift;
 
 // Declare the Plugin, defined in plugin.cpp
 extern Plugin* pluginInstance;

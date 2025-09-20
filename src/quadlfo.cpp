@@ -1,7 +1,7 @@
 #include "plugin.hpp"
 
 
-struct QuadLFO : Module {
+struct Drift : Module {
 	enum ParamId {
 		PARAMSHAPE_PARAM,
 		PARAMSTABILITY_PARAM,
@@ -58,7 +58,7 @@ struct QuadLFO : Module {
 	float brownianTarget[4] = {0.f, 0.f, 0.f, 0.f};
 	float lastBrownianPhase[4] = {0.f, 0.f, 0.f, 0.f};
 
-	QuadLFO() {
+	Drift() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(PARAMSHAPE_PARAM, 0.f, 1.f, 0.5f, "Shape", "", 0.f, 1.f);
 		configParam(PARAMSTABILITY_PARAM, 0.f, 1.f, 0.5f, "Stability", "", 0.f, 1.f);
@@ -308,8 +308,8 @@ struct QuadLFO : Module {
 };
 
 
-struct QuadLFOWidget : ModuleWidget {
-	QuadLFOWidget(QuadLFO* module) {
+struct DriftWidget : ModuleWidget {
+	DriftWidget(Drift* module) {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/quadlfo.svg")));
 
@@ -318,28 +318,28 @@ struct QuadLFOWidget : ModuleWidget {
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.1, 15.0)), module, QuadLFO::PARAMSTABILITY_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.7, 15.0)), module, QuadLFO::PARAMSHAPE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.1, 62.5)), module, QuadLFO::PARAMXSPREAD_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.7, 37.5)), module, QuadLFO::PARAMCENTER_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.7, 62.5)), module, QuadLFO::PARAMFREQUENCY_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.1, 37.5)), module, QuadLFO::PARAMYSPREAD_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.1, 15.0)), module, Drift::PARAMSTABILITY_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.7, 15.0)), module, Drift::PARAMSHAPE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.1, 62.5)), module, Drift::PARAMXSPREAD_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.7, 37.5)), module, Drift::PARAMCENTER_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.7, 62.5)), module, Drift::PARAMFREQUENCY_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.1, 37.5)), module, Drift::PARAMYSPREAD_PARAM));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.306, 85.365)), module, QuadLFO::INSHAPE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(18.955, 85.365)), module, QuadLFO::INSTABILITY_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(31.568, 85.365)), module, QuadLFO::INFREQUENCY_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(44.182, 85.365)), module, QuadLFO::INSPREAD_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(18.955, 102.033)), module, QuadLFO::INCENTER_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(31.568, 102.033)), module, QuadLFO::INYSPREAD_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.306, 85.365)), module, Drift::INSHAPE_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(18.955, 85.365)), module, Drift::INSTABILITY_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(31.568, 85.365)), module, Drift::INFREQUENCY_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(44.182, 85.365)), module, Drift::INSPREAD_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(18.955, 102.033)), module, Drift::INCENTER_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(31.568, 102.033)), module, Drift::INYSPREAD_INPUT));
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(44.182, 102.033)), module, QuadLFO::OUTMAX_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(6.255, 102.454)), module, QuadLFO::OUTMIN_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(6.306, 117.363)), module, QuadLFO::OUTA_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(18.955, 117.363)), module, QuadLFO::OUTB_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(31.568, 117.363)), module, QuadLFO::OUTC_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(44.182, 117.363)), module, QuadLFO::OUTD_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(44.182, 102.033)), module, Drift::OUTMAX_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(6.255, 102.454)), module, Drift::OUTMIN_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(6.306, 117.363)), module, Drift::OUTA_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(18.955, 117.363)), module, Drift::OUTB_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(31.568, 117.363)), module, Drift::OUTC_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(44.182, 117.363)), module, Drift::OUTD_OUTPUT));
 	}
 };
 
 
-Model* modelQuadLFO = createModel<QuadLFO, QuadLFOWidget>("QuadLFO");
+Model* modelDrift = createModel<Drift, DriftWidget>("Drift");

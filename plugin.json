@@ -14,8 +14,8 @@
   "changelogUrl": "",
   "modules": [
     {
-      "slug": "QuadLFO",
-      "name": "Quad LFO",
+      "slug": "Drift",
+      "name": "Drift",
       "description": "Phase shifted LFO with offset, attenuation and stability controls",
       "tags": ["LFO","chaos"]
     }
