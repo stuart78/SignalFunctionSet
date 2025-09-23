@@ -17,10 +17,10 @@ A  4-channel LFO with chaos capabilities and advanced phase and scaling control.
 
 
 **Controls:**
-- **Shape** (0-1): Morphs between waveform types (sine/triangle/sawtooth/square/chaos)
-- **Stability** (0-1): Adds uncertaintly to the wave forms. Higer values are more stable. Stability is calcularted independently, so each output will be slightly different. This is useful for sublte 
-- **Center** (-5V to +5V): DC offset for all outputs. 
-- **Spread** (0-1): Controls the amplitude of the oututs. This output is bipoloar, so 5v is +/- 5v.
+- **Shape**: Morphs between waveform types (sine/triangle/sawtooth/square/chaos)
+- **Stability**: Adds uncertaintly to the wave forms. Higer values are more stable. Stability is calcularted independently, so each output will be slightly different. This is useful for sublte 
+- **Center** (bipolar): DC offset for all outputs. 
+- **Spread**: Controls the amplitude of the oututs. This output is bipoloar, so 5v is +/- 5v.
 - **Frequency**: Sets LFO frequency in Hz. Slow to the left, fast to the right.
 - **Phase**: Sets the phase offset relative to A. At 1, A is 0°, B is 90°, C is 180° and D is 270°
 
