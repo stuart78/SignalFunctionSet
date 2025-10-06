@@ -1,8 +1,8 @@
 {
   "slug": "SignalFunctionSet",
   "name": "Signal Function Set",
-  "version": "1.0.0",
-  "license": "GPLv3+",
+  "version": "2.0.0",
+  "license": "GPL-3.0-or-later",
   "brand": "SignalFunctionSet",
   "author": "Stuart Frederich-Smith",
   "authorEmail": "hello@signalfunctionset.com",
@@ -17,7 +17,7 @@
       "slug": "Drift",
       "name": "Drift",
       "description": "Phase shifted LFO with offset, attenuation and stability controls",
-      "tags": ["LFO","chaos"]
+      "tags": ["LFO","Quad","Random","Utility"]
     }
   ]
 }
