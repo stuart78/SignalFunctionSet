@@ -1,9 +1,9 @@
 {
-  "slug": "SignalFunctionSet",
-  "name": "Signal Function Set",
+  "slug": "SignalFunctionSet-dev",
+  "name": "Signal Function Set (Dev)",
   "version": "2.0.0",
   "license": "GPL-3.0-or-later",
-  "brand": "SignalFunctionSet",
+  "brand": "SignalFunctionSet-dev",
   "author": "Stuart Frederich-Smith",
   "authorEmail": "hello@signalfunctionset.com",
   "authorUrl": "https://signalfunctionset.com/",
@@ -17,7 +17,22 @@
       "slug": "Drift",
       "name": "Drift",
       "description": "Phase shifted LFO with offset, attenuation and stability controls",
-      "tags": ["LFO","Quad","Random","Utility"]
+      "tags": [
+        "LFO",
+        "Quad",
+        "Random",
+        "Utility"
+      ]
+    },
+    {
+      "slug": "gsx",
+      "name": "GSX",
+      "description": "Granular synthesis module with real-time control over temporal, spectral, and spatial parameters",
+      "tags": [
+        "Granular",
+        "Synth voice",
+        "Polyphonic"
+      ]
     }
   ]
 }

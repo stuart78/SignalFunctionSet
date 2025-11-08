@@ -21,15 +21,15 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      showgrid="true"
-     inkscape:zoom="7.3203479"
-     inkscape:cx="30.39473"
-     inkscape:cy="67.278223"
+     inkscape:zoom="2.5881338"
+     inkscape:cx="107.99287"
+     inkscape:cy="305.43243"
      inkscape:window-width="1528"
      inkscape:window-height="1044"
      inkscape:window-x="95"
-     inkscape:window-y="35"
+     inkscape:window-y="31"
      inkscape:window-maximized="0"
-     inkscape:current-layer="layer3"
+     inkscape:current-layer="layer1"
      inkscape:document-units="mm"
      showguides="false">
     <inkscape:grid
@@ -434,8 +434,7 @@
        id="rect13"
        style="display:inline;fill:#e6e6e6;stroke-width:0.999998"
        d="M -0.00411003,0.00178039 H 192.00413 V 485.3455 H -0.00411003 Z"
-       sodipodi:nodetypes="ccccc"
-       sodipodi:insensitive="true" />
+       sodipodi:nodetypes="ccccc" />
     <path
        id="rect2"
        class="st3"
@@ -543,7 +542,8 @@
          d="m -236.87786,120.84785 v -1.584 h -1.128 v 1.644 c 0,0.312 0.012,0.672 -0.276,0.876 -0.168,0.132 -0.36,0.12 -0.432,0.12 -0.624,0 -0.66,-0.456 -0.672,-0.684 -0.012,-0.096 -0.012,-0.192 -0.012,-0.288 v -4.68 c 0,-0.324 -0.024,-0.684 0.252,-0.924 0.096,-0.072 0.216,-0.144 0.456,-0.144 0.744,0 0.684,0.696 0.684,0.876 v 1.308 h 1.128 v -1.08 c 0,-0.408 -0.012,-0.792 -0.18,-1.176 -0.084,-0.204 -0.216,-0.384 -0.396,-0.528 -0.216,-0.18 -0.552,-0.372 -1.176,-0.372 -0.264,0 -0.468,0.024 -0.708,0.108 -1.08,0.348 -1.14,1.416 -1.164,1.74 -0.012,0.192 -0.024,0.384 -0.024,0.576 v 4.092 c 0,0.492 0,1.02 0.3,1.452 0.204,0.3 0.636,0.696 1.5,0.696 0.9,0 1.332,-0.444 1.536,-0.744 0.276,-0.408 0.312,-0.816 0.312,-1.284 z m 3.672,1.92 v -1.068 h -1.656 v -2.808 h 1.476 v -1.056 h -1.488 v -2.484 h 1.668 v -1.056 h -2.796 v 8.472 z m 4.236,0 v -8.472 h -1.056 l 0.048,5.772 -1.332,-5.772 h -1.2 v 8.472 h 1.044 l -0.096,-6.216 1.356,6.216 z m 4.344,-7.476 v -0.996 h -3.744 v 0.996 h 1.284 v 7.476 h 1.14 v -7.476 z m 3.42,7.476 v -1.068 h -1.656 v -2.808 h 1.476 v -1.056 h -1.488 v -2.484 h 1.668 v -1.056 h -2.796 v 8.472 z m 4.212,0 c -0.192,-0.528 -0.216,-0.708 -0.216,-1.668 v -0.924 c 0,-0.696 -0.012,-1.044 -0.204,-1.344 -0.24,-0.372 -0.588,-0.324 -0.768,-0.36 0.18,-0.024 0.66,-0.012 0.864,-0.456 0.084,-0.192 0.12,-0.456 0.132,-0.672 0.024,-0.336 0.024,-0.672 0.024,-0.996 0,-0.576 -0.024,-0.996 -0.072,-1.212 -0.168,-0.768 -0.732,-0.804 -1.032,-0.828 -0.132,-0.012 -0.276,-0.012 -0.42,-0.012 h -1.824 v 8.472 h 1.116 v -3.9 h 0.456 c 0.132,0 0.252,0.024 0.36,0.108 0.144,0.132 0.18,0.336 0.204,0.54 0.036,0.288 0.048,0.588 0.048,0.876 v 0.6 c 0,0.804 0.024,0.984 0.168,1.776 z m -1.272,-6.504 c 0,0.588 -0.012,1.092 -0.06,1.296 -0.072,0.3 -0.24,0.372 -0.528,0.372 h -0.528 v -2.616 h 0.564 c 0.216,0 0.336,0 0.408,0.072 0.072,0.06 0.108,0.156 0.12,0.336 0.012,0.18 0.024,0.36 0.024,0.54 z"
          id="text13"
          transform="translate(276.56217,78.138037)"
-         aria-label="CENTER" />
+         aria-label="CENTER"
+         sodipodi:nodetypes="sccscscsscssccsccsccsscscscccccccccccccccccccccccccccccccccccccccccccccccssccccsccsccccsccssccscsccscss" />
     </g>
     <path
        style="font-weight:500;font-stretch:condensed;font-family:'Akzidenz-Grotesk BQ Condensed A';-inkscape-font-specification:'Akzidenz-Grotesk BQ Condensed A Medium Condensed';white-space:pre"
@@ -697,10 +697,10 @@
        style="font-weight:500;font-stretch:condensed;font-size:16px;font-family:'Akzidenz-Grotesk BQ Condensed A';-inkscape-font-specification:'Akzidenz-Grotesk BQ Condensed A Medium Condensed';text-align:start;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect92);fill:#666666;fill-opacity:1;stroke:#666666;stroke-width:1.32283;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"><tspan
          x="66.46875"
          y="496.44863"
-         id="tspan4"><tspan
+         id="tspan2"><tspan
            dx="0 7.29599 3.776001 8.2720032 8.2720032 7.5679932 3.7600098 3.29599 6.9599915 8.2720032 8.2720032 6.4159851 4.9760132 3.776001 8.0639954 8.2720032 3.29599 7.29599 7.5679932"
            style="fill:none"
-           id="tspan3">Signal Function Set</tspan></tspan></text>
+           id="tspan1">Signal Function Set</tspan></tspan></text>
     <path
        style="fill:none;fill-opacity:1;stroke:#666666;stroke-width:1.32283;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
        d="m 19.841567,51.354304 2.4,-3.165328 3.516871,5.669291 1.944544,-2.503979"
