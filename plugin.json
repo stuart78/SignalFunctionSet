@@ -27,8 +27,7 @@
     {
       "slug": "gsx",
       "name": "GSX",
-      "description": "Granular synthesis module based on Barry Truax's GSX system (1985-86), with real-time control over
-  temporal, spectral, and spatial parameters",
+      "description": "Granular synthesis module based on Barry Truax's GSX system (1985-86), with real-time control over temporal, spectral, and spatial parameters",
       "tags": [
         "Granular",
         "Oscillator"
