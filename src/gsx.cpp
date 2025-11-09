@@ -129,7 +129,7 @@ struct Gsx : Module {
 
 	Gsx() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(PARAMFREQUENCY_PARAM, std::log2(50.f), std::log2(2000.f), std::log2(440.f), "Frequency", " Hz", 2.f, 1.f);
+		configParam(PARAMFREQUENCY_PARAM, std::log2(50.f), std::log2(2000.f), std::log2(130.81f), "Frequency", " Hz", 2.f, 1.f);
 		configParam(PARAMSTREAMS_PARAM, 1.f, 20.f, 10.f, "Streams", " streams");
 		configParam(PARAMSHAPE_PARAM, 0.f, 1.f, 0.f, "Shape");
 		configParam(PARAMRANGE_PARAM, 0.f, 500.f, 100.f, "Range", " Hz");
@@ -169,24 +169,24 @@ struct Gsx : Module {
 
 		float shape = params[PARAMSHAPE_PARAM].getValue();
 		if (inputs[INSHAPE_INPUT].isConnected()) {
-			shape = clamp(shape + inputs[INSHAPE_INPUT].getVoltage() / 10.f, 0.f, 1.f);
+			shape = clamp(shape + inputs[INSHAPE_INPUT].getVoltage() / 5.f, 0.f, 1.f);
 		}
 
 		float range = params[PARAMRANGE_PARAM].getValue();
 		if (inputs[INRANGE_INPUT].isConnected()) {
-			range = clamp(range + inputs[INRANGE_INPUT].getVoltage() * 50.f, 0.f, 500.f);
+			range = clamp(range + inputs[INRANGE_INPUT].getVoltage() * 100.f, 0.f, 500.f);
 		}
 
 		float duration = params[PARAMDURATION_PARAM].getValue() / 1000.f; // Convert ms to seconds
 		if (inputs[INDURATION_INPUT].isConnected()) {
 			duration = clamp((params[PARAMDURATION_PARAM].getValue() +
-				inputs[INDURATION_INPUT].getVoltage() * 10.f) / 1000.f, 0.001f, 0.1f);
+				inputs[INDURATION_INPUT].getVoltage() * 20.f) / 1000.f, 0.001f, 0.1f);
 		}
 
 		float density = params[PARAMDENSITY_PARAM].getValue();
 		if (inputs[INDENSITY_INPUT].isConnected()) {
 			density = clamp(params[PARAMDENSITY_PARAM].getValue() +
-				inputs[INDENSITY_INPUT].getVoltage() * 100.f, 1.f, 1000.f);
+				inputs[INDENSITY_INPUT].getVoltage() * 200.f, 1.f, 1000.f);
 		}
 
 		// Always use Density as primary timing control (grains/sec -> seconds between grains)
@@ -196,7 +196,7 @@ struct Gsx : Module {
 		float delayOffset = params[PARAMDELAY_PARAM].getValue() / 1000.f; // Convert ms to seconds
 		if (inputs[INDELAY_INPUT].isConnected()) {
 			delayOffset = clamp((params[PARAMDELAY_PARAM].getValue() +
-				inputs[INDELAY_INPUT].getVoltage() * 20.f) / 1000.f, 0.0001f, 0.2f);
+				inputs[INDELAY_INPUT].getVoltage() * 40.f) / 1000.f, 0.0001f, 0.2f);
 		}
 
 		// Add delay offset if specified (allows manual override when Delay knob is turned up)
@@ -206,18 +206,18 @@ struct Gsx : Module {
 
 		float variation = params[PARAMVARIATION_PARAM].getValue();
 		if (inputs[INVARIATION_INPUT].isConnected()) {
-			variation = clamp(variation + inputs[INVARIATION_INPUT].getVoltage() / 10.f, 0.f, 1.f);
+			variation = clamp(variation + inputs[INVARIATION_INPUT].getVoltage() / 5.f, 0.f, 1.f);
 		}
 
 		float spread = params[PARAMSPREAD_PARAM].getValue();
 		if (inputs[INSPREAD_INPUT].isConnected()) {
-			spread = clamp(spread + inputs[INSPREAD_INPUT].getVoltage() / 10.f, 0.f, 1.f);
+			spread = clamp(spread + inputs[INSPREAD_INPUT].getVoltage() / 5.f, 0.f, 1.f);
 		}
 
-		// Read VCA input (0-10V = 0-1 gain, linear VCA)
+		// Read VCA input (0-5V = 0-1 gain, linear VCA)
 		float vcaGain = 1.f;
 		if (inputs[INVCA_INPUT].isConnected()) {
-			vcaGain = clamp(inputs[INVCA_INPUT].getVoltage() / 10.f, 0.f, 1.f);
+			vcaGain = clamp(inputs[INVCA_INPUT].getVoltage() / 5.f, 0.f, 1.f);
 		}
 
 		// Initialize output accumulators
@@ -264,10 +264,18 @@ struct Gsx : Module {
 						// Each grain gets random pan position across the stereo field
 						float panPos = 0.5f; // Center by default
 						if (spread > 0.01f) {
-							// Random pan position: spread controls width of distribution
-							// 0% spread = center only, 100% spread = full L-R range
+							// Random pan position with dramatic stereo spread
+							// Push distribution toward extremes (hard left/right) at high spread values
 							float randomPan = random::uniform(); // 0 to 1
-							panPos = 0.5f + (randomPan - 0.5f) * spread;
+
+							// Apply square root curve to bias toward extremes
+							// Normalize to -1 to 1, apply sqrt, scale back
+							float offset = randomPan - 0.5f; // -0.5 to 0.5
+							float sign = (offset >= 0.f) ? 1.f : -1.f;
+							float normalized = std::abs(offset) * 2.f; // 0 to 1
+							float pushed = std::sqrt(normalized) * 0.5f * sign; // -0.5 to 0.5, biased toward extremes
+
+							panPos = 0.5f + pushed * spread;
 							panPos = clamp(panPos, 0.f, 1.f);
 						}
 
@@ -354,25 +362,25 @@ struct GsxWidget : ModuleWidget {
 		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(10.16, 18.53)), module, Gsx::PARAMFREQUENCY_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(30.48, 18.53)), module, Gsx::PARAMSTREAMS_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(50.8, 18.53)), module, Gsx::PARAMSHAPE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(10.16, 38.85)), module, Gsx::PARAMRANGE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(30.48, 38.85)), module, Gsx::PARAMDURATION_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(50.8, 38.85)), module, Gsx::PARAMDELAY_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(10.16, 59.17)), module, Gsx::PARAMDENSITY_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(30.48, 59.17)), module, Gsx::PARAMVARIATION_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(50.8, 59.17)), module, Gsx::PARAMSPREAD_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(10.16, 28.69)), module, Gsx::PARAMFREQUENCY_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(30.48, 28.69)), module, Gsx::PARAMSTREAMS_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(50.8, 28.69)), module, Gsx::PARAMSHAPE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(10.16, 59.17)), module, Gsx::PARAMRANGE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(30.48, 59.17)), module, Gsx::PARAMDURATION_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(50.8, 59.17)), module, Gsx::PARAMDELAY_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(10.16, 89.65)), module, Gsx::PARAMDENSITY_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(30.48, 89.65)), module, Gsx::PARAMVARIATION_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(50.8, 89.65)), module, Gsx::PARAMSPREAD_PARAM));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.16, 74.41)), module, Gsx::INFREQUENCY_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(30.48, 74.41)), module, Gsx::INSTREAMS_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(50.8, 74.41)), module, Gsx::INSHAPE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.16, 89.65)), module, Gsx::INRANGE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(30.48, 89.65)), module, Gsx::INDURATION_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(50.8, 89.65)), module, Gsx::INDELAY_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.16, 104.89)), module, Gsx::INDENSITY_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(30.48, 104.89)), module, Gsx::INVARIATION_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(50.8, 104.89)), module, Gsx::INSPREAD_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.16, 41.39)), module, Gsx::INFREQUENCY_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(30.48, 41.39)), module, Gsx::INSTREAMS_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(50.8, 41.39)), module, Gsx::INSHAPE_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.16, 71.87)), module, Gsx::INRANGE_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(30.48, 71.87)), module, Gsx::INDURATION_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(50.8, 71.87)), module, Gsx::INDELAY_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.16, 102.35)), module, Gsx::INDENSITY_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(30.48, 102.35)), module, Gsx::INVARIATION_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(50.8, 102.35)), module, Gsx::INSPREAD_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.16, 120.13)), module, Gsx::INVCA_INPUT));
 
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(40.64, 120.13)), module, Gsx::OUTLEFT_OUTPUT));
