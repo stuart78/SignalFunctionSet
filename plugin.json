@@ -33,6 +33,16 @@
         "Granular",
         "Oscillator"
       ]
+    },
+    {
+      "slug": "Fugue",
+      "name": "Fugue",
+      "description": "8-step harmonic deviation sequencer with three independent CV/gate voices",
+      "tags": [
+        "Sequencer",
+        "Polyphonic",
+        "Quantizer"
+      ]
     }
   ]
 }

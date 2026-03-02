@@ -8,6 +8,7 @@ void init(Plugin* p) {
 	pluginInstance = p;
 	p->addModel(modelDrift);
 	p->addModel(modelGsx);
+	p->addModel(modelFugue);
 
 	// Add modules here
 	// p->addModel(modelMyModule);
