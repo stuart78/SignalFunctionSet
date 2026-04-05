@@ -10,6 +10,7 @@ void init(Plugin* p) {
 	p->addModel(modelGsx);
 	p->addModel(modelFugue);
 	p->addModel(modelPhase);
+	p->addModel(modelOvertone);
 
 	// Add modules here
 	// p->addModel(modelMyModule);

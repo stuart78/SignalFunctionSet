@@ -1,0 +1,462 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="101.6mm" height="128.5mm" viewBox="0 0 101.6 128.5">
+
+  <!-- Panel background -->
+  <rect width="101.6" height="128.5" fill="#f0f0f0"/>
+  <text x="50.8" y="8" text-anchor="middle" font-family="sans-serif" font-size="4" fill="#231f20">FUGUE</text>
+
+  <!-- ==================== STEP INDICATOR LEDS ==================== -->
+  <!-- Voice A lights Y=19.05 -->
+  <g transform="translate(35.56,19.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(43.71,19.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(51.86,19.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(60.01,19.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(68.16,19.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(76.31,19.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(84.46,19.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(92.61,19.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <!-- Voice B lights Y=22.05 -->
+  <g transform="translate(35.56,22.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(43.71,22.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(51.86,22.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(60.01,22.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(68.16,22.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(76.31,22.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(84.46,22.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(92.61,22.05)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <!-- Voice C lights Y=25.04 -->
+  <g transform="translate(35.56,25.04)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(43.71,25.04)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(51.86,25.04)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(60.01,25.04)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(68.16,25.04)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(76.31,25.04)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(84.46,25.04)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(92.61,25.04)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== LEFT COLUMN KNOBS ==================== -->
+  <!-- Root Y=22.9, Scale Y=22.9 -->
+  <text x="10.16" y="18" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">ROOT</text>
+  <text x="22.86" y="18" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SCALE</text>
+  <g transform="translate(10.16,22.9)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(22.86,22.9)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <!-- Root CV Y=33.87, Scale CV Y=33.87 -->
+  <g transform="translate(10.16,33.87)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(22.86,33.87)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- Steps Y=50.62, Slew Y=50.62 -->
+  <text x="10.16" y="46" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">STEPS</text>
+  <text x="22.86" y="46" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SLEW</text>
+  <g transform="translate(10.16,50.62)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(22.86,50.62)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <!-- Steps CV Y=61.63, Slew CV Y=61.63 -->
+  <g transform="translate(10.16,61.63)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(22.86,61.63)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- Reset input Y=77.23, Reset button Y=77.23 -->
+  <text x="10.16" y="73" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">RST IN</text>
+  <text x="22.86" y="73" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">RST BTN</text>
+  <g transform="translate(10.16,77.23)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(22.86,77.23)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== PITCH FADERS Y=43.03 ==================== -->
+  <!-- 8 faders at X = 35.56 + i*8.15 -->
+  <g transform="translate(35.56,43.03)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#cc00cc" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#cc00cc" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#cc00cc" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(43.71,43.03)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#cc00cc" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#cc00cc" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#cc00cc" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(51.86,43.03)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#cc00cc" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#cc00cc" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#cc00cc" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(60.01,43.03)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#cc00cc" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#cc00cc" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#cc00cc" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(68.16,43.03)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#cc00cc" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#cc00cc" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#cc00cc" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(76.31,43.03)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#cc00cc" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#cc00cc" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#cc00cc" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(84.46,43.03)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#cc00cc" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#cc00cc" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#cc00cc" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(92.61,43.03)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#cc00cc" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#cc00cc" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#cc00cc" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== GATE TOGGLES ==================== -->
+  <!-- Voice A gates Y=63.05 -->
+  <g transform="translate(35.56,63.05)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(43.71,63.05)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(51.86,63.05)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(60.01,63.05)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(68.16,63.05)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(76.31,63.05)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(84.46,63.05)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(92.61,63.05)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <!-- Voice B gates Y=70.03 -->
+  <g transform="translate(35.56,70.03)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(43.71,70.03)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(51.86,70.03)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(60.01,70.03)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(68.16,70.03)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(76.31,70.03)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(84.46,70.03)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(92.61,70.03)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <!-- Voice C gates Y=77.06 -->
+  <g transform="translate(35.56,77.06)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(43.71,77.06)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(51.86,77.06)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(60.01,77.06)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(68.16,77.06)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(76.31,77.06)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(84.46,77.06)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(92.61,77.06)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== BOTTOM SECTION ==================== -->
+  <!-- Voice A row Y=99.63 -->
+  <text x="10.16" y="95" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">CLK A</text>
+  <text x="22.86" y="95" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">WND A</text>
+  <text x="50.6" y="95" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">WNDR A</text>
+  <text x="79.94" y="95" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">GATE A</text>
+  <text x="89.6" y="95" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">CV A</text>
+  <g transform="translate(10.16,99.63)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(22.86,99.63)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(50.6,99.63)">
+    <line x1="-3" y1="0" x2="3" y2="0" stroke="#cc6600" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#cc6600" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#cc6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(79.94,99.63)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(89.6,99.63)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- Voice B row Y=108.42 -->
+  <text x="10.16" y="104" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">CLK B</text>
+  <text x="22.86" y="104" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">WND B</text>
+  <text x="50.6" y="104" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">WNDR B</text>
+  <text x="79.94" y="104" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">GATE B</text>
+  <text x="89.6" y="104" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">CV B</text>
+  <g transform="translate(10.16,108.42)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(22.86,108.42)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(50.6,108.42)">
+    <line x1="-3" y1="0" x2="3" y2="0" stroke="#cc6600" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#cc6600" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#cc6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(79.94,108.42)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(89.6,108.42)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- Voice C row Y=117.22 -->
+  <text x="10.16" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">CLK C</text>
+  <text x="22.86" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">WND C</text>
+  <text x="50.6" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">WNDR C</text>
+  <text x="79.94" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">GATE C</text>
+  <text x="89.6" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">CV C</text>
+  <g transform="translate(10.16,117.22)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(22.86,117.22)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(50.6,117.22)">
+    <line x1="-3" y1="0" x2="3" y2="0" stroke="#cc6600" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#cc6600" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#cc6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(79.94,117.22)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(89.6,117.22)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+</svg>

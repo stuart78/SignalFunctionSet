@@ -53,6 +53,15 @@
         "Dual",
         "Recording"
       ]
+    },
+    {
+      "slug": "Overtone",
+      "name": "Overtone",
+      "description": "Additive synthesis VCO with 8 individually-toggled harmonics and waveform display",
+      "tags": [
+        "Oscillator",
+        "VCO"
+      ]
     }
   ]
 }

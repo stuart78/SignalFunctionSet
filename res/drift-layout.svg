@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="50.8mm" height="128.5mm" viewBox="0 0 50.8 128.5">
+
+  <!-- Panel background -->
+  <rect width="50.8" height="128.5" fill="#f0f0f0"/>
+  <text x="25.4" y="8" text-anchor="middle" font-family="sans-serif" font-size="4" fill="#231f20">DRIFT</text>
+
+  <!-- ==================== KNOBS ROW 1 Y=15 ==================== -->
+  <text x="12.7" y="10.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SHAPE</text>
+  <text x="38.1" y="10.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">STABIL</text>
+  <g transform="translate(12.7,15)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(38.1,15)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== KNOBS ROW 2 Y=37.5 ==================== -->
+  <text x="12.7" y="33" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">CENTER</text>
+  <text x="38.1" y="33" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">Y SPRD</text>
+  <g transform="translate(12.7,37.5)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(38.1,37.5)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== KNOBS ROW 3 Y=62.5 ==================== -->
+  <text x="12.7" y="58" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">FREQ</text>
+  <text x="38.1" y="58" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">X SPRD</text>
+  <g transform="translate(12.7,62.5)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(38.1,62.5)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== CV INPUTS ROW 1 Y=85.365 ==================== -->
+  <text x="6.306" y="81" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">SHAPE</text>
+  <text x="18.955" y="81" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">STAB</text>
+  <text x="31.568" y="81" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">FREQ</text>
+  <text x="44.182" y="81" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">X SPR</text>
+  <g transform="translate(6.306,85.365)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(18.955,85.365)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(31.568,85.365)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(44.182,85.365)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== CV INPUTS ROW 2 + OUTPUTS Y=102.033 ==================== -->
+  <text x="6.255" y="97.5" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">MIN</text>
+  <text x="18.955" y="97.5" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">CNTR</text>
+  <text x="31.568" y="97.5" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">Y SPR</text>
+  <text x="44.182" y="97.5" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">MAX</text>
+  <g transform="translate(6.255,102.454)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(18.955,102.033)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(31.568,102.033)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(44.182,102.033)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== OUTPUTS ROW Y=117.363 ==================== -->
+  <text x="6.306" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">A</text>
+  <text x="18.955" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">B</text>
+  <text x="31.568" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">C</text>
+  <text x="44.182" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">D</text>
+  <g transform="translate(6.306,117.363)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(18.955,117.363)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(31.568,117.363)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(44.182,117.363)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+</svg>

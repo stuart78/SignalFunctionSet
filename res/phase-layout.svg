@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="101.6mm" height="128.5mm" viewBox="0 0 101.6 128.5">
+
+  <!-- Panel background -->
+  <rect width="101.6" height="128.5" fill="#f0f0f0"/>
+  <text x="50.8" y="8" text-anchor="middle" font-family="sans-serif" font-size="4" fill="#231f20">PHASE</text>
+
+  <!-- ==================== WAVEFORM DISPLAY ==================== -->
+  <!-- Position: (5.8, 14), Size: 90 x 24mm -->
+  <rect x="5.8" y="14" width="90" height="24" rx="1" ry="1" fill="#1a1a2e" stroke="#404060" stroke-width="0.3"/>
+
+  <!-- ==================== LOOP A ==================== -->
+  <text x="5.8" y="44" font-family="sans-serif" font-size="2.5" fill="#606060">LOOP A</text>
+
+  <!-- Loop A knob labels -->
+  <text x="15.24" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SLEEP</text>
+  <text x="35.56" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SPEED</text>
+  <text x="55.88" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">PAN</text>
+
+  <!-- Loop A knobs Y=50 (red) -->
+  <g transform="translate(15.24,50)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(35.56,50)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(55.88,50)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+
+  <!-- Loop A CV inputs Y=62 (blue) -->
+  <g transform="translate(15.24,62)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(35.56,62)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(55.88,62)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- Loop A right-side jacks Y=50: CLK, START, LEN (blue) -->
+  <text x="76.2" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">CLK</text>
+  <text x="86.36" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">START</text>
+  <text x="96.52" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">LEN</text>
+  <g transform="translate(76.2,50)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(86.36,50)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(96.52,50)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- Mode switch A Y=62 (green) -->
+  <text x="86.36" y="57" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">SLP</text>
+  <text x="86.36" y="69" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">ROT</text>
+  <g transform="translate(86.36,62)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== LOOP B ==================== -->
+  <text x="5.8" y="72" font-family="sans-serif" font-size="2.5" fill="#606060">LOOP B</text>
+
+  <!-- Loop B knob labels -->
+  <text x="15.24" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SLEEP</text>
+  <text x="35.56" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SPEED</text>
+  <text x="55.88" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">PAN</text>
+
+  <!-- Loop B knobs Y=78 (red) -->
+  <g transform="translate(15.24,78)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(35.56,78)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(55.88,78)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+
+  <!-- Loop B CV inputs Y=90 (blue) -->
+  <g transform="translate(15.24,90)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(35.56,90)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(55.88,90)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- Loop B right-side jacks Y=78: CLK, START, LEN (blue) -->
+  <text x="76.2" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">CLK</text>
+  <text x="86.36" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">START</text>
+  <text x="96.52" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">LEN</text>
+  <g transform="translate(76.2,78)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(86.36,78)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(96.52,78)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- Mode switch B Y=90 (green) -->
+  <text x="86.36" y="85" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">SLP</text>
+  <text x="86.36" y="97" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">ROT</text>
+  <g transform="translate(86.36,90)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== BOTTOM ROW Y=110 ==================== -->
+  <text x="15.24" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">PLAY</text>
+  <text x="25.4" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">GATE</text>
+  <text x="45.72" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SYNC</text>
+  <text x="56" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SYNC CV</text>
+  <text x="76.2" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">LEFT</text>
+  <text x="91.44" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">RIGHT</text>
+
+  <!-- Play button (green) -->
+  <g transform="translate(15.24,110)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <!-- Play gate input (blue) -->
+  <g transform="translate(25.4,110)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <!-- Sync button (green) -->
+  <g transform="translate(45.72,110)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <!-- Sync CV input (blue) -->
+  <g transform="translate(56,110)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <!-- Left output (blue) -->
+  <g transform="translate(76.2,110)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <!-- Right output (blue) -->
+  <g transform="translate(91.44,110)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+</svg>

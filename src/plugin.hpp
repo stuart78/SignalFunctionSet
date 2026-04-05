@@ -12,3 +12,4 @@ extern Model* modelDrift;
 extern Model* modelGsx;
 extern Model* modelFugue;
 extern Model* modelPhase;
+extern Model* modelOvertone;

@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="50.8mm" height="128.5mm" viewBox="0 0 50.8 128.5">
+
+  <!-- Panel background -->
+  <rect width="50.8" height="128.5" fill="#f0f0f0"/>
+
+  <!-- Module title -->
+  <text x="25.4" y="8" text-anchor="middle" font-family="sans-serif" font-size="4" fill="#231f20">OVERTONE</text>
+
+  <!-- ==================== WAVEFORM DISPLAY ==================== -->
+  <!-- Position: (5.8, 14), Size: 39.2 x 24mm -->
+  <rect x="5.8" y="14" width="39.2" height="24" rx="1" ry="1" fill="#1a1a2e" stroke="#404060" stroke-width="0.3"/>
+
+  <!-- ==================== INDICATOR LEDS Y=40 ==================== -->
+  <!-- 8 red LEDs, aligned to screen: X = 5.8 + 4.9*(i+0.5) -->
+  <g transform="translate(8.25,40)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(13.15,40)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(18.05,40)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(22.95,40)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(27.85,40)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(32.75,40)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(37.65,40)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(42.55,40)">
+    <line x1="-0.6" y1="0" x2="0.6" y2="0" stroke="#ff6600" stroke-width="0.15"/>
+    <line x1="0" y1="-0.6" x2="0" y2="0.6" stroke="#ff6600" stroke-width="0.15"/>
+    <circle cx="0" cy="0" r="0.5" fill="none" stroke="#ff6600" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== HARMONIC TOGGLES Y=46 ==================== -->
+  <!-- 8 CKSS switches, same X positions as LEDs -->
+  <g transform="translate(8.25,46)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(13.15,46)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(18.05,46)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(22.95,46)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(27.85,46)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(32.75,46)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(37.65,46)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(42.55,46)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <!-- Harmonic number labels -->
+  <text x="8.25" y="52" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">2</text>
+  <text x="13.15" y="52" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">3</text>
+  <text x="18.05" y="52" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">4</text>
+  <text x="22.95" y="52" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">5</text>
+  <text x="27.85" y="52" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">6</text>
+  <text x="32.75" y="52" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">7</text>
+  <text x="37.65" y="52" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">8</text>
+  <text x="42.55" y="52" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">9</text>
+
+  <!-- ==================== EVEN/ODD FILTER Y=60 ==================== -->
+  <!-- CKSSThree toggle at (15.24, 60) -->
+  <text x="10" y="57" text-anchor="end" font-family="sans-serif" font-size="1.5" fill="#808080">ALL</text>
+  <text x="10" y="61" text-anchor="end" font-family="sans-serif" font-size="1.5" fill="#808080">ODD</text>
+  <text x="10" y="65" text-anchor="end" font-family="sans-serif" font-size="1.5" fill="#808080">EVN</text>
+  <g transform="translate(15.24,60)">
+    <line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+    <line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+  </g>
+  <!-- Filter CV jack at (35.56, 60) -->
+  <text x="35.56" y="55" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">FLTR</text>
+  <g transform="translate(35.56,60)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== FREQ / FINE KNOBS Y=78 ==================== -->
+  <text x="15.24" y="72" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">FREQ</text>
+  <text x="35.56" y="72" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">FINE</text>
+  <g transform="translate(15.24,78)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(35.56,78)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== V/OCT INPUT Y=95 ==================== -->
+  <text x="25.4" y="91" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">V/OCT</text>
+  <g transform="translate(25.4,95)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== BOTTOM ROW Y=110 ==================== -->
+  <text x="15.24" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">MASK</text>
+  <text x="35.56" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">OUT</text>
+  <g transform="translate(15.24,110)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(35.56,110)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+</svg>

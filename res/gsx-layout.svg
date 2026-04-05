@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="60.96mm" height="128.5mm" viewBox="0 0 60.96 128.5">
+
+  <!-- Panel background -->
+  <rect width="60.96" height="128.5" fill="#f0f0f0"/>
+  <text x="30.48" y="8" text-anchor="middle" font-family="sans-serif" font-size="4" fill="#231f20">GSX</text>
+
+  <!-- ==================== KNOB ROW 1 Y=28.69 ==================== -->
+  <text x="10.16" y="22" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">FREQ</text>
+  <text x="30.48" y="22" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">STRMS</text>
+  <text x="50.8" y="22" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SHAPE</text>
+  <g transform="translate(10.16,28.69)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(30.48,28.69)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(50.8,28.69)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+
+  <!-- CV ROW 1 Y=41.39 -->
+  <g transform="translate(10.16,41.39)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(30.48,41.39)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(50.8,41.39)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== KNOB ROW 2 Y=59.17 ==================== -->
+  <text x="10.16" y="52.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">RANGE</text>
+  <text x="30.48" y="52.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">DUR</text>
+  <text x="50.8" y="52.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">DELAY</text>
+  <g transform="translate(10.16,59.17)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(30.48,59.17)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(50.8,59.17)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+
+  <!-- CV ROW 2 Y=71.87 -->
+  <g transform="translate(10.16,71.87)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(30.48,71.87)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(50.8,71.87)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== KNOB ROW 3 Y=89.65 ==================== -->
+  <text x="10.16" y="83" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">DENS</text>
+  <text x="30.48" y="83" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">VAR</text>
+  <text x="50.8" y="83" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SPRD</text>
+  <g transform="translate(10.16,89.65)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(30.48,89.65)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(50.8,89.65)">
+    <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+    <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+  </g>
+
+  <!-- CV ROW 3 Y=102.35 -->
+  <g transform="translate(10.16,102.35)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(30.48,102.35)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(50.8,102.35)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+
+  <!-- ==================== BOTTOM ROW Y=120.13 ==================== -->
+  <text x="10.16" y="115" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">VCA</text>
+  <text x="40.64" y="115" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">LEFT</text>
+  <text x="50.8" y="115" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">RIGHT</text>
+  <g transform="translate(10.16,120.13)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(40.64,120.13)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+  <g transform="translate(50.8,120.13)">
+    <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+    <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+    <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+  </g>
+</svg>
