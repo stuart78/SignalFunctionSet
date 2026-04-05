@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="101.6mm" height="128.5mm" viewBox="0 0 101.6 128.5">
+  <defs>
+    <!-- Crosshair marker for knob centers -->
+    <g id="crosshair-knob">
+      <line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/>
+      <line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/>
+      <circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/>
+    </g>
+    <!-- Crosshair marker for jack centers -->
+    <g id="crosshair-jack">
+      <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/>
+      <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/>
+      <circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/>
+    </g>
+    <!-- Crosshair marker for button/LED -->
+    <g id="crosshair-button">
+      <line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#00cc00" stroke-width="0.2"/>
+      <line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#00cc00" stroke-width="0.2"/>
+      <circle cx="0" cy="0" r="1.2" fill="none" stroke="#00cc00" stroke-width="0.15"/>
+    </g>
+  </defs>
+
+  <!-- Panel background -->
+  <rect width="101.6" height="128.5" fill="#f0f0f0"/>
+
+  <!-- Module title -->
+  <text x="50.8" y="8" text-anchor="middle" font-family="sans-serif" font-size="4" fill="#231f20">PHASE</text>
+
+  <!-- Waveform display area -->
+  <rect x="5.8" y="14" width="90" height="24" rx="1" ry="1" fill="#1a1a2e" stroke="#404060" stroke-width="0.3"/>
+
+  <!-- ==================== LOOP A ==================== -->
+  <text x="5.8" y="44" font-family="sans-serif" font-size="2.5" fill="#606060">LOOP A</text>
+
+  <!-- Loop A knob labels -->
+  <text x="15.24" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SLEEP</text>
+  <text x="35.56" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SPEED</text>
+  <text x="55.88" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">PAN</text>
+
+  <!-- Loop A jack labels (right side) -->
+  <text x="76.2" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">CLK</text>
+  <text x="86.36" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">START</text>
+  <text x="96.52" y="44.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">LEN</text>
+
+  <!-- Loop A Knob crosshairs (Y=50) -->
+  <use href="#crosshair-knob" x="15.24" y="50"/>
+  <use href="#crosshair-knob" x="35.56" y="50"/>
+  <use href="#crosshair-knob" x="55.88" y="50"/>
+
+  <!-- Loop A CV input crosshairs (Y=62) -->
+  <use href="#crosshair-jack" x="15.24" y="62"/>
+  <use href="#crosshair-jack" x="35.56" y="62"/>
+  <use href="#crosshair-jack" x="55.88" y="62"/>
+
+  <!-- Mode switch A (Y=62, vertical CKSS) -->
+  <text x="86.36" y="57" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">SLP</text>
+  <text x="86.36" y="69" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">ROT</text>
+  <use href="#crosshair-knob" x="86.36" y="62"/>
+
+  <!-- Loop A CLK, START, LEN jack crosshairs (Y=50) -->
+  <use href="#crosshair-jack" x="76.2" y="50"/>
+  <use href="#crosshair-jack" x="86.36" y="50"/>
+  <use href="#crosshair-jack" x="96.52" y="50"/>
+
+  <!-- ==================== LOOP B ==================== -->
+  <text x="5.8" y="72" font-family="sans-serif" font-size="2.5" fill="#606060">LOOP B</text>
+
+  <!-- Loop B knob labels -->
+  <text x="15.24" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SLEEP</text>
+  <text x="35.56" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SPEED</text>
+  <text x="55.88" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">PAN</text>
+
+  <!-- Loop B jack labels (right side) -->
+  <text x="76.2" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">CLK</text>
+  <text x="86.36" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">START</text>
+  <text x="96.52" y="72.5" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">LEN</text>
+
+  <!-- Loop B Knob crosshairs (Y=78) -->
+  <use href="#crosshair-knob" x="15.24" y="78"/>
+  <use href="#crosshair-knob" x="35.56" y="78"/>
+  <use href="#crosshair-knob" x="55.88" y="78"/>
+
+  <!-- Loop B CV input crosshairs (Y=90) -->
+  <use href="#crosshair-jack" x="15.24" y="90"/>
+  <use href="#crosshair-jack" x="35.56" y="90"/>
+  <use href="#crosshair-jack" x="55.88" y="90"/>
+
+  <!-- Mode switch B (Y=90, vertical CKSS) -->
+  <text x="86.36" y="85" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">SLP</text>
+  <text x="86.36" y="97" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">ROT</text>
+  <use href="#crosshair-knob" x="86.36" y="90"/>
+
+  <!-- Loop B CLK, START, LEN jack crosshairs (Y=78) -->
+  <use href="#crosshair-jack" x="76.2" y="78"/>
+  <use href="#crosshair-jack" x="86.36" y="78"/>
+  <use href="#crosshair-jack" x="96.52" y="78"/>
+
+  <!-- ==================== BOTTOM ROW ==================== -->
+
+  <!-- Bottom row labels -->
+  <text x="15.24" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">PLAY</text>
+  <text x="25.4" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">GATE</text>
+  <text x="45.72" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SYNC</text>
+  <text x="56" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">SYNC CV</text>
+  <text x="76.2" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">LEFT</text>
+  <text x="91.44" y="105" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">RIGHT</text>
+
+  <!-- Bottom row crosshairs (Y=110) -->
+  <use href="#crosshair-button" x="15.24" y="110"/>
+  <use href="#crosshair-jack" x="25.4" y="110"/>
+  <use href="#crosshair-button" x="45.72" y="110"/>
+  <use href="#crosshair-jack" x="56" y="110"/>
+  <use href="#crosshair-jack" x="76.2" y="110"/>
+  <use href="#crosshair-jack" x="91.44" y="110"/>
+</svg>

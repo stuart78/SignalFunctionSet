@@ -4,10 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a VCV Rack plugin called "Signal Function Set" that provides modular synthesizer modules. The plugin contains two modules:
+This is a VCV Rack plugin called "Signal Function Set" that provides modular synthesizer modules. The plugin contains the following modules:
 
 1. **Drift** - A phase-shifted LFO with offset, attenuation, and stability controls featuring Lorenz attractor-based chaos functionality
 2. **GSX** - A granular synthesis module based on Barry Truax's pioneering GSX system (1985-86), fully implemented and operational
+3. **Fugue** - An 8-step harmonic deviation sequencer with three independent CV/gate voices
+4. **Phase** - A dual sample looper with sleep-based phase drift, inspired by Steve Reich's phase compositions
 
 ## Build Commands
 
@@ -27,6 +29,8 @@ The build system uses the VCV Rack plugin framework via `$(RACK_DIR)/plugin.mk`.
 - `src/plugin.cpp` - Plugin initialization and model registration
 - `src/quadlfo.cpp` - Drift module implementation
 - `src/gsx.cpp` - GSX granular synthesis module implementation
+- `src/fugue.cpp` - Fugue module implementation
+- `src/phase.cpp` - Phase module implementation
 
 ### Module Development Pattern
 Each module follows the VCV Rack module pattern:
@@ -287,3 +291,249 @@ The implemented module sounds **very close** to Barry Truax's original GSX syste
 - Alternative envelope shapes (Gaussian, Tukey, custom)
 - Grain reverse playback option
 - Additional spatial modes (circular panning, motion paths)
+
+## Phase - Dual Sample Looper
+
+### Overview
+Phase is a dual sample looper inspired by Steve Reich's phase compositions ("It's Gonna Rain," "Piano Phase"). Two loops play the same or different audio samples with independent "sleep" parameters that create gradual phase drift between the loops. Each loop has a mode switch choosing between **Sleep** (silence gap after each cycle) and **Rotate** (continuous content drift like tape machines at slightly different speeds). The module supports forward and reverse playback, per-loop panning, transient detection with clock-triggered jumps, WAV cue point support, adjustable loop regions, and a VCA anti-click mode.
+
+### Implementation Status
+**COMPLETE AND OPERATIONAL** - The module is fully functional with all parameters, CV inputs, waveform display, transient detection, and loop region controls working correctly.
+
+### How Phase Drift Works
+Each loop has a bipolar "sleep" parameter (-500ms to +500ms) and a mode switch:
+
+**Sleep Mode (SLP):** After a loop completes one cycle, it waits the sleep duration before restarting. Positive values add silence; negative values cut the loop short. If Loop A has 10ms sleep and Loop B has 0ms, Loop A's effective period is `sample_length + 10ms` while Loop B's is just `sample_length`. They gradually drift apart.
+
+**Rotate Mode (ROT):** The loop plays continuously with no gaps. The sleep parameter controls a tiny speed offset that causes the content to gradually rotate within the loop — like two tape machines running at slightly different speeds. The read position drifts by `sleepMs` worth of samples per loop cycle. This creates a subtle pitch shift proportional to the drift rate (e.g., 10ms over 5s = 0.2% = ~3.5 cents — inaudible). Negative sleep rotates in the opposite direction.
+
+### Parameters
+
+#### Per Loop (x2: Loop A and Loop B)
+
+##### 1. Sleep
+- **Range**: -500 to +500 ms
+- **Default**: 0 ms
+- **Function**: Controls phase drift amount and direction
+- **CV Input**: ±5V, 50ms/V (bipolar)
+- **Notes**: In Sleep mode: positive = silence gap, negative = loop ends early. In Rotate mode: positive = drift forward, negative = drift backward. This is the core phasing mechanism.
+
+##### 2. Speed
+- **Range**: -4x to +4x
+- **Default**: 1x (center of knob is 0/stopped)
+- **Function**: Playback speed and direction
+- **CV Input**: ±5V, 0.8x/V (bipolar)
+- **Notes**: Negative values play in reverse. 0 = stopped. Speed also affects the effective loop period, providing a second axis for phase drift. Center detent is at 0 (stopped), default is 1x.
+
+##### 3. Pan
+- **Range**: -1 (full left) to +1 (full right)
+- **Default**: 0 (center)
+- **Function**: Stereo panning position for this loop
+- **CV Input**: ±5V, 0.2/V (bipolar)
+- **Notes**: Uses equal-power panning law (cos/sin). Allows positioning each loop in the stereo field independently.
+
+##### 4. Mode Switch (SLP/ROT)
+- **Type**: CKSS toggle switch
+- **Function**: Selects between Sleep mode (up) and Rotate mode (down) per loop
+
+### Inputs
+
+#### Per Loop (x2)
+| Input | Range | Function |
+|-------|-------|----------|
+| Sleep CV | ±5V | Modulates sleep time (50ms/V) |
+| Speed CV | ±5V | Modulates playback speed (0.8x/V) |
+| Pan CV | ±5V | Modulates stereo pan (0.2/V) |
+| CLK | Trigger | Jump playhead to next detected transient |
+| START | 0-10V | Loop start position (0-100% of sample) |
+| LEN | 0-10V | Loop length (0-100% of remaining sample after start) |
+
+#### Global
+| Input | Range | Function |
+|-------|-------|----------|
+| SYNC | Trigger | Reset both loops to their start positions |
+| PLAY GATE | Gate | High (>=1V) = play, overrides button state |
+
+### Outputs
+| Output | Function |
+|--------|----------|
+| LEFT | Stereo left mix of both loops |
+| RIGHT | Stereo right mix of both loops |
+
+### Controls
+
+#### Play Button
+- Green LED latch button
+- Toggles play/stop state on click
+- When PLAY GATE CV is connected, gate overrides the button state
+- Module outputs silence when stopped
+
+#### Sync Button
+- Momentary push button
+- Resets both loops to their start positions
+- Works alongside the SYNC CV input (either triggers a reset)
+
+### Waveform Display
+
+The display occupies the top portion of the module and shows:
+- **Top half**: Sample A waveform (blue)
+- **Bottom half**: Sample B waveform (orange)
+- **Playhead**: White vertical line showing current position per loop
+- **Transient markers**: Subtle vertical lines spanning waveform height
+- **Loop handles**: Draggable bracket-style start/end handles (solid filled, no transparency stacking)
+- **Dim overlay**: Regions outside the active loop are darkened
+- **Origin line**: Semi-transparent white line showing where the original sample start has drifted to in rotate mode
+- **Rotated waveform**: In rotate mode, the waveform image rotates to match the audio content
+
+#### Loop Region Handles
+- Bracket-style handles with 1px vertical bar and horizontal ticks at top/bottom
+- Start handles bracket right, end handles bracket left
+- Drag sensitivity accounts for zoom level via `getAbsoluteZoom()`
+- When START/LEN CV inputs are connected, they override the handle positions
+- Loop regions are persisted with patch save/load
+
+### Sample Loading
+
+- Right-click menu: "Load Sample A" / "Load Sample B"
+- WAV files supported (mono or stereo, any sample rate — resampled to 48kHz on load)
+- Stereo files are mixed down to mono; stereo placement comes from the Pan control
+- If only Sample A is loaded, it cascades to Sample B automatically
+- Loading Sample B explicitly breaks the cascade
+- "Clear Sample A" / "Clear Sample B" removes loaded samples
+- Maximum sample length: 10 minutes (28,800,000 samples at 48kHz)
+- File paths persist with patch save/load via JSON
+- **WAV cue point support**: If the WAV file contains embedded cue points, they are used as transient markers instead of auto-detection. Cue positions are resampled if the file isn't 48kHz. Re-detect Transients from the context menu overrides cues with auto-detection.
+
+### Transient Detection
+
+#### Algorithm
+Energy-based onset detection computed once per sample load:
+1. RMS energy computed in 1024-sample windows with 256-sample hop
+2. High-frequency emphasis via sample differencing (catches transients in noise)
+3. Half-wave rectified onset detection function
+4. Adaptive threshold based on local mean energy over 30-frame context window
+5. Local peak picking with ±2 frame neighborhood
+6. Minimum gap enforcement between detected transients
+7. Absolute energy floor (0.005) prevents false triggers on quiet/silent passages
+
+#### Context Menu Controls
+- **Re-detect Transients**: Re-run detection with current settings (overrides WAV cue points)
+- **Sensitivity**: High (0.15), Medium/default (0.7), Low (0.95) — maps to threshold range 1.0-12.0
+- **Min Transient Gap**: 10ms (fast), 50ms (medium), 100ms/default (slow)
+
+#### Clock Input Behavior
+On rising edge of CLK input, the playhead jumps to the next transient after the current position (within the active loop region). If at the end, wraps to the first transient in the region.
+
+### VCA Mode (Anti-Click)
+
+- **Default**: Enabled
+- **Context menu**: "VCA Mode (anti-click)" toggle
+- When enabled, applies a 1ms attack/release envelope around all discontinuities:
+  - Loop restarts (forward and reverse wrap-around)
+  - Transient jumps via clock trigger
+  - Sync resets
+  - Sleep wake-up transitions
+- Eliminates clicks from playhead discontinuities
+- Implementation: fade-out (1ms) → execute jump → fade-in (1ms)
+
+### Panel Layout (20HP = 101.6mm wide)
+
+All positions in mm, used with `mm2px()`:
+
+```
+WAVEFORM DISPLAY: position (5.8, 14), size 90mm x 24mm
+
+LOOP A:
+  Knobs  Y=50:    Sleep(15.24)   Speed(35.56)   Pan(55.88)
+  CVs    Y=62:    SleepCV(15.24) SpeedCV(35.56) PanCV(55.88)
+  Jacks  Y=50:    ClkA(76.2)     StartA(86.36)  LenA(96.52)
+  Switch Y=62:    ModeA(86.36)
+
+LOOP B:
+  Knobs  Y=78:    Sleep(15.24)   Speed(35.56)   Pan(55.88)
+  CVs    Y=90:    SleepCV(15.24) SpeedCV(35.56) PanCV(55.88)
+  Jacks  Y=78:    ClkB(76.2)     StartB(86.36)  LenB(96.52)
+  Switch Y=90:    ModeB(86.36)
+
+BOTTOM ROW Y=110:
+  Play(15.24)  PlayGate(25.4)  Sync(45.72)  SyncCV(56)  Left(76.2)  Right(91.44)
+```
+
+### Implementation Details
+
+#### Core DSP (src/phase.cpp)
+- **Double-precision playhead**: Prevents cumulative drift at fractional speeds over long playback
+- **Linear interpolation**: Sub-sample accuracy for non-integer speed values
+- **Mono mixdown on load**: Simplifies DSP; stereo placement via per-loop pan control
+- **Precomputed waveform overview**: 512-point peak array per sample, no per-frame buffer scanning
+- **Equal-power panning**: cos/sin law from bipolar [-1,+1] pan position
+- **Continuous drift (rotate mode)**: Read position advances at `speed + (sleepSamples/regionLength)` per sample — no discrete jumps, no crossfade needed
+
+#### Data Structures
+```cpp
+struct SampleData {
+    vector<float> samples;        // Mono float samples at 48kHz
+    size_t length;                // Number of samples
+    string filePath, fileName;    // For persistence and display
+    vector<size_t> transients;    // Precomputed transient positions
+    vector<float> waveformMini;   // 512-point peak array for display
+    bool loaded;
+    bool hasCuePoints;            // true if transients from WAV cue chunk
+    float loopStart, loopEnd;     // Normalized 0-1 loop region
+};
+
+struct LoopState {
+    double playhead;              // Current position (double precision)
+    bool sleeping;                // In post-loop silence
+    float sleepRemaining;         // Sleep countdown in seconds
+    SchmittTrigger clockTrigger;
+    float envelope;               // VCA mode anti-click envelope (0-1)
+    bool ramping;                 // In fade transition
+    double jumpTarget;            // Deferred jump destination
+    double rotationOffset;        // Accumulated drift in rotate mode
+};
+```
+
+#### JSON Persistence
+Saves and restores: file paths for both samples, explicit-B flag, play state, transient sensitivity, min gap, VCA mode, and loop start/end regions for both samples.
+
+#### Dependencies
+- **dr_wav.h**: Header-only WAV loader (included in src/, `#define DR_WAV_IMPLEMENTATION` in phase.cpp). Opened with `drwav_init_file_with_metadata()` to read cue points.
+- **osdialog**: File open dialogs (provided by VCV Rack SDK)
+- **NanoVG**: Waveform display drawing (provided by VCV Rack SDK)
+
+### Patch Ideas
+
+**Steve Reich Phase Drift:**
+- Load same sample in both loops
+- Sleep A: 5-10ms, Sleep B: 0ms
+- Speed both at 1x
+- Pan A left, Pan B right
+- Listen as patterns gradually shift
+
+**Tape Machine Drift (Rotate):**
+- Load same sample, set both to Rotate mode
+- Sleep A: 5ms, Sleep B: 0ms
+- Continuous seamless drift with no gaps
+- Content gradually rotates — subtle pitch shift adds to the effect
+
+**Reverse Texture:**
+- Speed A: 1x, Speed B: -0.5x
+- Same sample, different loop regions
+- High variation creates evolving textures
+
+**Transient Slicer:**
+- Load rhythmic material
+- High sensitivity transient detection
+- Clock both loops from an external sequencer at different rates
+- Each clock pulse jumps to the next transient
+
+**Granular-Style Scanning:**
+- Use LFO on START CV to slowly scan through the sample
+- Short LEN CV value for small loop windows
+- Different LFO rates on A and B for complex interplay
+
+**Bidirectional Drift:**
+- Sleep A: +10ms, Sleep B: -10ms
+- Loops drift in opposite directions simultaneously
+- Creates expanding then contracting phase relationships

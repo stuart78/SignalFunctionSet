@@ -43,6 +43,16 @@
         "Polyphonic",
         "Quantizer"
       ]
+    },
+    {
+      "slug": "Phase",
+      "name": "Phase",
+      "description": "Dual sample looper with sleep-based phase drift inspired by Steve Reich's phase compositions",
+      "tags": [
+        "Sampler",
+        "Dual",
+        "Recording"
+      ]
     }
   ]
 }

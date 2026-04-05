@@ -9,6 +9,7 @@ void init(Plugin* p) {
 	p->addModel(modelDrift);
 	p->addModel(modelGsx);
 	p->addModel(modelFugue);
+	p->addModel(modelPhase);
 
 	// Add modules here
 	// p->addModel(modelMyModule);
