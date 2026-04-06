@@ -1,7 +1,7 @@
 {
   "slug": "SignalFunctionSet",
   "name": "Signal Function Set",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "_comment": "Build script will modify slug/name/version for dev builds to allow coexistence",
   "license": "GPL-3.0-or-later",
   "brand": "SignalFunctionSet",
@@ -47,20 +47,22 @@
     {
       "slug": "Phase",
       "name": "Phase",
-      "description": "Dual sample looper with sleep-based phase drift inspired by Steve Reich's phase compositions",
+      "description": "Dual sample looper with phase drift via sleep and rotate modes, transient detection, and waveform display",
       "tags": [
         "Sampler",
         "Dual",
-        "Recording"
+        "Recording",
+        "Looper"
       ]
     },
     {
       "slug": "Overtone",
       "name": "Overtone",
-      "description": "Additive synthesis VCO with 8 individually-toggled harmonics and waveform display",
+      "description": "Additive synthesis VCO with 8 individually-toggled harmonics, even/odd filter, binary mask CV, and waveform display",
       "tags": [
         "Oscillator",
-        "VCO"
+        "VCO",
+        "Waveshaper"
       ]
     }
   ]

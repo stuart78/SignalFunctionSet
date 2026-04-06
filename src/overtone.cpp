@@ -63,7 +63,6 @@ struct Overtone : Module {
 		HARMONIC_8_PARAM,
 		EVENODD_PARAM,
 		FREQ_PARAM,
-		FINE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -121,12 +120,10 @@ struct Overtone : Module {
 
 		// Frequency: log2 scale, 0 = C4 (261.63 Hz)
 		configParam(FREQ_PARAM, -4.f, 4.f, 0.f, "Frequency", " Hz", 2.f, dsp::FREQ_C4);
-		// Fine tune: ±1 semitone
-		configParam(FINE_PARAM, -1.f / 12.f, 1.f / 12.f, 0.f, "Fine Tune", " cents", 0.f, 1200.f);
 
 		configInput(VOCT_INPUT, "V/Oct");
 		configInput(MASK_INPUT, "Harmonic Mask");
-		configInput(FILTER_INPUT, "Filter CV (0V=All, 3.3V=Odd, 6.6V=Even)");
+		configInput(FILTER_INPUT, "Filter CV (0V=All, 1.7V=Odd, 3.3V=Even)");
 
 		configOutput(AUDIO_OUTPUT, "Audio");
 	}
@@ -163,7 +160,7 @@ struct Overtone : Module {
 
 	void process(const ProcessArgs& args) override {
 		// Compute frequency
-		float pitch = params[FREQ_PARAM].getValue() + params[FINE_PARAM].getValue();
+		float pitch = params[FREQ_PARAM].getValue();
 		if (inputs[VOCT_INPUT].isConnected())
 			pitch += inputs[VOCT_INPUT].getVoltage();
 		float freq = dsp::FREQ_C4 * std::pow(2.f, pitch);
@@ -204,10 +201,10 @@ struct Overtone : Module {
 		// Apply even/odd filter based on actual harmonic number
 		int evenOdd = (int)params[EVENODD_PARAM].getValue();
 		if (inputs[FILTER_INPUT].isConnected()) {
-			// 0-3.3V = All, 3.3-6.6V = Odd, 6.6-10V = Even
-			float fv = clamp(inputs[FILTER_INPUT].getVoltage(), 0.f, 10.f);
-			if (fv < 3.33f) evenOdd = 0;
-			else if (fv < 6.66f) evenOdd = 1;
+			// 0-1.67V = All, 1.67-3.33V = Odd, 3.33-5V = Even
+			float fv = clamp(inputs[FILTER_INPUT].getVoltage(), 0.f, 5.f);
+			if (fv < 1.67f) evenOdd = 0;
+			else if (fv < 3.33f) evenOdd = 1;
 			else evenOdd = 2;
 		}
 		if (evenOdd == 1) {
@@ -386,40 +383,30 @@ struct OvertoneWidget : ModuleWidget {
 		display->box.size = mm2px(Vec(39.2f, 24.f));
 		addChild(display);
 
-		// 8 overtone CKSS toggles + indicator LEDs, aligned to screen width
-		// Screen: X=5.8mm to X=45.0mm (width 39.2mm)
-		// 8 positions evenly spaced within screen bounds
-		float screenLeft = 5.8f;
-		float screenWidth = 39.2f;
-		float toggleSpacing = screenWidth / (float)NUM_OVERTONES;
-
+		// 8 overtone CKSS toggles + indicator LEDs (single row)
+		// LEDs Y=40.64mm, Toggles Y=46.98mm
+		float toggleX[NUM_OVERTONES] = {
+			7.62f, 12.7f, 17.78f, 22.86f, 27.94f, 33.02f, 38.1f, 43.18f
+		};
 		for (int i = 0; i < NUM_OVERTONES; i++) {
-			float xPos = screenLeft + toggleSpacing * (i + 0.5f);
-
-			// Red LED indicator between display and toggle (Y=40mm)
 			addChild(createLightCentered<SmallLight<RedLight>>(
-				mm2px(Vec(xPos, 40.f)), module, Overtone::INDICATOR_1_LIGHT + i));
-
-			// CKSS toggle switch (Y=46mm)
+				mm2px(Vec(toggleX[i], 40.64f)), module, Overtone::INDICATOR_1_LIGHT + i));
 			addParam(createParamCentered<CKSS>(
-				mm2px(Vec(xPos, 46.f)), module, Overtone::HARMONIC_1_PARAM + i));
+				mm2px(Vec(toggleX[i], 46.98f)), module, Overtone::HARMONIC_1_PARAM + i));
 		}
 
-		// Even/Odd 3-state toggle + Filter CV (Y=60mm)
+		// Mask CV + Even/Odd toggle + Filter CV (Y=77.05mm)
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.62f, 77.05f)), module, Overtone::MASK_INPUT));
 		addParam(createParamCentered<CKSSThree>(
-			mm2px(Vec(15.24f, 60.f)), module, Overtone::EVENODD_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(35.56f, 60.f)), module, Overtone::FILTER_INPUT));
+			mm2px(Vec(25.43f, 77.05f)), module, Overtone::EVENODD_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(43.21f, 77.05f)), module, Overtone::FILTER_INPUT));
 
-		// Frequency and Fine knobs (Y=78mm)
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(15.24f, 78.f)), module, Overtone::FREQ_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(35.56f, 78.f)), module, Overtone::FINE_PARAM));
+		// Frequency knob (Y=101.6mm)
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(7.62f, 101.6f)), module, Overtone::FREQ_PARAM));
 
-		// V/Oct input (Y=95mm)
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(25.4f, 95.f)), module, Overtone::VOCT_INPUT));
-
-		// Bottom row (Y=110mm)
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(15.24f, 110.f)), module, Overtone::MASK_INPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(35.56f, 110.f)), module, Overtone::AUDIO_OUTPUT));
+		// Bottom row (Y=116.84mm)
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.62f, 116.84f)), module, Overtone::VOCT_INPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(43.18f, 116.84f)), module, Overtone::AUDIO_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {

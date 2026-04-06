@@ -103,6 +103,76 @@ An 8-step harmonic deviation sequencer with three independent CV/gate voices (A,
 - Harmonic Lock: Toggle consonance-biased deviation (default: on)
 - Randomize Sequence: Set all faders to random positions
 
+### Phase
+
+A dual sample looper inspired by Steve Reich's phase compositions. Two loops play the same or different audio samples with independent drift controls that create gradual phase relationships. Each loop has a mode switch choosing between Sleep (silence gap after each cycle) and Rotate (continuous tape-style content drift).
+
+**Features:**
+- **Dual Loop Playback** - Load one or two WAV files; loading only one cascades to both loops
+- **Sleep Mode** - Adds silence after each loop cycle, creating phase drift through timing gaps
+- **Rotate Mode** - Continuous content drift like tape machines at slightly different speeds
+- **Bipolar Drift** (-500ms to +500ms) - Positive and negative drift in both modes
+- **Reverse Playback** - Speed range of -4x to +4x with center at 0 (stopped)
+- **Transient Detection** - Energy-based onset detection with adjustable sensitivity and minimum gap
+- **WAV Cue Point Support** - Embedded cue markers used as transient positions when present
+- **Clock-Triggered Jumps** - Per-loop clock input jumps playhead to next detected transient
+- **Loop Region Controls** - Draggable bracket handles on waveform display, plus Start/Length CV inputs
+- **Waveform Display** - Dual waveform view with playhead, transient markers, loop handles, and rotation origin line
+- **VCA Anti-Click** - 1ms envelope on all discontinuities (enabled by default)
+
+**Controls:**
+- **Drift** (-500 to +500 ms): Phase drift amount per loop cycle. In Sleep mode: positive = silence gap, negative = early restart. In Rotate mode: continuous speed offset.
+- **Speed** (-4x to +4x, default 1x): Playback speed and direction. Center = stopped.
+- **Pan** (-1 to +1): Per-loop stereo position with equal-power panning.
+- **Mode Switch** (SLP/ROT): Sleep or Rotate mode per loop.
+
+**Inputs:**
+- **CLK A/B** - Trigger: jump to next transient
+- **START A/B** (0-10V) - Loop start position (0-100% of sample)
+- **LEN A/B** (0-10V) - Loop length (0-100% of remaining sample)
+- **Drift CV, Speed CV, Pan CV** (±5V) - Per-loop parameter modulation
+- **PLAY GATE** - High (>=1V) = play, overrides button
+- **SYNC** - Trigger: reset both loops to start
+
+**Outputs:**
+- **Left / Right** - Stereo output pair
+
+**Context Menu:**
+- Load/Clear Sample A and B
+- Transient sensitivity (High/Medium/Low) and minimum gap (10/50/100ms)
+- Re-detect Transients (overrides WAV cue points)
+- VCA Mode toggle (anti-click envelope)
+
+### Overtone
+
+An additive synthesis VCO that builds waveforms from the harmonic series. The fundamental is always present; 8 toggle switches enable/disable overtones (harmonics 2-9) with natural 1/n amplitude falloff. All overtones on produces a saw-like wave; all off gives a pure sine.
+
+**Features:**
+- **8 Harmonic Toggles** - Individual on/off for harmonics 2 through 9
+- **Natural Amplitude Falloff** - Each harmonic scaled by 1/n (H2=0.5, H3=0.33, etc.)
+- **Even/Odd Filter** - 3-position switch: All, Odd only (square-like), Even only
+- **Binary Mask CV** - 0-10V mapped to 8-bit pattern for voltage-controlled timbre
+- **Sweep Mask Mode** - Alternative CV mode: 0-10V enables 0-8 harmonics from bottom up
+- **Zero-Crossing Gating** - Click-free transitions when toggling harmonics
+- **Waveform Display** - Shows composite wave with faint individual harmonic traces and fundamental
+- **LED Indicators** - Show actual active state after filter/CV processing
+
+**Controls:**
+- **Harmonic 2-9 Toggles**: Enable/disable individual overtones (default: all on)
+- **Even/Odd/All Switch**: 3-position filter for harmonic selection
+- **Freq** (-4 to +4 octaves, default C4): Coarse frequency control, log2 scaled
+
+**Inputs:**
+- **V/Oct** - 1V/octave pitch tracking
+- **Mask** (0-10V) - Binary (8-bit) or sweep (0-8 harmonics) mode, selected via context menu
+- **Filter** (0-5V) - Even/odd filter CV (0-1.67V=All, 1.67-3.33V=Odd, 3.33-5V=Even)
+
+**Outputs:**
+- **Out** - Monophonic audio output (±5V normalized)
+
+**Context Menu:**
+- Mask CV Mode: Binary (8-bit pattern) or Sweep (bottom-up harmonics)
+
 ## Building
 
 ```bash

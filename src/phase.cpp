@@ -287,25 +287,25 @@ struct Phase : Module {
 	Phase() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
-		configParam(SLEEP_A_PARAM, -500.f, 500.f, 0.f, "Sleep A", " ms");
+		configParam(SLEEP_A_PARAM, -500.f, 500.f, 0.f, "Drift A", " ms");
 		configParam(SPEED_A_PARAM, -4.f, 4.f, 1.f, "Speed A", "x");
 		configParam(PAN_A_PARAM, -1.f, 1.f, 0.f, "Pan A");
 
-		configParam(SLEEP_B_PARAM, -500.f, 500.f, 0.f, "Sleep B", " ms");
+		configParam(SLEEP_B_PARAM, -500.f, 500.f, 0.f, "Drift B", " ms");
 		configParam(SPEED_B_PARAM, -4.f, 4.f, 1.f, "Speed B", "x");
 		configParam(PAN_B_PARAM, -1.f, 1.f, 0.f, "Pan B");
 
 		configButton(PLAY_PARAM, "Play / Stop");
-		configSwitch(MODE_A_PARAM, 0.f, 1.f, 0.f, "Mode A", {"Sleep", "Rotate"});
-		configSwitch(MODE_B_PARAM, 0.f, 1.f, 0.f, "Mode B", {"Sleep", "Rotate"});
+		configSwitch(MODE_A_PARAM, 0.f, 1.f, 1.f, "Mode A", {"Rotate", "Sleep"});
+		configSwitch(MODE_B_PARAM, 0.f, 1.f, 1.f, "Mode B", {"Rotate", "Sleep"});
 		configButton(SYNC_PARAM, "Sync (reset both loops)");
 
-		configInput(SLEEP_A_INPUT, "Sleep A CV");
+		configInput(SLEEP_A_INPUT, "Drift A CV");
 		configInput(SPEED_A_INPUT, "Speed A CV");
 		configInput(PAN_A_INPUT, "Pan A CV");
 		configInput(CLOCK_A_INPUT, "Clock A (transient jump)");
 
-		configInput(SLEEP_B_INPUT, "Sleep B CV");
+		configInput(SLEEP_B_INPUT, "Drift B CV");
 		configInput(SPEED_B_INPUT, "Speed B CV");
 		configInput(PAN_B_INPUT, "Pan B CV");
 		configInput(CLOCK_B_INPUT, "Clock B (transient jump)");
@@ -1032,8 +1032,8 @@ struct Phase : Module {
 		float leftOut = 0.f;
 		float rightOut = 0.f;
 
-		bool rotateModeA = params[MODE_A_PARAM].getValue() > 0.5f;
-		bool rotateModeB = params[MODE_B_PARAM].getValue() > 0.5f;
+		bool rotateModeA = params[MODE_A_PARAM].getValue() < 0.5f;
+		bool rotateModeB = params[MODE_B_PARAM].getValue() < 0.5f;
 
 		processLoop(loopA, sampleA, sleepA, speedA, panA, rotateModeA, args.sampleTime, leftOut, rightOut);
 		processLoop(loopB, sampleB, sleepB, speedB, panB, rotateModeB, args.sampleTime, leftOut, rightOut);
@@ -1141,7 +1141,7 @@ void PhaseWaveformDisplay::drawLayer(const DrawArgs& args, int layer) {
 	if (module->sampleA.loaded) {
 		// Compute rotation as normalized fraction of total sample
 		float rotNormA = 0.f;
-		if (module->params[Phase::MODE_A_PARAM].getValue() > 0.5f && module->sampleA.length > 0) {
+		if (module->params[Phase::MODE_A_PARAM].getValue() < 0.5f && module->sampleA.length > 0) {
 			rotNormA = (float)(module->loopA.rotationOffset / (double)module->sampleA.length);
 		}
 		drawWaveform(args, module->sampleA.waveformMini, 0, 0, w, halfH,
@@ -1152,7 +1152,7 @@ void PhaseWaveformDisplay::drawLayer(const DrawArgs& args, int layer) {
 		// appears in the rotated waveform display. The display shifts content
 		// forward by rotOffset, so the original start appears at (regionLength - rotOffset).
 		float originNorm = module->sampleA.loopStart;
-		if (module->params[Phase::MODE_A_PARAM].getValue() > 0.5f && module->loopA.rotationOffset != 0.0) {
+		if (module->params[Phase::MODE_A_PARAM].getValue() < 0.5f && module->loopA.rotationOffset != 0.0) {
 			size_t regionStart = (size_t)(module->sampleA.loopStart * module->sampleA.length);
 			size_t regionEnd = (size_t)(module->sampleA.loopEnd * module->sampleA.length);
 			size_t regionLength = regionEnd - regionStart;
@@ -1183,7 +1183,7 @@ void PhaseWaveformDisplay::drawLayer(const DrawArgs& args, int layer) {
 	// Draw waveform B (bottom half)
 	if (module->sampleB.loaded) {
 		float rotNormB = 0.f;
-		if (module->params[Phase::MODE_B_PARAM].getValue() > 0.5f && module->sampleB.length > 0) {
+		if (module->params[Phase::MODE_B_PARAM].getValue() < 0.5f && module->sampleB.length > 0) {
 			rotNormB = (float)(module->loopB.rotationOffset / (double)module->sampleB.length);
 		}
 		drawWaveform(args, module->sampleB.waveformMini, 0, halfH, w, halfH,
@@ -1192,7 +1192,7 @@ void PhaseWaveformDisplay::drawLayer(const DrawArgs& args, int layer) {
 
 		// Origin line for B
 		float originNorm = module->sampleB.loopStart;
-		if (module->params[Phase::MODE_B_PARAM].getValue() > 0.5f && module->loopB.rotationOffset != 0.0) {
+		if (module->params[Phase::MODE_B_PARAM].getValue() < 0.5f && module->loopB.rotationOffset != 0.0) {
 			size_t regionStart = (size_t)(module->sampleB.loopStart * module->sampleB.length);
 			size_t regionEnd = (size_t)(module->sampleB.loopEnd * module->sampleB.length);
 			size_t regionLength = regionEnd - regionStart;
@@ -1239,65 +1239,61 @@ struct PhaseWidget : ModuleWidget {
 		// Waveform display
 		PhaseWaveformDisplay* display = new PhaseWaveformDisplay();
 		display->module = module;
-		display->box.pos = mm2px(Vec(5.8f, 14.f));
-		display->box.size = mm2px(Vec(90.f, 24.f));
+		display->box.pos = mm2px(Vec(2.54f, 14.f));
+		display->box.size = mm2px(Vec(91.44f, 24.f));
 		addChild(display);
 
 		// --- Loop A controls ---
-		// Knobs (Y=50mm)
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(15.24f, 50.f)), module, Phase::SLEEP_A_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(35.56f, 50.f)), module, Phase::SPEED_A_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(55.88f, 50.f)), module, Phase::PAN_A_PARAM));
+		// Left side: CLK, START, LEN jacks (Y=53.34mm)
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.16f, 53.34f)), module, Phase::CLOCK_A_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.32f, 53.34f)), module, Phase::START_A_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(30.48f, 53.34f)), module, Phase::END_A_INPUT));
 
-		// CV inputs (Y=62mm)
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(15.24f, 62.f)), module, Phase::SLEEP_A_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(35.56f, 62.f)), module, Phase::SPEED_A_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(55.88f, 62.f)), module, Phase::PAN_A_INPUT));
+		// Mode switch A (Y=53.34mm)
+		addParam(createParamCentered<CKSS>(mm2px(Vec(43.18f, 53.34f)), module, Phase::MODE_A_PARAM));
 
-		// Clock input
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(76.2f, 50.f)), module, Phase::CLOCK_A_INPUT));
+		// Knobs: Drift, Speed, Pan (Y=53.34mm)
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(55.88f, 53.34f)), module, Phase::SLEEP_A_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(73.66f, 53.34f)), module, Phase::SPEED_A_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(88.9f, 53.34f)), module, Phase::PAN_A_PARAM));
 
-		// Loop region CV inputs
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(86.36f, 50.f)), module, Phase::START_A_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(96.52f, 50.f)), module, Phase::END_A_INPUT));
+		// CV inputs (Y=63.5mm)
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(55.88f, 63.5f)), module, Phase::SLEEP_A_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(73.66f, 63.5f)), module, Phase::SPEED_A_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(88.9f, 63.5f)), module, Phase::PAN_A_INPUT));
 
 		// --- Loop B controls ---
-		// Knobs (Y=78mm)
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(15.24f, 78.f)), module, Phase::SLEEP_B_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(35.56f, 78.f)), module, Phase::SPEED_B_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(55.88f, 78.f)), module, Phase::PAN_B_PARAM));
+		// Left side: CLK, START, LEN jacks (Y=81.28mm)
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.16f, 81.28f)), module, Phase::CLOCK_B_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.32f, 81.28f)), module, Phase::START_B_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(30.48f, 81.28f)), module, Phase::END_B_INPUT));
 
-		// CV inputs (Y=90mm)
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(15.24f, 90.f)), module, Phase::SLEEP_B_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(35.56f, 90.f)), module, Phase::SPEED_B_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(55.88f, 90.f)), module, Phase::PAN_B_INPUT));
+		// Mode switch B (Y=81.28mm)
+		addParam(createParamCentered<CKSS>(mm2px(Vec(43.18f, 81.28f)), module, Phase::MODE_B_PARAM));
 
-		// Clock input
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(76.2f, 78.f)), module, Phase::CLOCK_B_INPUT));
+		// Knobs: Drift, Speed, Pan (Y=81.28mm)
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(55.88f, 81.28f)), module, Phase::SLEEP_B_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(73.66f, 81.28f)), module, Phase::SPEED_B_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(88.9f, 81.28f)), module, Phase::PAN_B_PARAM));
 
-		// Loop region CV inputs
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(86.36f, 78.f)), module, Phase::START_B_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(96.52f, 78.f)), module, Phase::END_B_INPUT));
+		// CV inputs (Y=91.44mm)
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(55.88f, 91.44f)), module, Phase::SLEEP_B_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(73.66f, 91.44f)), module, Phase::SPEED_B_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(88.9f, 91.44f)), module, Phase::PAN_B_INPUT));
 
-		// Mode switches (Sleep/Rotate) - between CV and bottom rows
-		addParam(createParamCentered<CKSS>(mm2px(Vec(86.36f, 62.f)), module, Phase::MODE_A_PARAM));
-		addParam(createParamCentered<CKSS>(mm2px(Vec(86.36f, 90.f)), module, Phase::MODE_B_PARAM));
-
-		// --- Bottom row ---
-		// Play button with LED
+		// --- Bottom section ---
+		// Play button + Sync button (Y=106.68mm)
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(
-			mm2px(Vec(15.24f, 110.f)), module, Phase::PLAY_PARAM, Phase::PLAY_LIGHT));
+			mm2px(Vec(10.16f, 106.68f)), module, Phase::PLAY_PARAM, Phase::PLAY_LIGHT));
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(20.32f, 106.68f)), module, Phase::SYNC_PARAM));
 
-		// Play gate CV input
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(25.4f, 110.f)), module, Phase::PLAY_INPUT));
+		// Play gate + Sync CV (Y=116.84mm)
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.16f, 116.84f)), module, Phase::PLAY_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(20.32f, 116.84f)), module, Phase::SYNC_INPUT));
 
-		// Sync button + input
-		addParam(createParamCentered<VCVButton>(mm2px(Vec(45.72f, 110.f)), module, Phase::SYNC_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(56.f, 110.f)), module, Phase::SYNC_INPUT));
-
-		// Stereo outputs
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(76.2f, 110.f)), module, Phase::LEFT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(91.44f, 110.f)), module, Phase::RIGHT_OUTPUT));
+		// Stereo outputs (Y=116.84mm)
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(78.74f, 116.84f)), module, Phase::LEFT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(88.9f, 116.84f)), module, Phase::RIGHT_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
