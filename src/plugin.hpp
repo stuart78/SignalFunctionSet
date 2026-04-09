@@ -13,3 +13,4 @@ extern Model* modelGsx;
 extern Model* modelFugue;
 extern Model* modelPhase;
 extern Model* modelOvertone;
+extern Model* modelIntone;
