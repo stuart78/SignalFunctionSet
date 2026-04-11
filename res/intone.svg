@@ -1,74 +1,320 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="81.28mm" height="128.5mm" viewBox="0 0 81.28 128.5">
-
-  <!-- Panel background -->
-  <rect width="81.28" height="128.5" fill="#f0f0f0"/>
-  <text x="40.64" y="8" text-anchor="middle" font-family="sans-serif" font-size="4" fill="#231f20">INTONE</text>
-
-  <!-- Spectrum display -->
-  <rect x="5.8" y="14" width="69.68" height="24" rx="1" ry="1" fill="#1a1a2e" stroke="#404060" stroke-width="0.3"/>
-
-  <!-- Formant column labels Y=42 -->
-  <text x="13.55" y="42" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">F1</text>
-  <text x="27.10" y="42" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">F2</text>
-  <text x="40.64" y="42" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">F3</text>
-  <text x="54.18" y="42" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">F4</text>
-  <text x="67.73" y="42" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">F5</text>
-
-  <!-- FREQ knobs Y=48 (red) -->
-  <g transform="translate(13.55,48)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(27.10,48)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(40.64,48)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(54.18,48)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(67.73,48)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-
-  <!-- BW knobs Y=60 (red) -->
-  <g transform="translate(13.55,60)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(27.10,60)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(40.64,60)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(54.18,60)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(67.73,60)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-
-  <!-- AMP knobs Y=72 (red) -->
-  <g transform="translate(13.55,72)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(27.10,72)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(40.64,72)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(54.18,72)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(67.73,72)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-
-  <!-- FREQ CV jacks Y=84 (blue) -->
-  <g transform="translate(13.55,84)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(27.10,84)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(40.64,84)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(54.18,84)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(67.73,84)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-
-  <!-- BW CV jacks Y=94 (blue) -->
-  <g transform="translate(13.55,94)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(27.10,94)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(40.64,94)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(54.18,94)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(67.73,94)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-
-  <!-- Vowel morph slider Y=104 (orange-brown) -->
-  <text x="40.64" y="102" text-anchor="middle" font-family="sans-serif" font-size="2" fill="#808080">VOWEL MORPH</text>
-  <g transform="translate(40.64,106)"><line x1="-30" y1="0" x2="30" y2="0" stroke="#cc6600" stroke-width="0.2"/><line x1="0" y1="-1" x2="0" y2="1" stroke="#cc6600" stroke-width="0.2"/><circle cx="0" cy="0" r="0.8" fill="none" stroke="#cc6600" stroke-width="0.15"/></g>
-
-  <!-- Bottom row labels Y=113 -->
-  <text x="7.62" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">VWL CV</text>
-  <text x="17.78" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">SKIRT</text>
-  <text x="27.94" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">SKR CV</text>
-  <text x="38.10" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">MODE</text>
-  <text x="48.26" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">V/OCT</text>
-  <text x="58.42" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">EXC</text>
-  <text x="73.66" y="113" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">OUT</text>
-
-  <!-- Bottom row Y=118 -->
-  <g transform="translate(7.62,118)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(17.78,118)"><line x1="-2" y1="0" x2="2" y2="0" stroke="#ff0000" stroke-width="0.2"/><line x1="0" y1="-2" x2="0" y2="2" stroke="#ff0000" stroke-width="0.2"/><circle cx="0" cy="0" r="1.5" fill="none" stroke="#ff0000" stroke-width="0.15"/></g>
-  <g transform="translate(27.94,118)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(38.10,118)"><line x1="-1" y1="0" x2="1" y2="0" stroke="#00cc00" stroke-width="0.2"/><line x1="0" y1="-1" x2="0" y2="1" stroke="#00cc00" stroke-width="0.2"/><circle cx="0" cy="0" r="0.8" fill="none" stroke="#00cc00" stroke-width="0.15"/></g>
-  <g transform="translate(48.26,118)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(58.42,118)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
-  <g transform="translate(73.66,118)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
+<svg xmlns="http://www.w3.org/2000/svg" width="81.28mm" height="128.5mm" viewBox="0 0 230.4 364.25">
+  <g id="Background">
+    <rect width="230.4" height="364.25" fill="#f0f0f0"/>
+  </g>
+  <g id="UI">
+    <rect x="194.4" y="310.54" width="28.8" height="38.4" rx="2.37" ry="2.37"/>
+    <g>
+      <rect x="196.8" y="312.94" width="24" height="9.6" fill="none"/>
+      <path d="M204.43,320.28c-.48,0-.9-.11-1.27-.32-.37-.21-.66-.51-.86-.9-.21-.38-.31-.82-.31-1.31s.1-.94.31-1.32c.21-.38.49-.68.86-.9.36-.22.78-.33,1.26-.33s.9.11,1.26.33c.36.22.65.52.85.9.21.38.31.82.31,1.31s-.1.93-.31,1.32-.49.68-.85.9c-.36.21-.78.32-1.25.32ZM204.43,319.65c.33,0,.62-.08.88-.25s.46-.39.6-.67c.14-.29.22-.61.22-.99s-.07-.7-.22-.98c-.15-.29-.35-.51-.61-.68-.26-.16-.56-.24-.89-.24s-.63.08-.9.24c-.26.16-.47.39-.61.68-.15.29-.22.62-.22.98s.07.7.22.99c.15.28.36.51.62.67s.57.25.91.25Z" fill="#fff"/>
+      <path d="M209.59,320.3c-.38,0-.71-.08-1-.24-.29-.16-.51-.38-.67-.66-.16-.28-.24-.61-.24-.98v-3.14h.69v3.14c0,.24.05.46.16.64s.25.33.43.43c.18.1.4.15.64.15s.46-.05.64-.15c.19-.1.33-.25.43-.43s.15-.4.15-.64v-3.14h.69v3.14c0,.37-.08.69-.24.98s-.39.5-.68.66-.63.24-1.02.24Z" fill="#fff"/>
+      <path d="M213.61,320.19v-4.27h-1.53v-.63h3.76v.63h-1.53v4.27h-.69Z" fill="#fff"/>
+    </g>
+    <g>
+      <path id="path12" d="M157.91,22.09h1.7v-1.7h1.7v3.4h1.7v-5.1h1.7v6.8h1.7v-8.5h1.7v8.5h1.7v-5.1h1.7v3.4h1.7v-1.7h1.7" fill="none" stroke="#b2b2b2" stroke-linecap="round" stroke-linejoin="round" stroke-width=".85"/>
+      <path id="path13" d="M177.42,25.49l5.1-8.5c0,1.86,1.43,5.1,3.4,5.1h6.8l1.7,3.4" fill="none" stroke="#b2b2b2" stroke-linecap="square" stroke-linejoin="bevel" stroke-width=".85"/>
+      <path id="path17" d="M200.15,16.99h-1.7v10.2h1.7" fill="none" stroke="#b2b2b2" stroke-linecap="square" stroke-linejoin="bevel" stroke-width=".85"/>
+      <path id="path18" d="M213.76,16.99h1.7v10.2h-1.7" fill="none" stroke="#b2b2b2" stroke-linecap="square" stroke-linejoin="bevel" stroke-width=".85"/>
+      <path id="path21" d="M201.85,17.89l3.4,3.4" fill="none" stroke="#b2b2b2" stroke-linejoin="bevel" stroke-width=".85"/>
+      <path id="path22" d="M205.25,17.89l-3.4,3.4" fill="none" stroke="#b2b2b2" stroke-linejoin="bevel" stroke-width=".85"/>
+      <path id="path23-5" d="M201.85,22.99l3.4,3.4" fill="none" stroke="#b2b2b2" stroke-linejoin="bevel" stroke-width=".85"/>
+      <path id="path24" d="M201.85,26.39l3.4-3.4" fill="none" stroke="#b2b2b2" stroke-linejoin="bevel" stroke-width=".85"/>
+      <path id="path25-3" d="M208.65,17.89l3.4,3.4" fill="none" stroke="#b2b2b2" stroke-linejoin="bevel" stroke-width=".85"/>
+      <path id="path26-7" d="M212.06,17.89l-3.4,3.4" fill="none" stroke="#b2b2b2" stroke-linejoin="bevel" stroke-width=".85"/>
+      <rect id="rect26" x="208.65" y="22.99" width="3.4" height="3.4" fill="none" stroke="#b2b2b2" stroke-linejoin="bevel" stroke-width=".85"/>
+    </g>
+    <rect x="16.44" y="39.69" width="197.52" height="68.03" rx="2.83" ry="2.83" fill="#1a1a2e" stroke="#404060" stroke-miterlimit="11.34" stroke-width=".85"/>
+    <g>
+      <line x1="32.74" y1="136.06" x2="44.08" y2="136.06" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="38.41" y1="130.39" x2="38.41" y2="141.73" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="38.41" cy="136.06" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="71.15" y1="136.06" x2="82.49" y2="136.06" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="76.82" y1="130.39" x2="76.82" y2="141.73" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="76.82" cy="136.06" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="109.53" y1="136.06" x2="120.87" y2="136.06" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="115.2" y1="130.39" x2="115.2" y2="141.73" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="115.2" cy="136.06" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="147.91" y1="136.06" x2="159.25" y2="136.06" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="153.58" y1="130.39" x2="153.58" y2="141.73" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="153.58" cy="136.06" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="186.32" y1="136.06" x2="197.66" y2="136.06" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="191.99" y1="130.39" x2="191.99" y2="141.73" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="191.99" cy="136.06" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="32.74" y1="170.08" x2="44.08" y2="170.08" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="38.41" y1="164.41" x2="38.41" y2="175.75" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="38.41" cy="170.08" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="71.15" y1="170.08" x2="82.49" y2="170.08" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="76.82" y1="164.41" x2="76.82" y2="175.75" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="76.82" cy="170.08" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="109.53" y1="170.08" x2="120.87" y2="170.08" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="115.2" y1="164.41" x2="115.2" y2="175.75" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="115.2" cy="170.08" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="147.91" y1="170.08" x2="159.25" y2="170.08" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="153.58" y1="164.41" x2="153.58" y2="175.75" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="153.58" cy="170.08" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="186.32" y1="170.08" x2="197.66" y2="170.08" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="191.99" y1="164.41" x2="191.99" y2="175.75" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="191.99" cy="170.08" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="32.74" y1="204.09" x2="44.08" y2="204.09" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="38.41" y1="198.43" x2="38.41" y2="209.76" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="38.41" cy="204.09" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="71.15" y1="204.09" x2="82.49" y2="204.09" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="76.82" y1="198.43" x2="76.82" y2="209.76" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="76.82" cy="204.09" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="109.53" y1="204.09" x2="120.87" y2="204.09" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="115.2" y1="198.43" x2="115.2" y2="209.76" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="115.2" cy="204.09" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="147.91" y1="204.09" x2="159.25" y2="204.09" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="153.58" y1="198.43" x2="153.58" y2="209.76" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="153.58" cy="204.09" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="186.32" y1="204.09" x2="197.66" y2="204.09" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="191.99" y1="198.43" x2="191.99" y2="209.76" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="191.99" cy="204.09" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="34.16" y1="238.11" x2="42.66" y2="238.11" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="38.41" y1="233.86" x2="38.41" y2="242.36" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="38.41" cy="238.11" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="72.57" y1="238.11" x2="81.07" y2="238.11" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="76.82" y1="233.86" x2="76.82" y2="242.36" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="76.82" cy="238.11" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="110.95" y1="238.11" x2="119.45" y2="238.11" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="115.2" y1="233.86" x2="115.2" y2="242.36" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="115.2" cy="238.11" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="149.33" y1="238.11" x2="157.83" y2="238.11" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="153.58" y1="233.86" x2="153.58" y2="242.36" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="153.58" cy="238.11" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="187.74" y1="238.11" x2="196.24" y2="238.11" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="191.99" y1="233.86" x2="191.99" y2="242.36" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="191.99" cy="238.11" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="34.16" y1="266.46" x2="42.66" y2="266.46" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="38.41" y1="262.2" x2="38.41" y2="270.71" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="38.41" cy="266.46" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="72.57" y1="266.46" x2="81.07" y2="266.46" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="76.82" y1="262.2" x2="76.82" y2="270.71" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="76.82" cy="266.46" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="110.95" y1="266.46" x2="119.45" y2="266.46" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="115.2" y1="262.2" x2="115.2" y2="270.71" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="115.2" cy="266.46" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="149.33" y1="266.46" x2="157.83" y2="266.46" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="153.58" y1="262.2" x2="153.58" y2="270.71" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="153.58" cy="266.46" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="187.74" y1="266.46" x2="196.24" y2="266.46" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="191.99" y1="262.2" x2="191.99" y2="270.71" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="191.99" cy="266.46" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="115.2" y1="297.64" x2="115.2" y2="303.31" fill="none" stroke="#c60" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="115.2" cy="300.47" r="2.27" fill="none" stroke="#c60" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M11.62,317.74l-2.01-4.9h.74l1.65,4.1,1.66-4.1h.74l-2.01,4.9h-.76Z"/>
+        <path d="M16.98,317.83c-.48,0-.9-.11-1.27-.32-.37-.21-.66-.51-.87-.9-.21-.38-.31-.82-.31-1.31s.1-.94.31-1.32c.21-.38.49-.68.86-.9.36-.22.78-.33,1.26-.33s.9.11,1.26.33c.36.22.65.52.85.9.21.38.31.82.31,1.31s-.1.93-.31,1.32c-.21.38-.49.68-.85.9-.36.21-.78.32-1.25.32ZM16.99,317.2c.33,0,.62-.08.88-.25s.46-.39.6-.67c.14-.29.22-.61.22-.99s-.07-.7-.22-.98-.35-.51-.61-.68c-.26-.16-.56-.24-.89-.24s-.63.08-.9.24c-.26.16-.47.39-.61.68s-.22.62-.22.98.07.7.22.99c.15.28.36.51.62.67s.57.25.91.25Z"/>
+        <path d="M20.98,317.74l-1.48-4.9h.7l1.16,3.84,1.12-3.84h.69l1.1,3.82,1.18-3.82h.69l-1.51,4.9h-.73l-1.08-3.79-1.1,3.79h-.73Z"/>
+        <path d="M26.65,317.74v-4.9h2.95v.63h-2.26v1.46h2.04v.62h-2.04v1.57h2.28v.63h-2.96Z"/>
+        <path d="M30.61,317.74v-4.9h.69v4.27h2.27v.63h-2.96Z"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M43.51,317.83c-.26,0-.5-.03-.71-.09s-.4-.14-.55-.25c-.16-.1-.29-.22-.39-.35-.1-.13-.17-.27-.22-.41l.67-.22c.07.19.2.36.4.5.2.14.44.21.72.22.35,0,.62-.07.82-.21.2-.14.3-.32.3-.55,0-.21-.09-.38-.26-.51-.17-.13-.4-.23-.69-.3l-.57-.15c-.22-.06-.43-.15-.61-.26-.18-.11-.33-.25-.44-.43-.11-.17-.16-.38-.16-.62,0-.45.15-.8.44-1.05.29-.25.71-.38,1.26-.38.32,0,.59.05.83.15.23.1.43.23.58.4.15.16.26.34.33.54l-.67.22c-.08-.21-.21-.38-.41-.51-.19-.13-.43-.19-.71-.19-.29,0-.53.07-.7.21s-.26.33-.26.57c0,.21.07.36.2.47.13.11.31.19.54.25l.57.14c.46.11.81.3,1.06.56.25.26.38.54.38.85,0,.27-.07.51-.2.72s-.33.38-.59.5c-.26.12-.58.19-.96.19Z"/>
+        <path d="M46.04,317.74v-4.9h.67v2.17l2.08-2.17h.88l-2.09,2.21,2.18,2.7h-.85l-1.79-2.22-.41.43v1.79h-.67Z"/>
+        <path d="M50.24,317.74v-4.9h.69v4.9h-.69Z"/>
+        <path d="M51.99,317.74v-4.9h1.65c.33,0,.61.06.86.19.25.13.45.31.59.53.14.23.21.49.21.79,0,.32-.09.6-.27.85-.18.24-.42.42-.71.53l1.18,2.01h-.78l-1.09-1.88h-.96v1.88h-.69ZM52.68,315.24h1.03c.17,0,.32-.04.45-.12.13-.08.24-.18.32-.32s.12-.28.12-.45c0-.26-.09-.47-.27-.64-.18-.16-.42-.24-.71-.24h-.95v1.76Z"/>
+        <path d="M57.19,317.74v-4.27h-1.53v-.63h3.76v.63h-1.53v4.27h-.69Z"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M101.65,317.74v-4.27h-1.53v-.63h3.76v.63h-1.53v4.27h-.69Z"/>
+        <path d="M104.41,317.74v-4.9h1.65c.33,0,.62.06.87.19.25.13.45.31.59.53.14.23.21.49.21.79,0,.32-.09.6-.27.85-.18.24-.42.42-.71.53l1.18,2.01h-.78l-1.09-1.88h-.96v1.88h-.69ZM105.1,315.24h1.03c.17,0,.32-.04.45-.12.13-.08.24-.18.32-.32.08-.13.12-.28.12-.45,0-.26-.09-.47-.27-.64-.18-.16-.42-.24-.71-.24h-.95v1.76Z"/>
+        <path d="M108.65,317.74v-4.9h.69v4.9h-.69Z"/>
+        <path d="M112.64,317.83c-.49,0-.93-.11-1.32-.33-.38-.22-.69-.52-.9-.9-.22-.38-.33-.82-.33-1.31s.11-.94.33-1.32c.22-.38.52-.68.9-.9.38-.22.83-.33,1.32-.33.27,0,.53.04.78.13.25.09.48.21.68.36.2.15.37.33.49.52l-.55.36c-.09-.14-.21-.27-.36-.38s-.31-.2-.49-.26c-.18-.06-.36-.09-.54-.09-.36,0-.68.08-.96.24-.28.16-.5.39-.66.67-.16.28-.24.62-.24.99s.08.7.23.98c.16.28.38.51.66.67s.61.25.97.25c.29,0,.55-.06.78-.18s.41-.28.54-.5c.13-.21.2-.46.21-.74h-1.18v-.57h1.85v.5c0,.42-.1.8-.29,1.11-.19.32-.45.56-.78.74-.33.17-.71.26-1.14.26Z"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M97.43,353.12l1.97-4.9h.73l1.97,4.9h-.74l-.53-1.31h-2.16l-.53,1.31h-.74ZM98.92,351.19h1.69l-.84-2.11-.85,2.11Z"/>
+        <path d="M104.45,353.22c-.38,0-.71-.08-1-.24s-.51-.38-.67-.66c-.16-.28-.24-.61-.24-.98v-3.14h.69v3.14c0,.24.05.46.16.64.1.19.25.33.43.43.18.1.4.15.64.15s.46-.05.64-.15c.19-.1.33-.25.43-.43s.15-.4.15-.64v-3.14h.69v3.14c0,.37-.08.69-.24.98s-.39.5-.68.66c-.29.16-.63.24-1.02.24Z"/>
+        <path d="M107.39,353.12v-4.9h1.51c.47,0,.88.1,1.24.31.36.21.64.5.85.87.21.37.31.79.31,1.27s-.1.9-.31,1.27c-.21.37-.49.66-.85.87-.36.21-.78.32-1.24.32h-1.51ZM108.07,352.48h.83c.24,0,.46-.05.67-.14.21-.09.39-.22.54-.38.16-.17.28-.36.36-.58.09-.22.13-.46.13-.71s-.04-.49-.13-.71c-.09-.22-.21-.41-.36-.58s-.34-.29-.54-.38c-.21-.09-.43-.14-.67-.14h-.83v3.61Z"/>
+        <path d="M112.05,353.12v-4.9h.69v4.9h-.69Z"/>
+        <path d="M115.93,353.2c-.48,0-.9-.11-1.27-.32-.37-.21-.66-.51-.87-.9-.21-.38-.31-.82-.31-1.31s.1-.94.31-1.32c.21-.38.49-.68.86-.9.36-.22.78-.33,1.26-.33s.9.11,1.26.33c.36.22.65.52.85.9.21.38.31.82.31,1.31s-.1.93-.31,1.32c-.21.38-.49.68-.85.9-.36.21-.78.32-1.25.32ZM115.93,352.57c.33,0,.63-.08.88-.25.26-.16.46-.39.6-.67.14-.29.22-.61.22-.99s-.07-.7-.22-.98c-.15-.29-.35-.51-.61-.68-.26-.16-.56-.24-.89-.24s-.63.08-.9.24c-.26.16-.46.39-.61.68-.15.29-.22.62-.22.98s.08.7.22.99c.15.28.36.51.62.67s.57.25.91.25Z"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M128.15,317.74l-2.01-4.9h.74l1.65,4.1,1.66-4.1h.74l-2.01,4.9h-.76Z"/>
+        <path d="M130.91,318.33l1.93-5.82h.67l-1.92,5.82h-.68Z"/>
+        <path d="M136.18,317.83c-.48,0-.9-.11-1.27-.32-.37-.21-.66-.51-.87-.9-.21-.38-.31-.82-.31-1.31s.1-.94.31-1.32c.21-.38.49-.68.86-.9.36-.22.78-.33,1.26-.33s.9.11,1.26.33c.36.22.65.52.85.9.21.38.31.82.31,1.31s-.1.93-.31,1.32c-.21.38-.49.68-.85.9-.36.21-.78.32-1.25.32ZM136.19,317.2c.33,0,.63-.08.88-.25.26-.16.46-.39.6-.67.14-.29.22-.61.22-.99s-.07-.7-.22-.98c-.15-.29-.35-.51-.61-.68-.26-.16-.56-.24-.89-.24s-.63.08-.9.24c-.26.16-.46.39-.61.68-.15.29-.22.62-.22.98s.08.7.22.99c.15.28.36.51.62.67s.57.25.91.25Z"/>
+        <path d="M141.43,317.83c-.47,0-.88-.11-1.25-.33-.36-.22-.65-.52-.85-.9-.21-.38-.31-.82-.31-1.31s.1-.93.31-1.31c.21-.38.49-.68.85-.9.36-.22.77-.33,1.24-.33.3,0,.59.06.87.17s.52.26.74.46c.22.19.38.42.5.67l-.62.28c-.09-.19-.21-.36-.36-.5-.15-.14-.33-.25-.52-.33-.19-.08-.4-.12-.61-.12-.33,0-.62.08-.88.24-.26.16-.46.39-.6.67-.14.28-.22.61-.22.99s.07.71.22.99c.15.29.35.51.61.68s.55.24.89.24c.21,0,.42-.04.61-.13.19-.09.36-.21.51-.36.15-.15.27-.33.37-.52l.62.27c-.12.27-.28.5-.5.71-.21.21-.46.37-.74.48-.28.11-.57.17-.88.17Z"/>
+        <path d="M145.21,317.74v-4.27h-1.53v-.63h3.76v.63h-1.53v4.27h-.69Z"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M154.9,317.74v-4.9h2.95v.63h-2.26v1.46h2.04v.62h-2.04v1.57h2.27v.63h-2.96Z"/>
+        <path d="M158.31,317.74l1.76-2.49-1.74-2.41h.83l1.31,1.86,1.29-1.86h.83l-1.74,2.41,1.75,2.49h-.84l-1.29-1.93-1.31,1.93h-.84Z"/>
+        <path d="M165.2,317.83c-.47,0-.88-.11-1.25-.33-.36-.22-.65-.52-.85-.9-.21-.38-.31-.82-.31-1.31s.1-.93.31-1.31c.21-.38.49-.68.85-.9.36-.22.77-.33,1.24-.33.3,0,.59.06.87.17s.52.26.74.46.38.42.5.67l-.62.28c-.09-.19-.21-.36-.36-.5-.15-.14-.33-.25-.52-.33-.19-.08-.4-.12-.61-.12-.33,0-.62.08-.88.24-.26.16-.46.39-.6.67-.14.28-.22.61-.22.99s.07.71.22.99c.15.29.35.51.61.68.26.16.55.24.88.24.21,0,.42-.04.61-.13.19-.09.36-.21.51-.36s.27-.33.37-.52l.62.27c-.12.27-.28.5-.5.71-.21.21-.46.37-.74.48-.28.11-.57.17-.88.17Z"/>
+        <path d="M167.99,317.74v-4.9h.69v4.9h-.69Z"/>
+        <path d="M170.74,317.74v-4.27h-1.53v-.63h3.76v.63h-1.53v4.27h-.69Z"/>
+        <path d="M173.5,317.74v-4.9h2.95v.63h-2.26v1.46h2.04v.62h-2.04v1.57h2.27v.63h-2.96Z"/>
+      </g>
+    </g>
+    <g>
+      <line x1="17.35" y1="334.49" x2="25.85" y2="334.49" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="21.6" y1="330.24" x2="21.6" y2="338.74" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="21.6" cy="334.49" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="44.73" y1="334.49" x2="56.07" y2="334.49" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="50.4" y1="328.82" x2="50.4" y2="340.16" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="50.4" cy="334.49" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="74.95" y1="334.49" x2="83.45" y2="334.49" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="79.2" y1="330.24" x2="79.2" y2="338.74" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="79.2" cy="334.49" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="105.17" y1="334.49" x2="110.83" y2="334.49" fill="none" stroke="#0c0" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="108" y1="331.65" x2="108" y2="337.32" fill="none" stroke="#0c0" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="108" cy="334.49" r="2.27" fill="none" stroke="#0c0" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="132.55" y1="334.49" x2="141.05" y2="334.49" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="136.8" y1="330.24" x2="136.8" y2="338.74" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="136.8" cy="334.49" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="161.35" y1="334.49" x2="169.85" y2="334.49" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="165.6" y1="330.24" x2="165.6" y2="338.74" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="165.6" cy="334.49" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="204.55" y1="334.49" x2="213.05" y2="334.49" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="208.8" y1="330.24" x2="208.8" y2="338.74" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="208.8" cy="334.49" r="3.4" fill="none" stroke="#06f" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <polyline points="41.41 136.06 53.52 136.06 53.52 238.11 41.41 238.11" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <polyline points="35.48 266.46 23.36 266.46 22.84 170.26 34.95 170.26" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <polyline points="80.05 136.06 92.16 136.06 92.16 238.11 80.05 238.11" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <polyline points="74.11 266.46 62 266.46 61.48 170.26 73.59 170.26" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <polyline points="118.43 136.06 130.54 136.06 130.54 238.11 118.43 238.11" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <polyline points="112.49 266.46 100.38 266.46 99.86 170.26 111.97 170.26" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <polyline points="156.82 136.06 168.94 136.06 168.94 238.11 156.82 238.11" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <polyline points="150.89 266.46 138.78 266.46 138.25 170.26 150.37 170.26" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <polyline points="195.22 136.06 207.33 136.06 207.33 238.11 195.22 238.11" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <polyline points="189.29 266.46 177.17 266.46 176.65 170.26 188.76 170.26" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <line x1="50.4" y1="334.49" x2="79.2" y2="334.49" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+  </g>
+  <g id="Text">
+    <g>
+      <rect x="14.4" y="16.09" width="57.6" height="12" fill="none"/>
+      <path d="M15.01,25.24v-6.3h1.45v6.3h-1.45Z" fill="#231f20"/>
+      <path d="M17.46,25.24v-6.3h1.52l2.76,3.84v-3.84h1.45v6.3h-1.45l-2.84-3.95v3.95h-1.45Z" fill="#231f20"/>
+      <path d="M25.56,25.24v-4.97h-1.84v-1.33h5.11v1.33h-1.84v4.97h-1.44Z" fill="#231f20"/>
+      <path d="M32.33,25.35c-.65,0-1.22-.14-1.72-.42s-.89-.66-1.17-1.15c-.28-.49-.42-1.05-.42-1.68s.14-1.2.42-1.69c.28-.49.67-.87,1.17-1.15s1.06-.42,1.71-.42,1.21.14,1.71.42.88.66,1.17,1.15c.28.49.42,1.05.42,1.69s-.14,1.19-.42,1.68c-.28.49-.66.87-1.16,1.15s-1.06.42-1.7.42ZM32.33,24.02c.35,0,.67-.08.94-.24.27-.16.48-.39.63-.68.15-.29.22-.62.22-.99s-.08-.71-.23-1-.37-.52-.64-.68-.58-.25-.94-.25-.67.08-.94.25c-.27.17-.48.39-.64.68-.16.29-.23.62-.23.99s.08.71.23,1c.16.29.37.52.65.68.28.16.59.24.95.24Z" fill="#231f20"/>
+      <path d="M36.26,25.24v-6.3h1.52l2.76,3.84v-3.84h1.45v6.3h-1.45l-2.84-3.95v3.95h-1.45Z" fill="#231f20"/>
+      <path d="M42.99,25.24v-6.3h4.1v1.33h-2.66v1.15h2.22v1.29h-2.22v1.2h2.7v1.33h-4.15Z" fill="#231f20"/>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M35.37,119.06v-5.6h3.39v.72h-2.61v1.76h2.27v.72h-2.27v2.4h-.78Z" fill="#231f20"/>
+        <path d="M40.52,119.06v-4.58c-.2.16-.4.29-.61.38s-.42.14-.63.13v-.71c.12,0,.25-.03.41-.11.16-.08.32-.18.48-.31s.3-.26.42-.39h.7v5.6h-.77Z" fill="#231f20"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M73.19,119.06v-5.6h3.39v.72h-2.61v1.76h2.27v.72h-2.27v2.4h-.78Z" fill="#231f20"/>
+        <path d="M77.09,119.06v-.63c0-.17.04-.34.12-.52s.19-.36.34-.53c.15-.18.32-.34.52-.49l1.08-.8c.13-.09.24-.2.35-.32.1-.12.19-.25.25-.38.06-.13.09-.26.09-.39,0-.17-.04-.33-.13-.47-.09-.14-.21-.25-.36-.34-.15-.08-.34-.12-.55-.12s-.38.04-.53.12-.28.18-.38.31c-.1.13-.17.26-.22.41l-.81-.15c.06-.25.17-.47.34-.69.17-.21.39-.39.66-.52s.57-.2.9-.2c.38,0,.72.07,1,.21.28.14.5.34.65.58.15.25.23.53.23.85s-.08.59-.25.86-.41.51-.72.76l-1,.75c-.2.15-.35.3-.47.46-.12.16-.19.33-.21.51h2.73v.7h-3.62Z" fill="#231f20"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M111.64,119.06v-5.6h3.39v.72h-2.61v1.76h2.27v.72h-2.27v2.4h-.79Z" fill="#231f20"/>
+        <path d="M117.27,119.15c-.29,0-.55-.04-.78-.13-.24-.08-.43-.2-.59-.35-.16-.15-.28-.31-.37-.49l.68-.31c.05.07.12.16.2.25s.19.17.32.24c.13.06.3.1.5.1.34,0,.6-.1.8-.29.2-.19.3-.43.3-.73,0-.22-.06-.4-.18-.56-.12-.15-.29-.27-.52-.35s-.5-.12-.83-.12h-.2v-.66h.2c.44,0,.78-.07,1.02-.22s.37-.36.37-.63c0-.15-.04-.29-.12-.42-.08-.12-.2-.23-.34-.3-.15-.08-.32-.12-.52-.12-.13,0-.25.02-.37.06-.12.04-.23.1-.33.18-.1.08-.19.18-.26.3l-.66-.3c.09-.2.22-.37.38-.5.17-.14.36-.25.58-.32s.45-.11.7-.11c.34,0,.63.06.9.19.26.13.47.3.62.53.15.22.23.48.23.76s-.08.53-.24.74c-.16.21-.38.37-.66.49.32.14.57.33.76.57.18.24.28.53.28.87s-.08.62-.25.87c-.17.25-.39.44-.67.57-.28.13-.59.2-.92.2Z" fill="#231f20"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M149.71,119.06v-5.6h3.39v.72h-2.61v1.76h2.27v.72h-2.27v2.4h-.78Z" fill="#231f20"/>
+        <path d="M156.07,119.06v-1.29h-2.58v-.62l2.53-3.7h.82v3.62h1.1v.7h-1.1v1.29h-.76ZM154.34,117.07h1.72v-2.52l-1.72,2.52Z" fill="#231f20"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M188.32,119.06v-5.6h3.39v.72h-2.61v1.76h2.27v.72h-2.27v2.4h-.78Z" fill="#231f20"/>
+        <path d="M194.1,119.15c-.24,0-.47-.04-.72-.11-.24-.07-.47-.18-.68-.33-.21-.15-.37-.33-.5-.56l.66-.3c.17.21.36.37.56.47.2.1.41.15.63.15.35,0,.63-.1.84-.31s.32-.49.32-.83-.1-.61-.31-.82-.48-.32-.82-.32c-.19,0-.38.04-.55.12-.18.08-.31.19-.41.31l-.71-.16.29-2.99h3.03v.72h-2.34l-.17,1.66c.15-.08.31-.15.5-.21.18-.05.37-.08.55-.08.34,0,.63.08.9.22.26.15.47.36.62.62.15.26.23.57.23.91,0,.37-.08.69-.25.97s-.39.49-.68.65-.62.24-1,.24Z" fill="#231f20"/>
+      </g>
+    </g>
+    <path d="M12.59,138.21c0,.5.28.88.66.88s.81-.5.81-1.54c0-.76-.27-1.46-.64-1.81v-.02h.66c.34.3.66.97.66,1.86,0,1.44-.73,2.1-1.46,2.1-.47,0-.85-.26-1.01-.69h-.03c-.18.42-.55.69-1.02.69-.67,0-1.42-.57-1.42-2.04,0-.87.34-1.58.68-1.92h.65v.02c-.36.38-.64,1.06-.64,1.88,0,1.08.46,1.47.82,1.47s.64-.39.64-.87l-.02-1.48h.66l-.02,1.47Z" fill="#231f20"/>
+    <g>
+      <path d="M11.83,169.73c-.04.41-.1,1.74-.1,2.77,0,.46.11.65.38.66l-.06.5s-.16.03-.24.03c-.34,0-.62-.22-.66-.82h-.02c-.26.46-.7.82-1.32.82-.92,0-1.58-.77-1.58-1.94,0-1.26.83-2.1,1.73-2.1.56,0,.98.29,1.19.78h.03c.02-.3.04-.5.07-.69h.58ZM9.98,173.13c.49,0,.91-.47,1.03-.98.04-.18.05-.33.05-.54,0-.15,0-.28-.03-.42-.1-.52-.48-.99-.99-.99-.66,0-1.1.65-1.1,1.53,0,.74.38,1.41,1.05,1.41Z" fill="#231f20"/>
+      <path d="M15.82,170.28v2.17c0,.63.06.95.11,1.15h-.68c-.06-.12-.12-.46-.12-1.08v-2.24h-1.27c-.03,1.02-.26,2.68-.54,3.32h-.67c.29-.76.51-2.29.54-3.32-.31,0-.59.02-.79.07l-.1-.42c.18-.12.5-.21,1.11-.21h3.02l-.08.55h-.54Z" fill="#231f20"/>
+    </g>
+    <path d="M10.06,207.58l2.26-5.6h.84l2.26,5.6h-.84l-.6-1.5h-2.47l-.6,1.5h-.84ZM11.77,205.38h1.93l-.96-2.41-.97,2.41Z" fill="#231f20"/>
+    <line x1="38.41" y1="130.39" x2="38.41" y2="122.82" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <line x1="76.82" y1="130.39" x2="76.82" y2="122.82" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <line x1="115.2" y1="130.39" x2="115.2" y2="122.82" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <line x1="153.58" y1="130.39" x2="153.58" y2="122.82" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+    <line x1="191.99" y1="130.39" x2="191.99" y2="122.82" fill="none" stroke="#b2b2b2" stroke-miterlimit="10" stroke-width=".5"/>
+  </g>
+  <g id="Templates">
+    <g>
+      <rect x="68.66" y="284.09" width="91.49" height="15.97" fill="none"/>
+      <path d="M68.72,288.99l1.97-4.9h.74l1.97,4.9h-.74l-.52-1.31h-2.16l-.53,1.31h-.73ZM70.22,287.06h1.69l-.84-2.11-.85,2.11Z"/>
+      <path d="M91.64,288.99v-4.9h2.95v.63h-2.26v1.46h2.04v.62h-2.04v1.57h2.28v.63h-2.96Z"/>
+      <path d="M113.34,288.99v-4.9h.69v4.9h-.69Z"/>
+      <path d="M134.94,289.07c-.48,0-.9-.11-1.27-.32-.37-.21-.66-.51-.86-.9-.21-.38-.31-.82-.31-1.31s.1-.94.31-1.32c.21-.38.49-.68.86-.9.36-.22.78-.33,1.26-.33s.9.11,1.26.33c.36.22.65.52.85.9.21.38.31.82.31,1.31s-.1.93-.31,1.32-.49.68-.85.9c-.36.21-.78.32-1.25.32ZM134.95,288.44c.33,0,.62-.08.88-.25s.46-.39.6-.67c.14-.29.22-.61.22-.99s-.07-.7-.22-.98c-.15-.29-.35-.51-.61-.68-.26-.16-.56-.24-.89-.24s-.63.08-.9.24c-.26.16-.47.39-.61.68-.15.29-.22.62-.22.98s.07.7.22.99c.15.28.36.51.62.67s.57.25.91.25Z"/>
+      <path d="M157.66,289.1c-.38,0-.71-.08-1-.24-.29-.16-.51-.38-.67-.66-.16-.28-.24-.61-.24-.98v-3.14h.69v3.14c0,.24.05.46.16.64s.25.33.43.43c.18.1.4.15.64.15s.46-.05.64-.15c.19-.1.33-.25.43-.43s.15-.4.15-.64v-3.14h.69v3.14c0,.37-.08.69-.24.98s-.39.5-.68.66-.63.24-1.02.24Z"/>
+    </g>
+  </g>
 </svg>

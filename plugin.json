@@ -1,7 +1,7 @@
 {
   "slug": "SignalFunctionSet",
   "name": "Signal Function Set",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "_comment": "Build script will modify slug/name/version for dev builds to allow coexistence",
   "license": "GPL-3.0-or-later",
   "brand": "SignalFunctionSet",
@@ -61,7 +61,6 @@
       "description": "Additive synthesis VCO with 8 individually-toggled harmonics, even/odd filter, binary mask CV, and waveform display",
       "tags": [
         "Oscillator",
-        "VCO",
         "Waveshaper"
       ]
     },
@@ -71,9 +70,9 @@
       "description": "CHANT/FOF formant synthesis voice with vowel morphing, 5 formant cells, and dual excitation modes",
       "tags": [
         "Oscillator",
-        "VCO",
         "Synth voice",
-        "Vocoder"
+        "Filter",
+        "Speech"
       ]
     }
   ]

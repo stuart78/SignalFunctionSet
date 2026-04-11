@@ -141,19 +141,6 @@ struct IntoneDisplay : Widget {
 	void drawLayer(const DrawArgs& args, int layer) override;
 
 	void draw(const DrawArgs& args) override {
-		// Background
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
-		nvgFillColor(args.vg, nvgRGB(26, 26, 46));
-		nvgFill(args.vg);
-
-		// Border
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
-		nvgStrokeColor(args.vg, nvgRGB(64, 64, 96));
-		nvgStrokeWidth(args.vg, 1.0f);
-		nvgStroke(args.vg);
-
 		Widget::draw(args);
 	}
 };
@@ -430,17 +417,6 @@ void IntoneDisplay::drawLayer(const DrawArgs& args, int layer) {
 		return (lf - logMin) / logRange * w;
 	};
 
-	// Grid lines at 100, 1000 Hz
-	nvgStrokeColor(args.vg, nvgRGB(50, 50, 70));
-	nvgStrokeWidth(args.vg, 0.5f);
-	for (float gridF : {100.f, 1000.f}) {
-		float gx = freqToX(gridF);
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, gx, 2.f);
-		nvgLineTo(args.vg, gx, h - 2.f);
-		nvgStroke(args.vg);
-	}
-
 	// Per-formant colors
 	NVGcolor formantColors[NUM_FORMANTS] = {
 		nvgRGBA(100, 180, 255, 80),  // F1 blue
@@ -566,7 +542,7 @@ struct IntoneWidget : ModuleWidget {
 
 		// Bottom row Y=118
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.62f, 118.f)), module, Intone::VOWEL_CV));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(17.78f, 118.f)), module, Intone::SKIRT_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(17.78f, 118.f)), module, Intone::SKIRT_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(27.94f, 118.f)), module, Intone::SKIRT_CV));
 		addParam(createParamCentered<CKSS>(mm2px(Vec(38.10f, 118.f)), module, Intone::MODE_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(48.26f, 118.f)), module, Intone::VOCT_INPUT));

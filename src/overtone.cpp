@@ -24,28 +24,6 @@ struct OvertoneDisplay : Widget {
 	void drawLayer(const DrawArgs& args, int layer) override;
 
 	void draw(const DrawArgs& args) override {
-		// Background
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
-		nvgFillColor(args.vg, nvgRGB(26, 26, 46));
-		nvgFill(args.vg);
-
-		// Border
-		nvgBeginPath(args.vg);
-		nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
-		nvgStrokeColor(args.vg, nvgRGB(64, 64, 96));
-		nvgStrokeWidth(args.vg, 1.0f);
-		nvgStroke(args.vg);
-
-		// Zero line
-		float midY = box.size.y * 0.5f;
-		nvgBeginPath(args.vg);
-		nvgMoveTo(args.vg, 0, midY);
-		nvgLineTo(args.vg, box.size.x, midY);
-		nvgStrokeColor(args.vg, nvgRGB(50, 50, 70));
-		nvgStrokeWidth(args.vg, 0.5f);
-		nvgStroke(args.vg);
-
 		Widget::draw(args);
 	}
 };
