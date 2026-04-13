@@ -103,6 +103,29 @@ An 8-step harmonic deviation sequencer with three independent CV/gate voices (A,
 - Harmonic Lock: Toggle consonance-biased deviation (default: on)
 - Randomize Sequence: Set all faders to random positions
 
+#### Fugue X (Expander)
+
+An expander module for Fugue that adds per-voice controls for steps, range, sleep, and probability, plus sorted CV outputs and per-step trigger outputs. Place to the right of Fugue to connect automatically.
+
+**Per-Voice Controls (A, B, C):**
+- **Steps** (1-8): Independent step count per voice (overrides Fugue's global steps)
+- **Range** (1V/2V/5V): Independent fader range per voice (overrides Fugue's global range)
+- **Sleep** (0-64 steps): Number of clock ticks to skip between active steps — creates rests and rhythmic variation
+- **Probability** (0-100%): Chance that each step actually fires its gate. At 100% every step plays; lower values introduce random silences.
+
+**Additional Features:**
+- **Sample & Hold Mode** - Toggle: when enabled, held notes sustain through rests instead of returning to silence
+- **Randomize Sequence** - Button + trigger input to randomize the parent Fugue's pitch faders
+- **LED Matrix** - 8×3 grid showing the current step position for each voice, plus sleep indicator LEDs
+- **Per-Step Trigger Outputs** - 24 individual trigger outputs (8 steps × 3 voices) for driving external modules from specific sequence positions
+
+**Sorted CV Outputs:**
+- **Max** - Highest of the three voice CV values
+- **Mid** - Middle value
+- **Min** - Lowest value
+
+**All per-voice parameters have CV inputs** (±5V).
+
 ### Phase
 
 A dual sample looper inspired by Steve Reich's phase compositions. Two loops play the same or different audio samples with independent drift controls that create gradual phase relationships. Each loop has a mode switch choosing between Sleep (silence gap after each cycle) and Rotate (continuous tape-style content drift).
@@ -173,17 +196,76 @@ An additive synthesis VCO that builds waveforms from the harmonic series. The fu
 **Context Menu:**
 - Mask CV Mode: Binary (8-bit pattern) or Sweep (bottom-up harmonics)
 
+### Intone
+
+A CHANT/FOF formant synthesis voice inspired by the IRCAM CHANT project (Rodet, Potard, Barriere, 1984). Generates vocal-character sound using 5 parallel formant cells, each producing overlapping FOF (Formant Wave Function) grains — damped sinusoids at formant frequencies.
+
+**Features:**
+- **5 Parallel Formant Cells** - Each generating overlapping FOF grains at independently controllable center frequencies
+- **Vowel Morph Slider** - Smoothly interpolates through /a/, /e/, /i/, /o/, /u/ formant presets
+- **Per-Formant Controls** - Frequency offset, bandwidth, and amplitude knobs with CV inputs
+- **Skirt Width** - Controls the spectral slope of each formant peak (FOF attack rate)
+- **Spectrum Display** - 5 formant bell curves + composite envelope on a logarithmic frequency axis
+- **Three Excitation Modes:**
+  - **Default** (nothing patched): FOF vocal VCO, V/Oct controls pitch
+  - **Audio mode** (audio + switch up): Parallel resonant bandpass filter bank — input audio is formant-filtered through the 5 vowel resonances, V/Oct transposes the formant pattern
+  - **Trigger mode** (clock + switch down): External trigger fires FOF grains for rhythmic vowel hits, V/Oct transposes formants
+
+**Controls:**
+- **Formant 1-5 Frequency** (±1 octave offset): Adjusts each formant relative to the vowel morph preset
+- **Formant 1-5 Bandwidth** (30-500 Hz): Width of each formant resonance
+- **Formant 1-5 Amplitude** (0-1): Level of each formant
+- **Vowel Morph** (slider): Sweeps through /a/ → /e/ → /i/ → /o/ → /u/
+- **Skirt**: Spectral slope control (soft to hard formant edges)
+- **Mode Switch** (Audio/Trigger): Selects excitation mode when EXC is patched
+
+**Inputs:**
+- **V/Oct** - Pitch (default mode) or formant transposition (audio/trigger modes)
+- **EXC** - Excitation source (audio or trigger, behavior depends on mode switch)
+- **Formant 1-5 Freq CV, Formant 1-5 BW CV** (±5V) - Per-formant modulation
+- **Vowel CV** (0-10V) - Vowel morph position
+- **Skirt CV** (±5V) - Skirt width modulation
+
+**Outputs:**
+- **Out** - Monophonic audio output
+
+### Tine
+
+A tunable 3rd-order pingable resonator based on the Gamelan Resonator circuit from Paul DeMarinis' *Pygmy Gamelan* (1973), analyzed by Werner & Teboul (AES Convention Paper 10542, 2021). The unique 3rd-order active filter topology — distinct from classic Bridged-T and Twin-T designs — produces metallic, bell-like ringing tones when pinged.
+
+**Features:**
+- **3rd-Order IIR Filter** - Bilinear transform of the analog Gamelan Resonator transfer function with frequency pre-warping for accurate V/Oct tracking
+- **Variable Damping** - From short percussive thumps to long metallic rings approaching self-oscillation
+- **Trigger Input** - Accepts gates and triggers via rising edge detection
+- **Manual Ping Button** - Immediate excitation without patching
+- **Damping CV** - Expressive ring time modulation
+- **VCA Anti-Click Mode** - Crossfade envelope on retrigger eliminates zero-crossing clicks (default: on)
+- **Double-Precision Filter** - Numerical stability at high damping values
+
+**Controls:**
+- **Freq** (-4 to +4 octaves, default C4): Pitch, log2 scaled with V/Oct tracking
+- **Damp** (0-1, default 0.5): Ring time from short thump to long sustain
+
+**Inputs:**
+- **TRIG** - Trigger/gate input (rising edge fires ping)
+- **V/Oct** - 1V/octave pitch CV
+- **Damp CV** (±5V) - Damping modulation
+
+**Outputs:**
+- **Out** - Monophonic audio output
+
+**Context Menu:**
+- VCA Mode (anti-click): Toggle crossfade envelope on retrigger (default: on)
+
 ## Building
 
+See [build-doc.md](build-doc.md) for detailed build instructions.
+
 ```bash
-# Build with Rack SDK
-RACK_DIR=../Rack-SDK make
-
-# Clean build artifacts
-RACK_DIR=../Rack-SDK make clean
-
-# Create distribution package
-RACK_DIR=../Rack-SDK make dist
+# Quick start
+export PATH="/opt/homebrew/bin:$PATH"
+./build.sh dev   # Development build + auto-install
+./build.sh prod  # Production build
 ```
 
 ## License
