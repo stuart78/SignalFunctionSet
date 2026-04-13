@@ -74,6 +74,27 @@
         "Filter",
         "Speech"
       ]
+    },
+    {
+      "slug": "Tine",
+      "name": "Tine",
+      "description": "Tunable 3rd-order pingable resonator based on the Gamelan Resonator circuit, with damping and character controls",
+      "tags": [
+        "Filter",
+        "Synth voice",
+        "Physical modeling",
+        "Drum"
+      ]
+    },
+    {
+      "slug": "FugueX",
+      "name": "Fugue X",
+      "description": "Expander for Fugue — per-voice steps, range, sleep, probability, S&H mode, sorted CV outputs, and per-step trigger outputs",
+      "tags": [
+        "Sequencer",
+        "Expander",
+        "Utility"
+      ]
     }
   ]
 }

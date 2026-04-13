@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "fugue-messages.hpp"
 
 // ─── Scale Tables ────────────────────────────────────────────────────────────
 
@@ -203,10 +204,27 @@ struct Fugue : Module {
 	float faderRangeVolts = 1.f;
 	bool harmonicLock = true;
 
+	// ─── Expander state ─────────────────────────────────────────────────────
+	int sleepCounter[NUM_VOICES] = {};       // clocks remaining in sleep
+	bool sleeping[NUM_VOICES] = {};          // voice is in sleep state
+	bool sampleHoldEnabled = false;
+	bool sampleHoldHolding[NUM_VOICES] = {}; // currently holding CV
+	bool probGateSuppress[NUM_VOICES] = {};  // gate suppressed by probability
+	uint32_t probRng = 12345;
+
 	// ─── Constructor ─────────────────────────────────────────────────────────
+
+	~Fugue() {
+		delete (FugueToExpanderMessage*)rightExpander.producerMessage;
+		delete (FugueToExpanderMessage*)rightExpander.consumerMessage;
+	}
 
 	Fugue() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
+
+		// Expander message buffers (Fugue → FugueX)
+		rightExpander.producerMessage = new FugueToExpanderMessage();
+		rightExpander.consumerMessage = new FugueToExpanderMessage();
 
 		// 8 pitch faders (custom ParamQuantity shows quantized note name)
 		for (int i = 0; i < NUM_STEPS; i++) {
@@ -244,7 +262,7 @@ struct Fugue : Module {
 		for (int step = 0; step < NUM_STEPS; step++) {
 			for (int v = 0; v < NUM_VOICES; v++) {
 				int idx = step * NUM_VOICES + v;
-				float defaultVal = (v == 0) ? 1.f : 0.f;
+				float defaultVal = 1.f;
 				configSwitch(GATE_TOGGLE_PARAM_0 + idx, 0.f, 1.f, defaultVal,
 					string::f("Gate %s Step %d", voiceNames[v], step + 1),
 					{"Off", "On"});
@@ -521,6 +539,10 @@ struct Fugue : Module {
 	// ─── Step Advance ────────────────────────────────────────────────────────
 
 	void onVoiceStepAdvance(int voiceIdx) {
+		onVoiceStepAdvanceWithRange(voiceIdx, faderRangeVolts);
+	}
+
+	void onVoiceStepAdvanceWithRange(int voiceIdx, float rangeVolts) {
 		VoiceState& voice = voices[voiceIdx];
 
 		// Read root with CV (1V = 1 semitone, wraps 0-11)
@@ -548,7 +570,7 @@ struct Fugue : Module {
 
 		// Get base voltage from current step's fader
 		float faderValue = params[FADER_PARAM_0 + voice.currentStep].getValue();
-		float baseVolt = faderToVoltage(faderValue, rootNote, scaleIndex, faderRangeVolts);
+		float baseVolt = faderToVoltage(faderValue, rootNote, scaleIndex, rangeVolts);
 
 		// Read wander with CV (0=faithful, 1=wanders; invert for internal stability)
 		float instability = params[WANDER_A_PARAM + voiceIdx].getValue();
@@ -575,7 +597,7 @@ struct Fugue : Module {
 				uint32_t candidateSeed = seed + c * 7919u;
 				if (candidateSeed == 0) candidateSeed = 1;
 				float candidate = selectDeviationNote(
-					baseVolt, stability, rootNote, scaleIndex, faderRangeVolts, candidateSeed);
+					baseVolt, stability, rootNote, scaleIndex, rangeVolts, candidateSeed);
 				float score = scoreConsonance(candidate, voiceIdx);
 				if (score > bestScore) {
 					bestScore = score;
@@ -585,7 +607,7 @@ struct Fugue : Module {
 			voice.targetVoltage = bestVolt;
 		} else {
 			voice.targetVoltage = selectDeviationNote(
-				baseVolt, stability, rootNote, scaleIndex, faderRangeVolts, seed);
+				baseVolt, stability, rootNote, scaleIndex, rangeVolts, seed);
 		}
 
 		// Calculate adaptive slew
@@ -601,6 +623,33 @@ struct Fugue : Module {
 			numSteps = clamp(numSteps, 1, 8);
 		}
 
+		// ── Read expander overrides ──
+		ExpanderToFugueMessage expanderMsg = {};
+		expanderMsg.sampleHoldEnabled = false;
+		for (int v = 0; v < NUM_VOICES; v++) {
+			expanderMsg.voices[v].stepsOverride = -1;
+			expanderMsg.voices[v].rangeOverride = -1.f;
+			expanderMsg.voices[v].sleepDivision = 1;
+			expanderMsg.voices[v].probability = 1.f;
+		}
+
+		if (rightExpander.module && rightExpander.module->model == modelFugueX) {
+			ExpanderToFugueMessage* rxMsg =
+				(ExpanderToFugueMessage*)rightExpander.module->leftExpander.consumerMessage;
+			if (rxMsg && rxMsg->connected) {
+				expanderMsg = *rxMsg;
+			}
+		}
+
+		sampleHoldEnabled = expanderMsg.sampleHoldEnabled;
+
+		// ── Handle randomize request ──
+		if (expanderMsg.randomizeRequested) {
+			for (int i = 0; i < NUM_STEPS; i++) {
+				params[FADER_PARAM_0 + i].setValue(random::uniform());
+			}
+		}
+
 		// ── Reset (input or button) ──
 		bool resetTriggered = resetTrigger.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f);
 		bool resetBtnTriggered = resetButtonTrigger.process(params[RESET_BUTTON_PARAM].getValue());
@@ -608,35 +657,89 @@ struct Fugue : Module {
 			for (int v = 0; v < NUM_VOICES; v++) {
 				voices[v].currentStep = 0;
 				voices[v].stepCounter = 0;
+				sleeping[v] = false;
+				sleepCounter[v] = 0;
+				sampleHoldHolding[v] = false;
 				onVoiceStepAdvance(v);
 			}
 		}
+
+		// ── Prepare expander output message ──
+		FugueToExpanderMessage* txMsg = (FugueToExpanderMessage*)rightExpander.producerMessage;
 
 		// ── Per-voice clock processing ──
 		for (int v = 0; v < NUM_VOICES; v++) {
 			VoiceState& voice = voices[v];
 			float clockVolt = getClockVoltage(v);
 
+			// Per-voice step count (capped at global)
+			int voiceSteps = numSteps;
+			if (expanderMsg.voices[v].stepsOverride > 0) {
+				voiceSteps = std::min(expanderMsg.voices[v].stepsOverride, numSteps);
+			}
+
+			// Per-voice fader range override
+			float voiceRange = faderRangeVolts;
+			if (expanderMsg.voices[v].rangeOverride > 0.f) {
+				voiceRange = expanderMsg.voices[v].rangeOverride;
+			}
+
 			voice.clockHigh = (clockVolt >= 1.0f);
 			voice.clockTimer += args.sampleTime;
 
+			bool clockRose = false;
 			if (voice.clockTrigger.process(clockVolt, 0.1f, 1.f)) {
+				clockRose = true;
 				if (voice.clockTimer > 0.001f) {
 					voice.clockPeriod = voice.clockTimer;
 				}
 				voice.clockTimer = 0.f;
 
-				voice.stepCounter++;
-				voice.currentStep++;
-				if (voice.currentStep >= numSteps) {
-					voice.currentStep = 0;
-				}
+				// ── Sleep logic ──
+				int sleepDiv = expanderMsg.voices[v].sleepDivision;
+				if (sleeping[v]) {
+					sleepCounter[v]--;
+					if (sleepCounter[v] <= 0) {
+						sleeping[v] = false;
+					}
+					// Don't advance step while sleeping
+				} else {
+					voice.stepCounter++;
+					voice.currentStep++;
+					if (voice.currentStep >= voiceSteps) {
+						voice.currentStep = 0;
+						// Start sleeping at end of cycle
+						if (sleepDiv > 0) {
+							sleeping[v] = true;
+							sleepCounter[v] = sleepDiv;
+						}
+					}
 
-				onVoiceStepAdvance(v);
+					// ── Probability ──
+					float prob = expanderMsg.voices[v].probability;
+					if (prob < 1.f) {
+						float roll = (float)(xorshift32(probRng) & 0x7FFFFFFF) / (float)0x7FFFFFFF;
+						probGateSuppress[v] = (roll >= prob);
+					} else {
+						probGateSuppress[v] = false;
+					}
+
+					onVoiceStepAdvanceWithRange(v, voiceRange);
+				}
 			}
 
-			// ── Slew ──
-			processSlew(v, args.sampleTime);
+			// ── Slew / S&H ──
+			if (sampleHoldEnabled) {
+				// In S&H mode, only update voltage when gate fires
+				int toggleIdx = voice.currentStep * NUM_VOICES + v;
+				bool toggleOn = params[GATE_TOGGLE_PARAM_0 + toggleIdx].getValue() > 0.5f;
+				if (clockRose && toggleOn && !sleeping[v] && !probGateSuppress[v]) {
+					voice.currentVoltage = voice.targetVoltage;
+					sampleHoldHolding[v] = true;
+				}
+			} else {
+				processSlew(v, args.sampleTime);
+			}
 
 			// ── CV output ──
 			outputs[CV_A_OUTPUT + v].setVoltage(voice.currentVoltage);
@@ -644,22 +747,38 @@ struct Fugue : Module {
 			// ── Gate output ──
 			int toggleIdx = voice.currentStep * NUM_VOICES + v;
 			bool toggleOn = params[GATE_TOGGLE_PARAM_0 + toggleIdx].getValue() > 0.5f;
-			outputs[GATE_A_OUTPUT + v].setVoltage((voice.clockHigh && toggleOn) ? 10.f : 0.f);
+			bool gateActive = voice.clockHigh && toggleOn && !sleeping[v] && !probGateSuppress[v];
+			outputs[GATE_A_OUTPUT + v].setVoltage(gateActive ? 10.f : 0.f);
+
+			// ── Fill expander message ──
+			if (txMsg) {
+				txMsg->voices[v].currentStep = voice.currentStep;
+				txMsg->voices[v].clockHigh = voice.clockHigh;
+				txMsg->voices[v].clockRose = clockRose;
+				txMsg->voices[v].currentVoltage = voice.currentVoltage;
+				txMsg->voices[v].gateOn = gateActive;
+				txMsg->voices[v].sleeping = sleeping[v];
+				txMsg->voices[v].sleepCounter = sleepCounter[v];
+				txMsg->voices[v].sleepDivision = expanderMsg.voices[v].sleepDivision;
+			}
+		}
+
+		// ── Send expander message ──
+		if (txMsg) {
+			txMsg->numSteps = numSteps;
+			rightExpander.requestMessageFlip();
 		}
 
 		// ── Update lights ──
-		// Gate toggle LEDs
 		for (int step = 0; step < NUM_STEPS; step++) {
 			for (int v = 0; v < NUM_VOICES; v++) {
 				int idx = step * NUM_VOICES + v;
 				float brightness = params[GATE_TOGGLE_PARAM_0 + idx].getValue();
-				// Dim steps beyond active count
 				if (step >= numSteps) brightness *= 0.15f;
 				lights[GATE_LIGHT_0 + idx].setBrightness(brightness);
 			}
 		}
 
-		// Step indicator LEDs (3 rows) — only illuminate when gate toggle is ON
 		for (int step = 0; step < NUM_STEPS; step++) {
 			for (int v = 0; v < NUM_VOICES; v++) {
 				int toggleIdx = step * NUM_VOICES + v;

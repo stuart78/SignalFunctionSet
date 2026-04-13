@@ -12,6 +12,8 @@ void init(Plugin* p) {
 	p->addModel(modelPhase);
 	p->addModel(modelOvertone);
 	p->addModel(modelIntone);
+	p->addModel(modelTine);
+	p->addModel(modelFugueX);
 
 	// Add modules here
 	// p->addModel(modelMyModule);

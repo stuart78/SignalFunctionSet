@@ -14,3 +14,5 @@ extern Model* modelFugue;
 extern Model* modelPhase;
 extern Model* modelOvertone;
 extern Model* modelIntone;
+extern Model* modelTine;
+extern Model* modelFugueX;
