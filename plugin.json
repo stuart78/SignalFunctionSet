@@ -1,7 +1,7 @@
 {
   "slug": "SignalFunctionSet",
   "name": "Signal Function Set",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "_comment": "Build script will modify slug/name/version for dev builds to allow coexistence",
   "license": "GPL-3.0-or-later",
   "brand": "SignalFunctionSet",
@@ -78,7 +78,7 @@
     {
       "slug": "Tine",
       "name": "Tine",
-      "description": "Tunable 3rd-order pingable resonator based on the Gamelan Resonator circuit, with damping and character controls",
+      "description": "Tunable 3rd-order pingable resonator based on the Gamelan Resonator circuit, with variable damping and VCA anti-click mode",
       "tags": [
         "Filter",
         "Synth voice",
