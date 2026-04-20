@@ -1,7 +1,7 @@
 {
   "slug": "SignalFunctionSet",
   "name": "Signal Function Set",
-  "version": "2.5.0",
+  "version": "2.7.0",
   "_comment": "Build script will modify slug/name/version for dev builds to allow coexistence",
   "license": "GPL-3.0-or-later",
   "brand": "SignalFunctionSet",
@@ -94,6 +94,25 @@
         "Sequencer",
         "Expander",
         "Utility"
+      ]
+    },
+    {
+      "slug": "Meter",
+      "name": "Meter",
+      "description": "Time-signature-aware musical clock with bar/quarter/eighth/sixteenth/triplet outputs, CV-controllable time signature, and external clock sync",
+      "tags": [
+        "Clock generator",
+        "Clock modulator",
+        "Utility"
+      ]
+    },
+    {
+      "slug": "Beat",
+      "name": "Beat",
+      "description": "Single-voice pattern sequencer with 8 patterns x 16 steps, on-screen step/velocity/accent editing, per-pattern length, and active-pattern progression",
+      "tags": [
+        "Sequencer",
+        "Drum"
       ]
     }
   ]

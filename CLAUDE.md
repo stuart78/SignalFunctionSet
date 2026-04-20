@@ -7,9 +7,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a VCV Rack plugin called "Signal Function Set" that provides modular synthesizer modules. The plugin contains the following modules:
 
 1. **Drift** - A phase-shifted LFO with offset, attenuation, and stability controls featuring Lorenz attractor-based chaos functionality
-2. **GSX** - A granular synthesis module based on Barry Truax's pioneering GSX system (1985-86), fully implemented and operational
+2. **GSX** - A granular synthesis module based on Barry Truax's pioneering GSX system (1985-86)
 3. **Fugue** - An 8-step harmonic deviation sequencer with three independent CV/gate voices
-4. **Phase** - A dual sample looper with sleep-based phase drift, inspired by Steve Reich's phase compositions
+4. **Fugue X** - Expander for Fugue: per-voice steps/range/sleep/probability, sorted CV outs, per-step trigger outs
+5. **Phase** - A dual sample looper with sleep-based phase drift, inspired by Steve Reich's phase compositions
+6. **Overtone** - Additive synthesis VCO with 8 individually-toggled harmonics, even/odd filter, binary mask CV
+7. **Intone** - CHANT/FOF formant synthesis voice with vowel morphing, 5 formant cells, dual excitation modes
+8. **Tine** - Tunable 3rd-order pingable resonator based on the Gamelan Resonator circuit
+9. **Meter** - Time-signature-aware musical clock with multiple subdivision outputs, per-output enable/swing, BPM/bar status display
+10. **Beat** - Per-voice pattern sequencer (8 patterns × 16 steps) with on-screen step/velocity/accent/probability editing, per-pattern length and repeats
 
 ## Build Commands
 
@@ -30,7 +36,13 @@ The build system uses the VCV Rack plugin framework via `$(RACK_DIR)/plugin.mk`.
 - `src/quadlfo.cpp` - Drift module implementation
 - `src/gsx.cpp` - GSX granular synthesis module implementation
 - `src/fugue.cpp` - Fugue module implementation
+- `src/fugue-expander.cpp` - Fugue X expander module implementation
 - `src/phase.cpp` - Phase module implementation
+- `src/overtone.cpp` - Overtone module implementation
+- `src/intone.cpp` - Intone formant synthesis module implementation
+- `src/tine.cpp` - Tine resonator module implementation
+- `src/meter.cpp` - Meter musical clock module implementation
+- `src/beat.cpp` - Beat pattern sequencer module implementation
 
 ### Module Development Pattern
 Each module follows the VCV Rack module pattern:
@@ -536,4 +548,235 @@ Saves and restores: file paths for both samples, explicit-B flag, play state, tr
 **Bidirectional Drift:**
 - Sleep A: +10ms, Sleep B: -10ms
 - Loops drift in opposite directions simultaneously
+
+## Meter - Musical Clock with Time Signature
+
+### Overview
+Meter is a musical clock module designed to be the master clock for a Beat-driven rhythm rig. Unlike most VCV clocks, it understands musical structure: time signature, bar boundaries, and beat subdivisions. Six gate outputs cover the common subdivisions (Bar, Quarter, Eighth, Sixteenth, Quarter Triplet, Eighth Triplet), each with independent enable and swing controls — so the user can shape the macro feel of an entire patch from one place. The intent is that one Meter drives many Beat instances, each per-instrument, each potentially using a different swung/unswung subdivision as its clock.
+
+### Implementation Status
+**COMPLETE AND OPERATIONAL** — all subdivision outputs, per-output enable + swing (with mockup-aligned blue/orange display), external clock sync, time signature CV, and reset out are working. Display shows BPM, time signature, bars-since-reset, sync indicator, plus per-output hit indicator rows with swing ghost markers and a position tracker.
+
+### Parameters
+
+| Param | Range | Default | Notes |
+|---|---|---|---|
+| BPM (huge knob) | 30–300 | 120 | Quarter notes per minute (DAW convention) |
+| Numerator (snap knob) | 1–16 | 4 | Top of time signature |
+| Denominator (config-switch) | indices 0–5 → 1, 2, 4, 8, 16, 32 | 2 (=4) | Bottom of time signature |
+| Run (light latch) | momentary | — | Play/stop toggle |
+| Reset (button) | momentary | — | Resets bar to 1, position to 0; fires Reset OUT |
+| Per-output Enable (×6) | latch w/ green LED | on | Mute that subdivision output |
+| Per-output Swing (×5, no swing on BAR) | -0.5 .. +0.5 | 0 | Standard convention: positive = off-beats delayed |
+
+### Inputs
+- **BPM CV** (~27 BPM/V)
+- **Numerator CV / Denominator CV** (CV stepping)
+- **Run gate** (overrides Run button when patched)
+- **External clock** (overrides internal BPM; PPQN configurable via context menu: 1/2/4/8/12/16/24)
+- Per-output **Enable CV** (×6, gate input that overrides the latch)
+- Per-output **Swing CV** (×5, ±5V → ±50%)
+
+### Outputs
+All gate outputs are 1ms 10V pulses via `dsp::PulseGenerator`:
+- **BAR** (downbeat per bar)
+- **QUARTER** / **EIGHTH** / **SIXTEENTH**
+- **QUARTER TRIPLET** / **EIGHTH TRIPLET**
+- **RESET OUT** (1ms trigger; fires when the Reset button is pressed — Meter is the master, downstream modules receive reset via this jack)
+
+### Display
+
+Top status line:
+- Left: current BPM (numeric)
+- Sync indicator (right of BPM, only when EXT CLOCK is patched): small dot, dim orange at rest, flashes bright on each external clock pulse, decays over ~100ms
+- Center (large): time signature `4/4`, with optional pending `→ 7/8` to the right when a change is queued
+- Right: `BAR N` counter, increments on each bar wrap, resets to 1 on Reset
+
+Six per-output hit indicator rows above the position tracker. Each row shows tick marks for that output's pulse positions across the bar, with:
+- Swing ghosts (dim ticks at un-swung positions) plus connector lines from ghost → actual position
+- A pulse flash that lerps blue → orange when the pulse fires (decays over ~100ms)
+- Disabled rows render in dim purple
+
+Position tracker at the bottom: one cell per sixteenth-note in the bar, with the current sixteenth highlighted orange, beat boundaries shown in mid-purple, and other cells dim purple.
+
+### DSP Design
+
+#### Per-subdivision phase accumulators
+Each subdivision (Quarter, Eighth, Sixteenth, Quarter Triplet, Eighth Triplet) maintains its own `samplesSinceX` accumulator and `pulseCountX` counter. Per sample:
+- `samplesPerQuarter = 60 * sampleRate / effectiveBpm`
+- `eTarget = swingAdjustedPeriod(pulseCountX, basePeriod, activeSwing[X])`
+- When `samplesSinceX >= eTarget`, fire the pulse, subtract eTarget, increment pulse count
+
+#### Bar tracking
+SIXTEENTH drives `sixteenthCount`. When it reaches `sixteenthsPerBar = numerator * 16 / denominator`, the bar wraps:
+- `sixteenthCount = 0`
+- `barsSinceReset++`
+- BAR pulse fires
+- Triplet phases reset to 0 (so triplets always realign with the downbeat)
+- Pending swing values copied to active swing (per-bar latching — see "Swing latching" below)
+
+#### Swing math
+```cpp
+// pulseCount = pulses already fired since reset.
+// Next pulse to fire is pulse (pulseCount + 1).
+// Off-beats are pulses 1, 3, 5... (odd index).
+bool nextIsOffBeat = (pulseCount % 2) == 0;
+return basePeriod * (nextIsOffBeat ? (1 + swing) : (1 - swing));
+```
+Each pair of (on-beat → off-beat → on-beat) periods sums to exactly 2*base, so on-beats always land on the grid regardless of swing amount. Swing range is ±0.5 (off-beat pulled all the way to the next on-beat at +0.5, all the way to the previous on-beat at -0.5).
+
+#### Swing latching (CRITICAL)
+Mid-period swing changes would corrupt the accumulator (the threshold being raced toward changes mid-race), causing notes to fire early or get swallowed. To prevent this:
+- `pendingSwing[i]` is read from knob+CV every sample
+- `activeSwing[i]` is what `swingAdjustedPeriod` actually uses
+- On bar boundary (and on Reset), `activeSwing = pendingSwing`
+- On the very first process call, also commit (so initial knob position takes effect immediately)
+- Display reflects `pendingSwing` (so the visualization stays responsive while the audio waits for the bar boundary)
+
+#### External clock sync
+On each rising edge of EXT CLOCK:
+- Measure samples since last pulse → `samplesPerQuarter = samples_between * ppqn`
+- `measuredBpmRaw = clamp(60 * sampleRate / samplesPerQuarter, 30, 300)`
+- One-pole LPF (coefficient 0.1) toward `measuredBpm`
+- Sync indicator flash set to 1.0
+- When EXT is connected and has a measurement, `effectiveBpm = measuredBpm`; otherwise `effectiveBpm = bpmKnob + bpmCV`
+
+#### Pulse flash (display only)
+Each output has a `pulseFlash[i]` brightness (0..1, decays over 100ms), `pulseFlashIdx[i]` (which tick within the bar most recently fired), and `pulseInBar[i]` (running counter, reset on bar wrap). When BAR fires on the same sample as another subdivision's downbeat, the flash indices for those subdivisions are post-corrected to point at tick 0 of the new bar (rather than the last tick of the old bar).
+
+### Panel Layout (18HP = 91.44mm)
+
+Two-column left side (x=8, x=22):
+- BPM huge knob (centered between columns at x=15)
+- Y=58: EXT clock | BPM CV
+- Y=72: NUM knob | DEN knob
+- Y=84: NUM CV | DEN CV
+- Y=98: RUN latch | RST button
+- Y=110: RUN gate (in) | RESET OUT (with dark plate behind)
+
+Right side: 6 output rows at y=44, 57, 70, 83, 96, 109. Each row has:
+- Enable button (latch+LED) at x=44
+- Enable CV at x=53
+- Swing trimpot at x=65 (omitted on BAR row)
+- Swing CV at x=74 (omitted on BAR row)
+- Output jack at x=86 (with dark plate behind for visual separation)
+
+### Context Menu
+- External Clock PPQN selector (1, 2, 4, 8, 12, 16, 24)
+- "Apply time signature changes immediately" toggle (default off — changes queue for next bar)
+- "Reset on play" toggle (default off — Run after Stop resumes from current position)
+- "Detected: NN.N BPM" label when ext clock is connected and measuring
+
+### Persistence
+JSON saves: running state, ext clock PPQN index, applyTimeSigImmediately, resetOnPlay, outputEnabled[6], barsSinceReset.
+
+## Beat - Per-Voice Pattern Sequencer
+
+### Overview
+Beat is a single-voice pattern sequencer designed to be paired with Meter (or any clock+bar source). One Beat instance = one drum/voice. Eight patterns × sixteen steps each, with per-step velocity, accent, and probability. Per-pattern length (1–16) and per-pattern repeat count (1–8 bars) define the macro structure. Most editing happens on the screen — the panel is a narrow 10HP with just the display + jacks.
+
+### Implementation Status
+**COMPLETE AND OPERATIONAL** — full edit modes (STEPS / VEL / ACC / PROB), drag-to-paint/scrub across all sequential elements, double-click to toggle pattern active state, on-screen length and repeat count controls, blue/orange Beat-design palette, connector rails between mode tabs/step-grid and pattern-selector/repeats-bar, and persistent state.
+
+### Per-pattern Data (×8 patterns)
+- `bool steps[16]` — gate on/off per step
+- `float velocities[16]` — 0..1 per step (drives 0..10V VEL output)
+- `bool accents[16]` — accent flag per step (drives 1ms ACC pulse)
+- `float probabilities[16]` — 0..1 chance the step actually fires when reached
+- `int length` — 1..16 (step count per loop)
+- `int repeats` — 1..8 (number of bars to play this pattern before advancing)
+- `bool active` — included in the pattern rotation
+
+### Inputs
+- **CLOCK** — advances the step counter
+- **BAR** — advances to the next active pattern (with `repeats` honored)
+- **RESET** — returns to first active pattern, step 0
+- **MUTE** (gate ≥1V) — silences all three outputs
+
+### Outputs
+- **GATE** — 1ms 10V pulse on each fired step
+- **VELOCITY** — sample-and-hold CV 0..10V (the previous step's velocity stays held until the next fire)
+- **ACCENT** — 1ms 10V pulse on accented steps
+
+### Display Layout (mockup-aligned)
+
+Mockup uses a 174 × 155 unit display (= 46 × 41 mm). Internal coordinates use a `s = w / 174` scale factor for unit conversion. Display origin is at panel `(2.4, 12)` mm.
+
+Top to bottom:
+1. **Mode tabs row** (y=8, height 18): 4 cells of 38×18 at x = 7, 47, 87, 127 — `STEPS / VEL / ACC / PROB`. Selected tab = dark blue (`#0D5986`); inactive = dim purple.
+2. **Top connector rail** at y=32 (between mode tabs and step grid) — horizontal `#0D5988` line spanning x=7..165, with a short vertical stem from the active mode tab's center.
+3. **Step grid** (y=35..73): 2 rows × 8 cols of 18×18 cells. Cells colored:
+   - Out of length → very dim (`#1A1A32`)
+   - Active step → blue (`#0097DE`)
+   - Active step + currently-playing → orange (`#EC652E`)
+   - Inactive step at beat boundary (idx % 4 == 0) → mid purple (`#4A4A66`)
+   - Inactive step elsewhere → dim purple (`#35354D`)
+4. **Length dots** (y=75): 16 small 8×8 dots at x = 7+i*10. Lit (blue) for `i < length`, dim for the rest.
+5. **PATTERN label** (y=103, baseline): white text matching mode tab font size, left-aligned.
+6. **Pattern selector** (y=111..129): 8 cells of 18×18 with pattern numbers 1–8 slightly above center. Loop-count dots row at the bottom of each cell, centered horizontally — N dots where N = pattern's repeats. The dot at `currentBar - 1` lights bright on the playing pattern; others stay dim.
+7. **Bottom connector rail** at y=134.5 (between pattern selector and repeats bar) — same style as the top rail, with a stem from the edit pattern's center.
+8. **Repeats bar** (y=137..145): 8 cells of 18×8. Cell colors: orange for current playhead bar, blue for in-range cells (`i < reps`), dim purple for out-of-range.
+
+### Edit Mode Behaviors
+
+**STEPS mode**: Click toggles a step on/off. Drag paints subsequent cells with the same new state (only within current pattern length — drag won't extend length, but click can).
+
+**VEL mode**: Click a cell to set velocity by Y position within the cell (top = 1.0, bottom = 0.0). Vertical drag adjusts further. Auto-enables the step. Cell renders a bottom-up white overlay sized to velocity (60% white in VEL mode, 10% white as a hint in STEPS/ACC modes — skipped entirely in PROB mode).
+
+**ACC mode**: Click toggles the accent flag (auto-enables the step). Drag paints. Accent shows as an unfilled white circle at the cell center — full opacity in ACC mode, 10% opacity hint elsewhere.
+
+**PROB mode**: Same vertical-drag behavior as VEL but writes to `probabilities[]`. Fired probabilistically in DSP via `random::uniform() >= probabilities[step]`. Renders a 60% white bottom-up overlay (only in PROB mode — no faint hints in other modes to avoid clutter).
+
+### Pattern Selector Interactions
+- **Left-click**: select for editing (also drag across cells to scrub edit pattern)
+- **Double-click**: toggle pattern active/inactive (replaced the previous right-click for better discoverability)
+- Inactive patterns are skipped in the rotation
+
+### Length Dots / Repeats Bar Interactions
+- **Click** any length dot → set length to that index + 1
+- **Drag** across length dots → scrub length 1..16
+- **Click** any repeats cell → set repeats to that index + 1
+- **Drag** across repeats cells → scrub repeats 1..8
+- Scroll-wheel over a pattern cell → adjust that pattern's repeats (alternative shortcut)
+
+### DSP Logic
+
+#### Bar / clock coincidence
+Meter typically fires BAR and downbeat-EIGHTH/QUARTER/SIXTEENTH on the same sample. Beat collapses these into a single event: if BAR fired this sample OR if BAR voltage is currently high (still within its 1ms pulse window), CLOCK is suppressed. This handles either-direction sub-sample drift between Meter outputs.
+
+#### Pattern advance
+- BAR pulse: `currentBar++`. If `currentBar > repeats`, advance to `nextActivePattern(playPattern)` and `currentBar = 1`. Reset `playStep = 0`. Fire step.
+- CLOCK pulse: `playStep = (playStep + 1) % length`. Fire step if active and probability check passes.
+
+#### "Advance only on bar trigger" (default ON)
+Context menu toggle. When ON (default), pattern advances only happen on BAR pulse — even if BAR isn't patched, the pattern just loops the same one indefinitely. When OFF (legacy fallback), pattern wrap also advances when BAR isn't connected.
+
+#### Fire logic
+```cpp
+void fireStepIfActive() {
+    if (!steps[playStep]) return;
+    if (random::uniform() >= probabilities[playStep]) return;
+    gatePulse.trigger(0.001f);
+    currentVelocity = clamp(velocities[playStep], 0.f, 1.f);
+    if (accents[playStep]) accentPulse.trigger(0.001f);
+}
+```
+
+### Panel Layout (10HP)
+- Display: x=2.4, y=12, 46mm × 41mm
+- Inputs row at y=80: CLK (x=8), BAR (x=20), RST (x=32), MUTE (x=44)
+- Outputs row at y=110 (with dark plates): GATE (x=10), VEL (x=25.4), ACC (x=40.8)
+
+### Context Menu
+- "Advance only on bar trigger" (default ON) — see DSP section above
+- Patterns submenu:
+  - Randomize current pattern steps (50% density, doesn't touch velocity/accent/probability)
+  - Clear current pattern
+  - Clear all patterns
+
+### Persistence
+JSON saves: editPattern, editMode, playPattern, playStep, currentBar, advanceOnBarOnly, and per-pattern: active, length, repeats, steps[16], velocities[16], accents[16], probabilities[16].
+
+### Default State
+On Initialize: all 8 patterns active (so a fresh Beat will visibly cycle through patterns even if most are empty). `advanceOnBarOnly = true`. EditMode = STEPS, EditPattern = 0.
 - Creates expanding then contracting phase relationships

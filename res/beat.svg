@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="50.8mm" height="128.5mm" viewBox="0 0 50.8 128.5">
+
+  <rect width="50.8" height="128.5" fill="#f0f0f0"/>
+  <text x="25.4" y="8" text-anchor="middle" font-family="sans-serif" font-size="4" fill="#231f20">BEAT</text>
+
+  <!-- Display Y=12 H=41 (matches Beat Design mockup) -->
+  <rect x="2.4" y="12" width="46" height="41" rx="1" ry="1" fill="#1a1a2e" stroke="#404060" stroke-width="0.3"/>
+
+  <!-- Input labels Y=76 -->
+  <text x="8"  y="76" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">CLK</text>
+  <text x="20" y="76" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">BAR</text>
+  <text x="32" y="76" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">RST</text>
+  <text x="44" y="76" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">MUTE</text>
+
+  <!-- Input jacks Y=80 -->
+  <g transform="translate(8,80)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
+  <g transform="translate(20,80)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
+  <g transform="translate(32,80)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
+  <g transform="translate(44,80)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
+
+  <!-- Output labels Y=106 -->
+  <text x="10"   y="106" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">GATE</text>
+  <text x="25.4" y="106" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">VEL</text>
+  <text x="40.8" y="106" text-anchor="middle" font-family="sans-serif" font-size="1.5" fill="#808080">ACC</text>
+
+  <!-- Output jack background plates -->
+  <rect x="6"    y="106" width="8" height="8" rx="1" ry="1" fill="#2a2a2a"/>
+  <rect x="21.4" y="106" width="8" height="8" rx="1" ry="1" fill="#2a2a2a"/>
+  <rect x="36.8" y="106" width="8" height="8" rx="1" ry="1" fill="#2a2a2a"/>
+
+  <!-- Output jacks Y=110 -->
+  <g transform="translate(10,110)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
+  <g transform="translate(25.4,110)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
+  <g transform="translate(40.8,110)"><line x1="-1.5" y1="0" x2="1.5" y2="0" stroke="#0066ff" stroke-width="0.2"/><line x1="0" y1="-1.5" x2="0" y2="1.5" stroke="#0066ff" stroke-width="0.2"/><circle cx="0" cy="0" r="1.2" fill="none" stroke="#0066ff" stroke-width="0.15"/></g>
+</svg>

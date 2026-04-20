@@ -15,4 +15,6 @@ extern Model* modelPhase;
 extern Model* modelOvertone;
 extern Model* modelIntone;
 extern Model* modelTine;
+extern Model* modelMeter;
 extern Model* modelFugueX;
+extern Model* modelBeat;
