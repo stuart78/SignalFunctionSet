@@ -19,3 +19,4 @@ extern Model* modelMeter;
 extern Model* modelFugueX;
 extern Model* modelBeat;
 extern Model* modelNote;
+extern Model* modelSwell;

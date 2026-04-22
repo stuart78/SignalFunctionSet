@@ -1,7 +1,7 @@
 {
   "slug": "SignalFunctionSet",
   "name": "Signal Function Set",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "_comment": "Build script will modify slug/name/version for dev builds to allow coexistence",
   "license": "GPL-3.0-or-later",
   "brand": "SignalFunctionSet",
@@ -123,6 +123,17 @@
         "Sequencer",
         "Polyphonic",
         "Quantizer"
+      ]
+    },
+    {
+      "slug": "Swell",
+      "name": "Swell",
+      "description": "Ping-driven additive A/D envelope generator. Each ping adds voltage with a per-ping rise; pings stack additively. Continuous decay with selectable linear/exponential curve. Soft-saturated 0-10V output.",
+      "tags": [
+        "Envelope generator",
+        "Slew limiter",
+        "Function generator",
+        "Utility"
       ]
     }
   ]

@@ -150,6 +150,14 @@ struct Meter : Module {
 	float samplesSinceGrid[5] = { 0.f, 0.f, 0.f, 0.f, 0.f };
 	dsp::PulseGenerator pulses_grid[5];
 
+	// Cached samplesPerQuarter from previous process call. When BPM changes,
+	// every accumulator gets scaled by (new / old) so the *phase fraction*
+	// (accumulator / basePeriod) is preserved — otherwise a sudden BPM jump
+	// would fire some subdivisions early and delay others, breaking their
+	// relative alignment. This is the bug that surfaced after rapid BPM /
+	// time-sig sweeps: subdivisions drift out of phase with the bar.
+	float lastSamplesPerQuarter = 0.f;
+
 	// Swing values: pending = what the user has dialed in (knob+CV); active =
 	// what the DSP is currently using. Pending → active transfer happens on
 	// bar boundaries to avoid mid-period accumulator glitches when swing
@@ -421,6 +429,27 @@ struct Meter : Module {
 
 		// --- Compute per-subdivision base periods (samples per pulse, no swing) ---
 		float samplesPerQuarter = 60.f * args.sampleRate / effectiveBpm;
+
+		// --- BPM-change rescaling ---
+		// When samplesPerQuarter changes (BPM knob, BPM CV, ext clock LPF
+		// settling, etc.), scale every accumulator by the same ratio so each
+		// subdivision's phase fraction is preserved across the change. Without
+		// this, a sudden BPM jump can push one accumulator past its new
+		// threshold (firing immediately) while leaving another below its
+		// threshold — the subdivisions then drift out of phase with each
+		// other and with the bar. Skipping the very first frame avoids a
+		// divide-by-zero / huge-ratio glitch on startup.
+		if (lastSamplesPerQuarter > 0.f
+			&& std::fabs(samplesPerQuarter - lastSamplesPerQuarter) > 0.001f) {
+			float ratio = samplesPerQuarter / lastSamplesPerQuarter;
+			samplesSinceQuarter   *= ratio;
+			samplesSinceEighth    *= ratio;
+			samplesSinceSixteenth *= ratio;
+			samplesSinceQTrip     *= ratio;
+			samplesSinceETrip     *= ratio;
+			for (int i = 0; i < 5; i++) samplesSinceGrid[i] *= ratio;
+		}
+		lastSamplesPerQuarter = samplesPerQuarter;
 		float basePeriods[NUM_OUTPUTS];
 		basePeriods[SUB_BAR] = samplesPerQuarter * (float)sixteenthsPerBar / 4.f; // not used directly
 		basePeriods[SUB_QUARTER] = samplesPerQuarter;
