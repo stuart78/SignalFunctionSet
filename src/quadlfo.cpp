@@ -313,10 +313,6 @@ struct DriftWidget : ModuleWidget {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/quadlfo.svg")));
 
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.1, 15.0)), module, Drift::PARAMSTABILITY_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.7, 15.0)), module, Drift::PARAMSHAPE_PARAM));

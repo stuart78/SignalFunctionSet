@@ -1,7 +1,7 @@
 {
   "slug": "SignalFunctionSet",
   "name": "Signal Function Set",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "_comment": "Build script will modify slug/name/version for dev builds to allow coexistence",
   "license": "GPL-3.0-or-later",
   "brand": "SignalFunctionSet",
@@ -113,6 +113,16 @@
       "tags": [
         "Sequencer",
         "Drum"
+      ]
+    },
+    {
+      "slug": "Note",
+      "name": "Note",
+      "description": "Monophonic CV/gate pattern sequencer with 12-note pitch matrix, scale and root selection (incl. just-intonation harmonic series), 8 patterns x 8 steps with velocity/accent/probability editing",
+      "tags": [
+        "Sequencer",
+        "Polyphonic",
+        "Quantizer"
       ]
     }
   ]

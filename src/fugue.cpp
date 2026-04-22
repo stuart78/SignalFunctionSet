@@ -2,43 +2,69 @@
 #include "fugue-messages.hpp"
 
 // ─── Scale Tables ────────────────────────────────────────────────────────────
+// Order mirrors Note's scale list so SCALE CV values are interchangeable
+// between modules. Two extras (Melodic Minor, Locrian) are appended to
+// preserve them from older Fugue versions.
 
 struct ScaleInfo {
-	const int* intervals;
+	const float* intervals;
 	int size;
 };
 
-static const int SCALE_MAJOR[]        = {0, 2, 4, 5, 7, 9, 11};
-static const int SCALE_NAT_MINOR[]    = {0, 2, 3, 5, 7, 8, 10};
-static const int SCALE_HARM_MINOR[]   = {0, 2, 3, 5, 7, 8, 11};
-static const int SCALE_MELO_MINOR[]   = {0, 2, 3, 5, 7, 9, 11};
-static const int SCALE_DORIAN[]       = {0, 2, 3, 5, 7, 9, 10};
-static const int SCALE_PHRYGIAN[]     = {0, 1, 3, 5, 7, 8, 10};
-static const int SCALE_LYDIAN[]       = {0, 2, 4, 6, 7, 9, 11};
-static const int SCALE_MIXOLYDIAN[]   = {0, 2, 4, 5, 7, 9, 10};
-static const int SCALE_LOCRIAN[]      = {0, 1, 3, 5, 6, 8, 10};
-static const int SCALE_PENTA_MAJ[]    = {0, 2, 4, 7, 9};
-static const int SCALE_PENTA_MIN[]    = {0, 3, 5, 7, 10};
-static const int SCALE_CHROMATIC[]    = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+// 12-TET scales (integer semitones, expressed as floats)
+static const float SCALE_CHROMATIC[]   = {0,1,2,3,4,5,6,7,8,9,10,11};
+static const float SCALE_MAJOR[]       = {0,2,4,5,7,9,11};
+static const float SCALE_NAT_MINOR[]   = {0,2,3,5,7,8,10};
+static const float SCALE_PENTA_MAJ[]   = {0,2,4,7,9};
+static const float SCALE_PENTA_MIN[]   = {0,3,5,7,10};
+static const float SCALE_BLUES[]       = {0,3,5,6,7,10};
+static const float SCALE_WHOLE[]       = {0,2,4,6,8,10};
+// Just-intonation harmonics 1..12 (non-12-TET, log2(n)*12)
+static const float SCALE_HARMONIC[]    = {
+	0.f, 12.f, 19.0196f, 24.f, 27.8631f, 31.0196f,
+	33.6883f, 36.f, 38.0392f, 39.8632f, 41.5126f, 43.0196f
+};
+static const float SCALE_DORIAN[]      = {0,2,3,5,7,9,10};
+static const float SCALE_PHRYGIAN[]    = {0,1,3,5,7,8,10};
+static const float SCALE_LYDIAN[]      = {0,2,4,6,7,9,11};
+static const float SCALE_MIXOLYDIAN[]  = {0,2,4,5,7,9,10};
+static const float SCALE_HARM_MINOR[]  = {0,2,3,5,7,8,11};
+static const float SCALE_HIJAZ[]       = {0,1,4,5,7,8,10};
+static const float SCALE_HIRAJOSHI[]   = {0,2,3,7,8};
+// Pelog: Surakarta-style approximation in cents/12 (non-12-TET)
+static const float SCALE_PELOG[]       = {0.f, 1.2f, 2.7f, 5.4f, 7.0f, 8.0f, 10.4f};
+// Slendro: 5 equal divisions of the octave (non-12-TET)
+static const float SCALE_SLENDRO[]     = {0.f, 2.4f, 4.8f, 7.2f, 9.6f};
+// Preserved-from-old-Fugue extras
+static const float SCALE_MELO_MINOR[]  = {0,2,3,5,7,9,11};
+static const float SCALE_LOCRIAN[]     = {0,1,3,5,6,8,10};
 
 static const ScaleInfo SCALES[] = {
-	{SCALE_MAJOR,      7},
-	{SCALE_NAT_MINOR,  7},
-	{SCALE_HARM_MINOR, 7},
-	{SCALE_MELO_MINOR, 7},
-	{SCALE_DORIAN,     7},
-	{SCALE_PHRYGIAN,   7},
-	{SCALE_LYDIAN,     7},
-	{SCALE_MIXOLYDIAN, 7},
-	{SCALE_LOCRIAN,    7},
-	{SCALE_PENTA_MAJ,  5},
-	{SCALE_PENTA_MIN,  5},
-	{SCALE_CHROMATIC, 12},
+	{SCALE_CHROMATIC, 12},   //  0  Chromatic
+	{SCALE_MAJOR,      7},   //  1  Major
+	{SCALE_NAT_MINOR,  7},   //  2  Minor
+	{SCALE_PENTA_MAJ,  5},   //  3  Pentatonic Major
+	{SCALE_PENTA_MIN,  5},   //  4  Pentatonic Minor
+	{SCALE_BLUES,      6},   //  5  Blues
+	{SCALE_WHOLE,      6},   //  6  Whole tone
+	{SCALE_HARMONIC,  12},   //  7  Harmonic series
+	{SCALE_DORIAN,     7},   //  8  Dorian
+	{SCALE_PHRYGIAN,   7},   //  9  Phrygian
+	{SCALE_LYDIAN,     7},   // 10  Lydian
+	{SCALE_MIXOLYDIAN, 7},   // 11  Mixolydian
+	{SCALE_HARM_MINOR, 7},   // 12  Harmonic Minor
+	{SCALE_HIJAZ,      7},   // 13  Hijaz
+	{SCALE_HIRAJOSHI,  5},   // 14  Hirajoshi
+	{SCALE_PELOG,      7},   // 15  Pelog
+	{SCALE_SLENDRO,    5},   // 16  Slendro
+	{SCALE_MELO_MINOR, 7},   // 17  Melodic Minor (Fugue extra)
+	{SCALE_LOCRIAN,    7},   // 18  Locrian (Fugue extra)
 };
+static const int NUM_SCALES_FUGUE = sizeof(SCALES) / sizeof(SCALES[0]);
 
 static const int NUM_STEPS = 8;
 static const int NUM_VOICES = 3;
-static const int CHROMATIC_SCALE_INDEX = 11;
+static const int CHROMATIC_SCALE_INDEX = 0;
 
 // ─── Harmonic Deviation Tier Tables ──────────────────────────────────────────
 
@@ -236,11 +262,19 @@ struct Fugue : Module {
 		configSwitch(ROOT_PARAM, 0.f, 11.f, 0.f, "Root Note",
 			{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"});
 
-		// Scale (snapped)
-		configSwitch(SCALE_PARAM, 0.f, 11.f, 0.f, "Scale",
-			{"Major", "Natural Minor", "Harmonic Minor", "Melodic Minor",
-			 "Dorian", "Phrygian", "Lydian", "Mixolydian", "Locrian",
-			 "Penta Major", "Penta Minor", "Chromatic"});
+		// Scale (snapped) — order matches Note module's SCALES array so
+		// SCALE CV values are interchangeable between modules.
+		configSwitch(SCALE_PARAM, 0.f, (float)(NUM_SCALES_FUGUE - 1), 1.f, "Scale", {
+			"Chromatic", "Major", "Minor",
+			"Pentatonic Major", "Pentatonic Minor",
+			"Blues", "Whole tone", "Harmonic series",
+			"Dorian", "Phrygian", "Lydian", "Mixolydian",
+			"Harmonic Minor", "Hijaz (Arabic)",
+			"Hirajoshi (Japanese)",
+			"Pelog (Gamelan, 7-tone)",
+			"Slendro (Gamelan, 5-equal)",
+			"Melodic Minor", "Locrian"
+		});
 
 		// Steps (snapped)
 		configSwitch(STEPS_PARAM, 1.f, 8.f, 8.f, "Steps",
@@ -297,6 +331,9 @@ struct Fugue : Module {
 		json_t* rootJ = json_object();
 		json_object_set_new(rootJ, "faderRange", json_real(faderRangeVolts));
 		json_object_set_new(rootJ, "harmonicLock", json_boolean(harmonicLock));
+		// Bump on any change to SCALE ordering so dataFromJson can migrate
+		// older saved scaleParam values.
+		json_object_set_new(rootJ, "schemaVersion", json_integer(2));
 		return rootJ;
 	}
 
@@ -305,6 +342,32 @@ struct Fugue : Module {
 		if (j) faderRangeVolts = json_number_value(j);
 		json_t* hlJ = json_object_get(rootJ, "harmonicLock");
 		if (hlJ) harmonicLock = json_boolean_value(hlJ);
+
+		// Schema v1 → v2: SCALE ordering changed to match Note. Remap the
+		// saved scale param so the patch sounds the same as before.
+		json_t* schemaJ = json_object_get(rootJ, "schemaVersion");
+		int schema = schemaJ ? (int)json_integer_value(schemaJ) : 1;
+		if (schema < 2) {
+			// old → new index map
+			static const int REMAP[12] = {
+				1,  // 0 Major          → 1
+				2,  // 1 Natural Minor  → 2
+				12, // 2 Harmonic Minor → 12
+				17, // 3 Melodic Minor  → 17
+				8,  // 4 Dorian         → 8
+				9,  // 5 Phrygian       → 9
+				10, // 6 Lydian         → 10
+				11, // 7 Mixolydian     → 11
+				18, // 8 Locrian        → 18
+				3,  // 9 Penta Major    → 3
+				4,  // 10 Penta Minor   → 4
+				0,  // 11 Chromatic     → 0
+			};
+			int oldVal = (int)std::round(params[SCALE_PARAM].getValue());
+			if (oldVal >= 0 && oldVal < 12) {
+				params[SCALE_PARAM].setValue((float)REMAP[oldVal]);
+			}
+		}
 	}
 
 	// ─── Scale Quantization ──────────────────────────────────────────────────
@@ -321,8 +384,8 @@ struct Fugue : Module {
 
 		for (int oct = 0; oct <= maxOctaves; oct++) {
 			for (int d = 0; d < scale.size; d++) {
-				int semitone = oct * 12 + scale.intervals[d];
-				float noteVoltage = (float)semitone / 12.f;
+				float semitone = (float)(oct * 12) + scale.intervals[d];
+				float noteVoltage = semitone / 12.f;
 
 				if (noteVoltage > faderRange + 0.05f) break;
 				if (noteVoltage < -0.05f) continue;
@@ -414,11 +477,15 @@ struct Fugue : Module {
 				if (baseSemiNorm < 0) baseSemiNorm += 12;
 				int baseOctave = (int)std::floor(baseSemiFromRoot / 12.f);
 
+				// Find scale degree closest to baseSemiNorm. Floats are used
+				// so non-12-TET scales (Pelog, Slendro, Harmonic) work too.
 				int baseDegree = 0;
+				float bestDiff = 999.f;
 				for (int d = 0; d < scale.size; d++) {
-					if (scale.intervals[d] == baseSemiNorm) {
+					float diff = std::fabs(scale.intervals[d] - (float)baseSemiNorm);
+					if (diff < bestDiff) {
+						bestDiff = diff;
 						baseDegree = d;
-						break;
 					}
 				}
 
@@ -441,7 +508,7 @@ struct Fugue : Module {
 					targetDegree = raw % scale.size;
 				}
 
-				float targetSemi = targetOctave * 12 + scale.intervals[targetDegree];
+				float targetSemi = (float)(targetOctave * 12) + scale.intervals[targetDegree];
 				float dev = (float)rootNote / 12.f + targetSemi / 12.f;
 				return clamp(dev, baseVoltage - faderRange, baseVoltage + faderRange);
 			}
@@ -832,11 +899,6 @@ struct FugueWidget : ModuleWidget {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/fugue.svg")));
 
-		// Screws
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		// ══════════════════════════════════════════════════════════════════════
 		// LAYOUT CONSTANTS (mm)

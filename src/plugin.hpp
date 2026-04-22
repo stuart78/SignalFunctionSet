@@ -18,3 +18,4 @@ extern Model* modelTine;
 extern Model* modelMeter;
 extern Model* modelFugueX;
 extern Model* modelBeat;
+extern Model* modelNote;

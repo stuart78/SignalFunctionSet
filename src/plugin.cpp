@@ -16,6 +16,7 @@ void init(Plugin* p) {
 	p->addModel(modelMeter);
 	p->addModel(modelFugueX);
 	p->addModel(modelBeat);
+	p->addModel(modelNote);
 
 	// Add modules here
 	// p->addModel(modelMyModule);

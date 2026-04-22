@@ -66,7 +66,6 @@ struct Beat : Module {
 		CLOCK_INPUT,
 		BAR_INPUT,
 		RESET_INPUT,
-		MUTE_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId {
@@ -132,7 +131,6 @@ struct Beat : Module {
 		configInput(CLOCK_INPUT, "Clock (step advance)");
 		configInput(BAR_INPUT, "Bar (pattern advance)");
 		configInput(RESET_INPUT, "Reset");
-		configInput(MUTE_INPUT, "Mute");
 		configOutput(GATE_OUTPUT, "Gate");
 		configOutput(VELOCITY_OUTPUT, "Velocity (0-10V)");
 		configOutput(ACCENT_OUTPUT, "Accent");
@@ -237,15 +235,12 @@ struct Beat : Module {
 			advanceStep();
 		}
 
-		bool muted = inputs[MUTE_INPUT].isConnected()
-			&& inputs[MUTE_INPUT].getVoltage() >= 1.f;
-
 		bool gateHi = gatePulse.process(args.sampleTime);
 		bool accHi = accentPulse.process(args.sampleTime);
 
-		outputs[GATE_OUTPUT].setVoltage((muted || !gateHi) ? 0.f : 10.f);
-		outputs[VELOCITY_OUTPUT].setVoltage(muted ? 0.f : currentVelocity * 10.f);
-		outputs[ACCENT_OUTPUT].setVoltage((muted || !accHi) ? 0.f : 10.f);
+		outputs[GATE_OUTPUT].setVoltage(gateHi ? 10.f : 0.f);
+		outputs[VELOCITY_OUTPUT].setVoltage(currentVelocity * 10.f);
+		outputs[ACCENT_OUTPUT].setVoltage(accHi ? 10.f : 0.f);
 	}
 
 	json_t* dataToJson() override {
@@ -955,35 +950,29 @@ struct BeatWidget : ModuleWidget {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/beat.svg")));
 
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
-		// Display: x=2.4, y=12, w=46, h=41 (matches Beat Design mockup)
+		// Display: x=2.4, y=12.2, w=46, h=41 (per updated Beat SVG)
 		BeatDisplay* display = new BeatDisplay();
 		display->module = module;
-		display->box.pos = mm2px(Vec(2.4f, 12.f));
+		display->box.pos = mm2px(Vec(2.4f, 12.2f));
 		display->box.size = mm2px(Vec(46.f, 41.f));
 		addChild(display);
 
-		// Inputs row Y=80
+		// Inputs (LEFT column at x=10.16mm) — top→bottom: RESET, BAR, CLOCK
 		addInput(createInputCentered<PJ301MPort>(
-			mm2px(Vec(8.f, 80.f)), module, Beat::CLOCK_INPUT));
+			mm2px(Vec(10.16f, 91.45f)),  module, Beat::RESET_INPUT));
 		addInput(createInputCentered<PJ301MPort>(
-			mm2px(Vec(20.f, 80.f)), module, Beat::BAR_INPUT));
+			mm2px(Vec(10.16f, 106.68f)), module, Beat::BAR_INPUT));
 		addInput(createInputCentered<PJ301MPort>(
-			mm2px(Vec(32.f, 80.f)), module, Beat::RESET_INPUT));
-		addInput(createInputCentered<PJ301MPort>(
-			mm2px(Vec(44.f, 80.f)), module, Beat::MUTE_INPUT));
+			mm2px(Vec(10.16f, 121.92f)), module, Beat::CLOCK_INPUT));
 
-		// Outputs row Y=110
+		// Outputs (RIGHT column at x=40.64mm on dark plate) — top→bottom: VEL, ACC, GATE
 		addOutput(createOutputCentered<PJ301MPort>(
-			mm2px(Vec(10.f, 110.f)), module, Beat::GATE_OUTPUT));
+			mm2px(Vec(40.64f, 91.45f)),  module, Beat::VELOCITY_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(
-			mm2px(Vec(25.4f, 110.f)), module, Beat::VELOCITY_OUTPUT));
+			mm2px(Vec(40.64f, 106.68f)), module, Beat::ACCENT_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(
-			mm2px(Vec(40.8f, 110.f)), module, Beat::ACCENT_OUTPUT));
+			mm2px(Vec(40.64f, 121.92f)), module, Beat::GATE_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {

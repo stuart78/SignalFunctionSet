@@ -48,12 +48,6 @@ struct Meter : Module {
 		DENOMINATOR_PARAM,
 		RUN_PARAM,
 		RESET_PARAM,
-		ENABLE_PARAM_0,
-		ENABLE_PARAM_1,
-		ENABLE_PARAM_2,
-		ENABLE_PARAM_3,
-		ENABLE_PARAM_4,
-		ENABLE_PARAM_5,
 		SWING_PARAM_0,
 		SWING_PARAM_1,
 		SWING_PARAM_2,
@@ -68,12 +62,6 @@ struct Meter : Module {
 		DENOMINATOR_INPUT,
 		RUN_INPUT,
 		EXT_CLOCK_INPUT,
-		ENABLE_CV_0,
-		ENABLE_CV_1,
-		ENABLE_CV_2,
-		ENABLE_CV_3,
-		ENABLE_CV_4,
-		ENABLE_CV_5,
 		SWING_CV_0,
 		SWING_CV_1,
 		SWING_CV_2,
@@ -83,6 +71,7 @@ struct Meter : Module {
 		INPUTS_LEN
 	};
 	enum OutputId {
+		// Swung outputs (BAR has no swing — its output is always on the grid).
 		BAR_OUTPUT,
 		QUARTER_OUTPUT,
 		EIGHTH_OUTPUT,
@@ -90,16 +79,17 @@ struct Meter : Module {
 		QUARTER_TRIPLET_OUTPUT,
 		EIGHTH_TRIPLET_OUTPUT,
 		RESET_OUTPUT,
+		// Grid (un-swung) outputs for the 5 swingable subdivisions.
+		// Appended after RESET_OUTPUT so existing patches keep their cables.
+		QUARTER_GRID_OUTPUT,
+		EIGHTH_GRID_OUTPUT,
+		SIXTEENTH_GRID_OUTPUT,
+		QUARTER_TRIPLET_GRID_OUTPUT,
+		EIGHTH_TRIPLET_GRID_OUTPUT,
 		OUTPUTS_LEN
 	};
 	enum LightId {
 		RUN_LIGHT,
-		ENABLE_LIGHT_0,
-		ENABLE_LIGHT_1,
-		ENABLE_LIGHT_2,
-		ENABLE_LIGHT_3,
-		ENABLE_LIGHT_4,
-		ENABLE_LIGHT_5,
 		LIGHTS_LEN
 	};
 
@@ -154,8 +144,11 @@ struct Meter : Module {
 	int barsSinceReset = 0;       // Increments on each bar wrap; cleared on Reset
 	float syncFlash = 0.f;        // Brightness of the sync indicator (decays)
 
-	// --- Per-output state ---
-	bool outputEnabled[NUM_OUTPUTS] = { true, true, true, true, true, true };
+	// --- Grid (un-swung) phase trackers ---
+	// 5 entries for the swingable subdivisions: Q, E, S, QT, ET (no BAR
+	// straight — BAR has no swing, so BAR_OUTPUT is already on the grid).
+	float samplesSinceGrid[5] = { 0.f, 0.f, 0.f, 0.f, 0.f };
+	dsp::PulseGenerator pulses_grid[5];
 
 	// Swing values: pending = what the user has dialed in (knob+CV); active =
 	// what the DSP is currently using. Pending → active transfer happens on
@@ -193,9 +186,8 @@ struct Meter : Module {
 		configButton(RUN_PARAM, "Run / Stop");
 		configButton(RESET_PARAM, "Reset");
 
-		// Per-output enable + swing params
+		// Per-output swing params (no per-output enable anymore)
 		for (int i = 0; i < NUM_OUTPUTS; i++) {
-			configButton(ENABLE_PARAM_0 + i, string::f("%s enable", SUB_LABELS[i]));
 			configParam(SWING_PARAM_0 + i, -0.5f, 0.5f, 0.f,
 				string::f("%s swing", SUB_LABELS[i]), "%", 0.f, 100.f);
 		}
@@ -207,17 +199,21 @@ struct Meter : Module {
 		configInput(EXT_CLOCK_INPUT, "External clock");
 
 		for (int i = 0; i < NUM_OUTPUTS; i++) {
-			configInput(ENABLE_CV_0 + i, string::f("%s enable gate", SUB_LABELS[i]));
 			configInput(SWING_CV_0 + i, string::f("%s swing CV", SUB_LABELS[i]));
 		}
 
-		configOutput(BAR_OUTPUT, "Bar");
-		configOutput(QUARTER_OUTPUT, "Quarter note");
-		configOutput(EIGHTH_OUTPUT, "Eighth note");
-		configOutput(SIXTEENTH_OUTPUT, "Sixteenth note");
-		configOutput(QUARTER_TRIPLET_OUTPUT, "Quarter triplet");
-		configOutput(EIGHTH_TRIPLET_OUTPUT, "Eighth triplet");
-		configOutput(RESET_OUTPUT, "Reset (fires when Reset button pressed)");
+		configOutput(BAR_OUTPUT,                       "Bar");
+		configOutput(QUARTER_OUTPUT,                   "Quarter note (swung)");
+		configOutput(EIGHTH_OUTPUT,                    "Eighth note (swung)");
+		configOutput(SIXTEENTH_OUTPUT,                 "Sixteenth note (swung)");
+		configOutput(QUARTER_TRIPLET_OUTPUT,           "Quarter triplet (swung)");
+		configOutput(EIGHTH_TRIPLET_OUTPUT,            "Eighth triplet (swung)");
+		configOutput(RESET_OUTPUT,                     "Reset (fires when Reset button pressed)");
+		configOutput(QUARTER_GRID_OUTPUT,          "Quarter note (grid, no swing)");
+		configOutput(EIGHTH_GRID_OUTPUT,           "Eighth note (grid, no swing)");
+		configOutput(SIXTEENTH_GRID_OUTPUT,        "Sixteenth note (grid, no swing)");
+		configOutput(QUARTER_TRIPLET_GRID_OUTPUT,  "Quarter triplet (grid)");
+		configOutput(EIGHTH_TRIPLET_GRID_OUTPUT,   "Eighth triplet (grid)");
 	}
 
 	void onReset() override {
@@ -238,12 +234,12 @@ struct Meter : Module {
 		barsSinceReset = 0;
 		syncFlash = 0.f;
 		for (int i = 0; i < NUM_OUTPUTS; i++) {
-			outputEnabled[i] = true;
 			activeSwing[i] = pendingSwing[i];
 			pulseFlash[i] = 0.f;
 			pulseFlashIdx[i] = 0;
 			pulseInBar[i] = 0;
 		}
+		for (int i = 0; i < 5; i++) samplesSinceGrid[i] = 0.f;
 		firstProcess = true;
 	}
 
@@ -338,16 +334,6 @@ struct Meter : Module {
 			denIdx += (int)std::round(inputs[DENOMINATOR_INPUT].getVoltage() * 0.5f);
 		denIdx = clamp(denIdx, 0, NUM_DENOMS - 1);
 		int denValue = DENOM_VALUES[denIdx];
-
-		// --- Per-output enable button toggling ---
-		for (int i = 0; i < NUM_OUTPUTS; i++) {
-			float btnVal = params[ENABLE_PARAM_0 + i].getValue();
-			if (btnVal > 0.f) {
-				params[ENABLE_PARAM_0 + i].setValue(0.f);
-				outputEnabled[i] = !outputEnabled[i];
-			}
-			lights[ENABLE_LIGHT_0 + i].setBrightness(outputEnabled[i] ? 1.f : 0.f);
-		}
 
 		// --- External clock processing ---
 		extClockConnected = inputs[EXT_CLOCK_INPUT].isConnected();
@@ -449,6 +435,24 @@ struct Meter : Module {
 		samplesSinceSixteenth += 1.f;
 		samplesSinceQTrip += 1.f;
 		samplesSinceETrip += 1.f;
+		// Grid (un-swung) phase trackers tick the same way
+		for (int i = 0; i < 5; i++) samplesSinceGrid[i] += 1.f;
+
+		// --- Fire grid pulses at exact basePeriod intervals (no swing) ---
+		// Index: 0=Q, 1=E, 2=S, 3=QT, 4=ET. Reset on bar boundary below.
+		const float gridBase[5] = {
+			basePeriods[SUB_QUARTER],
+			basePeriods[SUB_EIGHTH],
+			basePeriods[SUB_SIXTEENTH],
+			basePeriods[SUB_QTRIP],
+			basePeriods[SUB_ETRIP]
+		};
+		for (int i = 0; i < 5; i++) {
+			if (samplesSinceGrid[i] >= gridBase[i]) {
+				samplesSinceGrid[i] -= gridBase[i];
+				pulses_grid[i].trigger(0.001f);
+			}
+		}
 
 		// Decay pulse flash (~100ms back to dim)
 		float flashDecay = args.sampleTime / 0.10f;
@@ -540,6 +544,12 @@ struct Meter : Module {
 				samplesSinceETrip = 0.f;
 				pulseCountQTrip = 0;
 				pulseCountETrip = 0;
+				// Realign grid pulses with the bar boundary (also fires
+				// the downbeat straight pulses, mirroring the swung set).
+				for (int i = 0; i < 5; i++) {
+					samplesSinceGrid[i] = 0.f;
+					pulses_grid[i].trigger(0.001f);
+				}
 				// Commit pending swing → active for the new bar. Doing it
 				// only on bar boundaries prevents mid-period accumulator
 				// glitches that can swallow or misplace pulses.
@@ -550,15 +560,23 @@ struct Meter : Module {
 			displayedSixteenth = sixteenthCount;
 		}
 
-		// --- Emit gate outputs (with per-output enable check) ---
+		// --- Emit swung gate outputs ---
 		for (int i = 0; i < NUM_OUTPUTS; i++) {
-			// Determine effective enable state (button or CV gate)
-			bool enabled = outputEnabled[i];
-			if (inputs[ENABLE_CV_0 + i].isConnected()) {
-				enabled = inputs[ENABLE_CV_0 + i].getVoltage() >= 1.f;
-			}
 			bool pulseHigh = pulses[i].process(args.sampleTime);
-			outputs[BAR_OUTPUT + i].setVoltage((enabled && pulseHigh) ? 10.f : 0.f);
+			outputs[BAR_OUTPUT + i].setVoltage(pulseHigh ? 10.f : 0.f);
+		}
+
+		// --- Emit grid (un-swung) gate outputs ---
+		const int gridOutIds[5] = {
+			QUARTER_GRID_OUTPUT,
+			EIGHTH_GRID_OUTPUT,
+			SIXTEENTH_GRID_OUTPUT,
+			QUARTER_TRIPLET_GRID_OUTPUT,
+			EIGHTH_TRIPLET_GRID_OUTPUT
+		};
+		for (int i = 0; i < 5; i++) {
+			bool hi = pulses_grid[i].process(args.sampleTime);
+			outputs[gridOutIds[i]].setVoltage(hi ? 10.f : 0.f);
 		}
 	}
 
@@ -569,11 +587,6 @@ struct Meter : Module {
 		json_object_set_new(rootJ, "applyTimeSigImmediately", json_boolean(applyTimeSigImmediately));
 		json_object_set_new(rootJ, "resetOnPlay", json_boolean(resetOnPlay));
 		json_object_set_new(rootJ, "barsSinceReset", json_integer(barsSinceReset));
-		json_t* enabledJ = json_array();
-		for (int i = 0; i < NUM_OUTPUTS; i++) {
-			json_array_append_new(enabledJ, json_boolean(outputEnabled[i]));
-		}
-		json_object_set_new(rootJ, "outputEnabled", enabledJ);
 		return rootJ;
 	}
 
@@ -588,13 +601,6 @@ struct Meter : Module {
 		if (ropJ) resetOnPlay = json_boolean_value(ropJ);
 		json_t* bsrJ = json_object_get(rootJ, "barsSinceReset");
 		if (bsrJ) barsSinceReset = (int)json_integer_value(bsrJ);
-		json_t* enabledJ = json_object_get(rootJ, "outputEnabled");
-		if (enabledJ && json_is_array(enabledJ)) {
-			for (int i = 0; i < NUM_OUTPUTS; i++) {
-				json_t* v = json_array_get(enabledJ, i);
-				if (v) outputEnabled[i] = json_boolean_value(v);
-			}
-		}
 	}
 };
 
@@ -710,7 +716,7 @@ void MeterDisplay::drawLayer(const DrawArgs& args, int layer) {
 
 	for (int out = 0; out < NUM_OUTPUTS; out++) {
 		float yRow = indTop + (out + 0.5f) * rowH;
-		bool enabled = module->outputEnabled[out];
+		bool enabled = true;   // outputs are always live now
 
 		// Faint baseline
 		nvgBeginPath(args.vg);
@@ -832,90 +838,83 @@ struct MeterWidget : ModuleWidget {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/meter.svg")));
 
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
-		addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-		addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
 
 		// 18HP = 91.44mm
 		// Display top, full width
 		MeterDisplay* display = new MeterDisplay();
 		display->module = module;
 		display->box.pos = mm2px(Vec(3.0f, 12.0f));
-		display->box.size = mm2px(Vec(85.44f, 18.0f));
+		display->box.size = mm2px(Vec(85.44f, 26.0f));
 		addChild(display);
 
-		// --- LEFT COLUMN: two aligned columns at xL=8, xR=22 ---
-		const float xL = 8.f;
-		const float xR = 22.f;
-
-		// BPM huge knob (centered between the two columns)
-		addParam(createParamCentered<RoundHugeBlackKnob>(
-			mm2px(Vec(15.f, 42.f)), module, Meter::BPM_PARAM));
-
-		// EXT clock (left), BPM CV (right) — both directly below the knob
-		addInput(createInputCentered<PJ301MPort>(
-			mm2px(Vec(xL, 58.f)), module, Meter::EXT_CLOCK_INPUT));
-		addInput(createInputCentered<PJ301MPort>(
-			mm2px(Vec(xR, 58.f)), module, Meter::BPM_INPUT));
-
-		// Numerator + Denominator knobs
+		// --- LEFT COLUMN: clock/transport controls (positions per Meter SVG) ---
+		// BPM knob (smaller — RoundBlackKnob, was RoundHugeBlackKnob)
 		addParam(createParamCentered<RoundBlackKnob>(
-			mm2px(Vec(xL, 72.f)), module, Meter::NUMERATOR_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(
-			mm2px(Vec(xR, 72.f)), module, Meter::DENOMINATOR_PARAM));
+			mm2px(Vec(10.06f, 50.79f)), module, Meter::BPM_PARAM));
+		// BPM CV jack (right of BPM knob)
 		addInput(createInputCentered<PJ301MPort>(
-			mm2px(Vec(xL, 84.f)), module, Meter::NUMERATOR_INPUT));
-		addInput(createInputCentered<PJ301MPort>(
-			mm2px(Vec(xR, 84.f)), module, Meter::DENOMINATOR_INPUT));
+			mm2px(Vec(20.22f, 50.79f)), module, Meter::BPM_INPUT));
 
-		// Run latch + Reset button row
+		// SYNC / EXT clock input
+		addInput(createInputCentered<PJ301MPort>(
+			mm2px(Vec(10.16f, 71.11f)), module, Meter::EXT_CLOCK_INPUT));
+
+		// NUM + DEN knobs and their CV jacks
+		addParam(createParamCentered<RoundBlackKnob>(
+			mm2px(Vec(10.16f, 88.89f)), module, Meter::NUMERATOR_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(
+			mm2px(Vec(20.32f, 88.89f)), module, Meter::DENOMINATOR_PARAM));
+		addInput(createInputCentered<PJ301MPort>(
+			mm2px(Vec(10.16f, 101.59f)), module, Meter::NUMERATOR_INPUT));
+		addInput(createInputCentered<PJ301MPort>(
+			mm2px(Vec(20.32f, 101.59f)), module, Meter::DENOMINATOR_INPUT));
+
+		// Bottom row (y=121.92): RUN button + RUN gate, RST button, RESET out
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(
-			mm2px(Vec(xL, 98.f)), module, Meter::RUN_PARAM, Meter::RUN_LIGHT));
-		addParam(createParamCentered<VCVButton>(
-			mm2px(Vec(xR, 98.f)), module, Meter::RESET_PARAM));
-
-		// Run gate (in) + Reset (out) row
+			mm2px(Vec(10.01f, 121.92f)), module, Meter::RUN_PARAM, Meter::RUN_LIGHT));
 		addInput(createInputCentered<PJ301MPort>(
-			mm2px(Vec(xL, 110.f)), module, Meter::RUN_INPUT));
+			mm2px(Vec(20.32f, 121.92f)), module, Meter::RUN_INPUT));
+		addParam(createParamCentered<VCVButton>(
+			mm2px(Vec(50.79f, 121.92f)), module, Meter::RESET_PARAM));
 		addOutput(createOutputCentered<PJ301MPort>(
-			mm2px(Vec(xR, 110.f)), module, Meter::RESET_OUTPUT));
+			mm2px(Vec(81.27f, 121.92f)), module, Meter::RESET_OUTPUT));
 
-		// --- RIGHT COLUMN: 6 output rows ---
-		// Order per row: enable button, enable CV | swing knob, swing CV | out
-		// Pairs are tight (8mm apart); sets are separated by 11mm gaps.
-		float xEnable   = 44.f;
-		float xEnableCV = 53.f;
-		float xSwing    = 65.f;
-		float xSwingCV  = 74.f;
-		float xOut      = 86.f;
+		// --- RIGHT COLUMN: 5 swing rows + BAR row ---
+		// Per row: [trimpot] [swing CV] [swung] [grid]
+		const float xTrimpot = 50.79f;
+		const float xCV      = 60.95f;
+		const float xSwung   = 71.11f;
+		const float xGrid    = 81.27f;
 
-		float rowYs[NUM_OUTPUTS] = { 44.f, 57.f, 70.f, 83.f, 96.f, 109.f };
+		// 5 swingable subdivisions (Q, E, S, QT, ET) top-to-bottom
+		const float swingRowYs[5] = { 60.95f, 71.11f, 81.27f, 91.43f, 101.59f };
+		const int swingSubIds[5] = {
+			SUB_QUARTER, SUB_EIGHTH, SUB_SIXTEENTH, SUB_QTRIP, SUB_ETRIP
+		};
+		const int gridOutIds[5] = {
+			Meter::QUARTER_GRID_OUTPUT,
+			Meter::EIGHTH_GRID_OUTPUT,
+			Meter::SIXTEENTH_GRID_OUTPUT,
+			Meter::QUARTER_TRIPLET_GRID_OUTPUT,
+			Meter::EIGHTH_TRIPLET_GRID_OUTPUT
+		};
 
-		for (int i = 0; i < NUM_OUTPUTS; i++) {
-			float y = rowYs[i];
-
-			// Enable button with green LED
-			addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(
-				mm2px(Vec(xEnable, y)), module,
-				Meter::ENABLE_PARAM_0 + i, Meter::ENABLE_LIGHT_0 + i));
-
-			// Swing trimpot + CV (BAR has no swing — once-per-bar)
-			if (i != SUB_BAR) {
-				addParam(createParamCentered<Trimpot>(
-					mm2px(Vec(xSwing, y)), module, Meter::SWING_PARAM_0 + i));
-				addInput(createInputCentered<PJ301MPort>(
-					mm2px(Vec(xSwingCV, y)), module, Meter::SWING_CV_0 + i));
-			}
-
-			// Enable CV gate
+		for (int i = 0; i < 5; i++) {
+			int sub = swingSubIds[i];
+			float y = swingRowYs[i];
+			addParam(createParamCentered<Trimpot>(
+				mm2px(Vec(xTrimpot, y)), module, Meter::SWING_PARAM_0 + sub));
 			addInput(createInputCentered<PJ301MPort>(
-				mm2px(Vec(xEnableCV, y)), module, Meter::ENABLE_CV_0 + i));
-
-			// Output jack
+				mm2px(Vec(xCV, y)), module, Meter::SWING_CV_0 + sub));
 			addOutput(createOutputCentered<PJ301MPort>(
-				mm2px(Vec(xOut, y)), module, Meter::BAR_OUTPUT + i));
+				mm2px(Vec(xSwung, y)), module, Meter::BAR_OUTPUT + sub));
+			addOutput(createOutputCentered<PJ301MPort>(
+				mm2px(Vec(xGrid, y)), module, gridOutIds[i]));
 		}
+
+		// BAR row (no swing): single output jack in the grid column
+		addOutput(createOutputCentered<PJ301MPort>(
+			mm2px(Vec(81.27f, 111.75f)), module, Meter::BAR_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
