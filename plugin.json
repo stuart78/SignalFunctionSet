@@ -1,7 +1,7 @@
 {
   "slug": "SignalFunctionSet",
   "name": "Signal Function Set",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "_comment": "Build script will modify slug/name/version for dev builds to allow coexistence",
   "license": "GPL-3.0-or-later",
   "brand": "SignalFunctionSet",
@@ -19,7 +19,7 @@
       "name": "Drift",
       "description": "Phase shifted LFO with offset, attenuation and stability controls",
       "tags": [
-        "LFO",
+        "Low-frequency oscillator",
         "Quad",
         "Random",
         "Utility"
@@ -51,8 +51,7 @@
       "tags": [
         "Sampler",
         "Dual",
-        "Recording",
-        "Looper"
+        "Recording"
       ]
     },
     {
