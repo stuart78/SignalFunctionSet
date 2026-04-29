@@ -167,6 +167,10 @@ struct Note : Module {
 	int playStep = 0;
 	int currentBar = 1;
 	int editMode = MODE_STEPS;
+	// True between Reset/start and the first BAR-aligned downbeat — see
+	// Beat for full rationale. Default true so a fresh Note also waits for
+	// the first real downbeat instead of skipping step 0 on first CLOCK.
+	bool firstClockPending = true;
 
 	int rootNote = 0;          // 0..11 semitones (C=0)
 	int scaleIndex = 0;        // 0..NUM_SCALES-1
@@ -292,7 +296,11 @@ struct Note : Module {
 		playPattern = firstActivePattern();
 		playStep = 0;
 		currentBar = 1;
-		fireStepIfActive();
+		// Park before step 0; the next CLOCK or BAR pulse will fire it.
+		// Also clear any deferred clock so we don't double-fire.
+		firstClockPending = true;
+		pendingClockSamples = -1;
+		barSuppressionSamples = 0;
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -320,6 +328,12 @@ struct Note : Module {
 		bool barConnected = inputs[BAR_INPUT].isConnected();
 
 		auto advanceBar = [&]() {
+			if (firstClockPending) {
+				firstClockPending = false;
+				playStep = 0;
+				fireStepIfActive();
+				return;
+			}
 			currentBar++;
 			if (currentBar > patterns[playPattern].repeats) {
 				playPattern = nextActivePattern(playPattern);
@@ -330,6 +344,15 @@ struct Note : Module {
 		};
 
 		auto advanceStep = [&]() {
+			if (firstClockPending) {
+				// Wait for BAR if connected so step 0 lands on a real
+				// downbeat. Without BAR, fire on this CLOCK.
+				if (barConnected) return;
+				firstClockPending = false;
+				playStep = 0;
+				fireStepIfActive();
+				return;
+			}
 			int len = patterns[playPattern].length;
 			if (len < 1) len = 1;
 			int nextStep = playStep + 1;

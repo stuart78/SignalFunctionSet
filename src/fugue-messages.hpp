@@ -26,7 +26,7 @@ struct ExpanderToFugueMessage {
 	struct VoiceOverride {
 		int stepsOverride;    // -1 = no override, else 1-8 (capped at global)
 		float rangeOverride;  // -1 = no override, else 1.f/2.f/5.f
-		int sleepDivision;    // 1 = no sleep, else number of clocks to sleep after cycle
+		int sleepDivision;    // 0 = no sleep, else number of clocks to sleep after cycle
 		float probability;    // 0-1, gate fire probability (1.0 = always)
 	} voices[FUGUE_NUM_VOICES];
 };

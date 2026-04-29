@@ -116,6 +116,19 @@ struct Beat : Module {
 	int currentBar = 1;          // Which bar of the loop we are in (1..reps)
 	float currentVelocity = 1.f;
 
+	// True between Reset (or fresh start) and the next BAR-aligned downbeat.
+	// Makes the first audible step 0 land on a real downbeat:
+	//   - If BAR is connected, only a BAR pulse consumes the flag (CLOCKs
+	//     in between are silently absorbed). This keeps step 0 musically
+	//     aligned even if Reset lands mid-bar.
+	//   - If BAR is not connected, the next CLOCK consumes the flag.
+	// Without this, Reset fired step 0 off-clock, then the next CLOCK
+	// advanced to step 1 and fired it; subsequently the BAR pulse re-fired
+	// step 0 — the user heard step 0 "early" before the real bar 2 downbeat.
+	// Default true at construction so a fresh Beat also waits for the
+	// first real downbeat instead of skipping step 0 on the first CLOCK.
+	bool firstClockPending = true;
+
 	// When true, pattern only advances on a BAR pulse (default — most musical
 	// behavior). When false, pattern wrap also advances when BAR isn't patched.
 	bool advanceOnBarOnly = true;
@@ -125,6 +138,19 @@ struct Beat : Module {
 	dsp::SchmittTrigger resetTrigger;
 	dsp::PulseGenerator gatePulse;
 	dsp::PulseGenerator accentPulse;
+
+	// Bar/clock coincidence handling. CLOCK and BAR from Meter SHOULD arrive
+	// on the same sample, but in practice can be off by a few samples. Two
+	// guards keep step 0 from double-firing on bar boundaries:
+	//   - pendingClockSamples: defer a CLOCK fire by N samples; if a BAR
+	//     arrives within that window, it cancels the pending clock (so the
+	//     BAR's advanceBar handles step 0 alone).
+	//   - barSuppressionSamples: after a BAR fires, drop any CLOCK that
+	//     arrives within the window (it's the same musical event).
+	int pendingClockSamples = -1;
+	int barSuppressionSamples = 0;
+	static const int CLOCK_DEFER_SAMPLES = 24;    // ~0.5ms at 48kHz
+	static const int BAR_SUPPRESS_SAMPLES = 96;   // ~2ms at 48kHz
 
 	Beat() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -185,7 +211,12 @@ struct Beat : Module {
 		playPattern = firstActivePattern();
 		playStep = 0;
 		currentBar = 1;
-		fireStepIfActive();
+		// Park before step 0; the next CLOCK or BAR pulse will fire it.
+		// Also clear any in-flight deferred clock so a stale CLOCK from
+		// just before Reset doesn't fire after the reset state is set.
+		firstClockPending = true;
+		pendingClockSamples = -1;
+		barSuppressionSamples = 0;
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -196,6 +227,14 @@ struct Beat : Module {
 		bool barConnected = inputs[BAR_INPUT].isConnected();
 
 		auto advanceBar = [&]() {
+			if (firstClockPending) {
+				// First bar after Reset — sit on step 0 instead of
+				// incrementing past it.
+				firstClockPending = false;
+				playStep = 0;
+				fireStepIfActive();
+				return;
+			}
 			currentBar++;
 			if (currentBar > patterns[playPattern].repeats) {
 				playPattern = nextActivePattern(playPattern);
@@ -206,6 +245,17 @@ struct Beat : Module {
 		};
 
 		auto advanceStep = [&]() {
+			if (firstClockPending) {
+				// Waiting for downbeat. If BAR is patched, silently absorb
+				// this CLOCK — only a BAR pulse should fire step 0, so it
+				// lands on the actual downbeat. If BAR isn't patched, fire
+				// step 0 on this CLOCK.
+				if (barConnected) return;
+				firstClockPending = false;
+				playStep = 0;
+				fireStepIfActive();
+				return;
+			}
 			int len = patterns[playPattern].length;
 			if (len < 1) len = 1;
 			int nextStep = playStep + 1;
@@ -222,18 +272,36 @@ struct Beat : Module {
 
 		bool barFired = barConnected
 			&& barTrigger.process(inputs[BAR_INPUT].getVoltage(), 0.1f, 1.f);
-		if (barFired) advanceBar();
-
-		// Always service the clock SchmittTrigger so its edge state stays in
-		// sync. Suppress the CLOCK if BAR fired this sample OR BAR is currently
-		// high (still inside its 1ms pulse window) — that means CLOCK is the
-		// matching downbeat pulse from a subdivision and the bar event has
-		// already played its step.
-		bool clockFired = clockTrigger.process(inputs[CLOCK_INPUT].getVoltage(), 0.1f, 1.f);
-		bool barHighNow = barConnected && inputs[BAR_INPUT].getVoltage() >= 1.f;
-		if (clockFired && !barFired && !barHighNow) {
-			advanceStep();
+		if (barFired) {
+			// Cancel any deferred clock — the BAR is the canonical event.
+			pendingClockSamples = -1;
+			barSuppressionSamples = BAR_SUPPRESS_SAMPLES;
+			advanceBar();
 		}
+
+		bool clockFired = clockTrigger.process(inputs[CLOCK_INPUT].getVoltage(), 0.1f, 1.f);
+		if (clockFired && !barFired) {
+			if (barConnected) {
+				if (barSuppressionSamples > 0) {
+					// CLOCK in post-BAR window — same musical event, drop.
+				} else {
+					// Defer the CLOCK fire so a BAR arriving in the next
+					// few samples can cancel it.
+					pendingClockSamples = CLOCK_DEFER_SAMPLES;
+				}
+			} else {
+				// No BAR cable — fire CLOCK immediately.
+				advanceStep();
+			}
+		}
+		if (pendingClockSamples > 0) {
+			pendingClockSamples--;
+			if (pendingClockSamples == 0) {
+				advanceStep();
+				pendingClockSamples = -1;
+			}
+		}
+		if (barSuppressionSamples > 0) barSuppressionSamples--;
 
 		bool gateHi = gatePulse.process(args.sampleTime);
 		bool accHi = accentPulse.process(args.sampleTime);

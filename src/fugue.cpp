@@ -222,6 +222,10 @@ struct Fugue : Module {
 		float currentVoltage = 0.f;
 		float targetVoltage = 0.f;
 		float slewRate = 0.f;
+		// True between Reset and the first clock pulse — makes that first
+		// clock fire step 0 (visually step 1) instead of incrementing past
+		// it to step 1 (visually step 2).
+		bool firstClockPending = true;
 	};
 
 	VoiceState voices[NUM_VOICES];
@@ -696,7 +700,7 @@ struct Fugue : Module {
 		for (int v = 0; v < NUM_VOICES; v++) {
 			expanderMsg.voices[v].stepsOverride = -1;
 			expanderMsg.voices[v].rangeOverride = -1.f;
-			expanderMsg.voices[v].sleepDivision = 1;
+			expanderMsg.voices[v].sleepDivision = 0;   // 0 = no sleep
 			expanderMsg.voices[v].probability = 1.f;
 		}
 
@@ -727,6 +731,11 @@ struct Fugue : Module {
 				sleeping[v] = false;
 				sleepCounter[v] = 0;
 				sampleHoldHolding[v] = false;
+				// First clock after Reset should fire step 1 (currentStep=0)
+				// instead of skipping it by incrementing to step 2. The flag
+				// makes the first post-reset clock "land on" step 0 rather
+				// than advance past it.
+				voices[v].firstClockPending = true;
 				onVoiceStepAdvance(v);
 			}
 		}
@@ -771,14 +780,22 @@ struct Fugue : Module {
 					}
 					// Don't advance step while sleeping
 				} else {
-					voice.stepCounter++;
-					voice.currentStep++;
-					if (voice.currentStep >= voiceSteps) {
-						voice.currentStep = 0;
-						// Start sleeping at end of cycle
-						if (sleepDiv > 0) {
-							sleeping[v] = true;
-							sleepCounter[v] = sleepDiv;
+					if (voice.firstClockPending) {
+						// First clock after Reset: don't increment — sit on
+						// step 0 (visually step 1) so its gate fires now.
+						voice.firstClockPending = false;
+					} else {
+						voice.stepCounter++;
+						voice.currentStep++;
+						if (voice.currentStep >= voiceSteps) {
+							voice.currentStep = 0;
+							// Start sleeping at end of cycle. sleepDiv == 0
+							// means "no sleep" (matches the FugueX dropdown's
+							// "0" entry).
+							if (sleepDiv > 0) {
+								sleeping[v] = true;
+								sleepCounter[v] = sleepDiv;
+							}
 						}
 					}
 

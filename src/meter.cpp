@@ -263,6 +263,14 @@ struct Meter : Module {
 		pulseCountQuarter = pulseCountEighth = pulseCountSixteenth = 0;
 		pulseCountQTrip = pulseCountETrip = 0;
 		sixteenthCount = 0;
+		// Reset grid (un-swung) accumulators too so they stay phase-locked
+		// with the bar. Without this, pressing Reset mid-bar leaves the grid
+		// outputs at their pre-reset phase; 16 sixteenths later when the bar
+		// wraps, the bar-wrap force-trigger fires an EXTRA grid pulse out of
+		// phase with the natural ones — downstream Beat/Note hear it as a
+		// double-CLOCK on the bar boundary ("early on 2nd loop").
+		for (int i = 0; i < 5; i++) samplesSinceGrid[i] = 0.f;
+		lastSamplesPerQuarter = 0.f;
 		if (hasPendingChange) {
 			activeNumerator = pendingNumerator;
 			activeDenominator = pendingDenominator;
@@ -273,7 +281,11 @@ struct Meter : Module {
 		for (int i = 0; i < NUM_OUTPUTS; i++) {
 			activeSwing[i] = pendingSwing[i];
 		}
-		// Fire all pulses on reset (downbeat)
+		// Fire all swung pulses on reset (downbeat). Grid pulses are NOT
+		// fired here — they'll fire naturally one basePeriod after Reset
+		// since their accumulators were just reset to 0. Force-firing grid
+		// here would inject an extra CLOCK into modules clocked from a grid
+		// output without a Reset cable.
 		for (int i = 0; i < NUM_OUTPUTS; i++) {
 			pulses[i].trigger(0.001f);
 		}
