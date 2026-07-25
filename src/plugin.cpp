@@ -35,6 +35,7 @@ void init(Plugin* p) {
 	p->addModel(modelRatio);
 	p->addModel(modelArrange);
 	p->addModel(modelFill);
+	p->addModel(modelChime);
 
 	// Add modules here
 	// p->addModel(modelMyModule);

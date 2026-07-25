@@ -329,12 +329,24 @@
     {
       "slug": "Fill",
       "name": "Fill",
-      "description": "Auto-playing 5-channel drum sequencer. Curated groove banks organised into intensity tiers; one internal pressure value builds each bar and vents as a generated fill, so the groove thickens then releases — musical variation, not random. Per-channel gate/velocity/accent out.",
+      "description": "Auto-playing 8-channel drum sequencer. Groove banks organised into intensity tiers; an internal pressure value builds each bar and vents as a generated fill, so the groove thickens then releases. Imports drum-patterns.com files; per-channel gate/velocity/accent out.",
       "tags": [
         "Sequencer",
         "Drum",
         "Random",
         "Clock modulator"
+      ],
+      "hidden": true
+    },
+    {
+      "slug": "Chime",
+      "name": "Chime",
+      "description": "Eight-note resonating drone machine. Each note's rotating resonator tube is a slow bidirectional LFO; the note blooms as its tube passes center. Bowed or struck excitation, scale-degree tuning, per-note LFO CV and audio outs plus a stereo mix.",
+      "tags": [
+        "Drone",
+        "Low-frequency oscillator",
+        "Physical modeling",
+        "Oscillator"
       ],
       "hidden": true
     }

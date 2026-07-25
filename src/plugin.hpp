@@ -37,3 +37,4 @@ extern Model* modelPlay;
 extern Model* modelRatio;
 extern Model* modelArrange;
 extern Model* modelFill;
+extern Model* modelChime;

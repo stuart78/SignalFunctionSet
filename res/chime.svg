@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="142.24mm" height="128.5mm" viewBox="0 0 420 379.43">
+  <!-- Placeholder panel for CHIME (WIP), 28HP. Real art TBD. -->
+  <rect width="420" height="379.43" fill="#f0f0f0"/>
+  <rect x="0" y="0" width="420" height="379.43" fill="none" stroke="#d0d0d0" stroke-width="1"/>
+  <rect x="100" y="30" width="310" height="150" rx="4" fill="#1a1a32" opacity="0.06"/>
+</svg>
