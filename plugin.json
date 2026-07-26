@@ -349,6 +349,18 @@
         "Oscillator"
       ],
       "hidden": true
+    },
+    {
+      "slug": "Crystal",
+      "name": "Crystal",
+      "description": "A 3D echo chamber shaped like a real crystal. Sound enters at a movable emitter and reflects inside a genuine crystal habit — cube, dodecahedron, tetrahedron, quartz — heard at four listeners as quad outs. Size sweeps from pitched resonator to hall; rotate the crystal to move the echoes.",
+      "tags": [
+        "Reverb",
+        "Delay",
+        "Effect",
+        "Physical modeling"
+      ],
+      "hidden": true
     }
   ]
 }

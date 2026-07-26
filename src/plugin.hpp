@@ -38,3 +38,4 @@ extern Model* modelRatio;
 extern Model* modelArrange;
 extern Model* modelFill;
 extern Model* modelChime;
+extern Model* modelCrystal;

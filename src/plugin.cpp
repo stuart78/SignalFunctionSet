@@ -36,6 +36,7 @@ void init(Plugin* p) {
 	p->addModel(modelArrange);
 	p->addModel(modelFill);
 	p->addModel(modelChime);
+	p->addModel(modelCrystal);
 
 	// Add modules here
 	// p->addModel(modelMyModule);
