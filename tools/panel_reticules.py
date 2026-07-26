@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""Generate a panel reticule SVG from a module's widget constructor.
+
+The widget code is the single source of truth for where controls sit, so this
+reads the positions straight out of it rather than asking anyone to keep a
+second copy in sync. Run it again after moving anything:
+
+    python3 tools/panel_reticules.py crystal chime fill chance
+
+Conventions it enforces (see docs/conventions/panel-reticules.md):
+  * one shape per element, so a reticule can be dragged as a unit
+  * controls drawn at 99% of the real component, centred on the real position
+  * screens at 100%, filled with the display blue
+"""
+import glob
+import os
+import re
+import sys
+
+MM = 2.952756                      # Rack SVG px per mm (75 dpi)
+SCALE = 0.99                       # controls sit at 99%
+DISPLAY_BLUE = "#1a1a32"           # the same deep blue the displays clear to
+PANEL = "#f0f0f0"
+RETICULE = "#b2b2b2"               # matches the existing hand-drawn panels
+
+# Real component sizes, read from Rack's own ComponentLibrary (px).
+SIZES = {
+    "RoundHugeBlackKnob": (53.859, 53.859), "RoundLargeBlackKnob": (36.0, 36.0),
+    "RoundBlackKnob": (28.348, 28.348), "RoundSmallBlackKnob": (22.676, 22.676),
+    "Trimpot": (17.856, 17.859), "PJ301MPort": (23.7, 23.7),
+    "CKSS": (14.0, 20.641), "CKSSThree": (13.457, 28.348),
+    "VCVButton": (18.0, 18.0), "VCVLightBezel": (21.26, 21.26),
+    "VCVLightLatch": (18.0, 18.0), "VCVSlider": (19.843, 76.535),
+    "ChimeExciteSlider": (30.0 * MM, 7.0 * MM),      # custom horizontal slider
+    "TinyLight": (1.0 * MM, 1.0 * MM), "SmallLight": (2.0 * MM, 2.0 * MM),
+    "MediumLight": (3.0 * MM, 3.0 * MM), "LargeLight": (5.0 * MM, 5.0 * MM),
+}
+ROUND = ("Knob", "Trimpot", "PJ301MPort", "VCVButton", "VCVLightBezel",
+         "VCVLightLatch", "Light")
+
+
+def component(call):
+    """Component class from create*Centered<X<Y<Z>>>(...) — outermost wins."""
+    m = re.search(r"create\w*?Centered<\s*([A-Za-z0-9_]+)", call)
+    return m.group(1) if m else None
+
+
+def widget_source(src, module):
+    """The body of struct <Module>Widget's constructor."""
+    m = re.search(r"struct %sWidget\s*:\s*ModuleWidget\s*\{(.*?)\n\};" % module,
+                  src, re.S)
+    return m.group(1) if m else ""
+
+
+def evaluate(expr, env):
+    # strip C++ float suffixes: 76.31f, 4.f and .5f all appear in these widgets
+    e = re.sub(r"(?<=[\d.])f\b", "", expr)
+    e = e.replace("M_PI", "3.141592653589793")
+    return float(eval(e, {"__builtins__": {}}, dict(env)))
+
+
+def constants(seed, *sources):
+    """Constants the position expressions refer to, from widget body and file
+    scope alike. Handles `const float a = 1.f, b = 2.f;` — declaring several per
+    line is normal in these widgets and missing them silently drops controls."""
+    env = dict(seed)
+    for text in sources:
+        for m in re.finditer(r"(?:static\s+)?const\s+float\s+(\w+)\s*\[\s*\w*\s*\]\s*=\s*\{([^}]*)\}", text):
+            try:
+                env[m.group(1)] = [float(v.strip().rstrip("f"))
+                                   for v in m.group(2).split(",") if v.strip()]
+            except Exception:
+                pass
+        for m in re.finditer(r"(?:static\s+)?const\s+float\s+([^;\[]+);", text):
+            for decl in m.group(1).split(","):
+                if "=" not in decl:
+                    continue
+                name, _, val = decl.partition("=")
+                try:
+                    env[name.strip()] = evaluate(val, env)
+                except Exception:
+                    pass
+    return env
+
+
+def loop_ranges(body, env, extra_defs):
+    """Every `for (int v = 0; v < N; v++)` as (var, count, start, end), where the
+    range is found by matching braces — testing whether the loop variable appears
+    in the position text instead would fire on the `c` in `Vec`."""
+    out = []
+    for m in re.finditer(r"for\s*\(\s*int\s+(\w+)\s*=\s*0;\s*\1\s*<\s*([A-Za-z0-9_]+)\s*;", body):
+        n = m.group(2)
+        n = int(n) if n.isdigit() else int(env.get(n, extra_defs.get(n, 0)) or 0)
+        if not n:
+            continue
+        i = body.find("{", m.end())
+        nl = body.find("\n", m.end())
+        if i < 0 or (nl >= 0 and i > nl):        # braceless single-statement body
+            end = body.find(";", m.end()) + 1
+            out.append((m.group(1), n, m.end(), end))
+            continue
+        depth, j = 0, i
+        while j < len(body):
+            if body[j] == "{":
+                depth += 1
+            elif body[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        out.append((m.group(1), n, i, j))
+    return out
+
+
+def collect(body, env, extra_defs):
+    """Every placed element as (kind, cx_px, cy_px, w_px, h_px)."""
+    out = []
+    env = dict(env)
+    env.update(extra_defs)
+
+    # displays / custom children: box.pos + box.size in mm
+    for m in re.finditer(r"(\w+)->box\.pos\s*=\s*mm2px\(Vec\(([^,]+),([^)]+)\)\);\s*"
+                         r"\1->box\.size\s*=\s*mm2px\(Vec\(([^,]+),([^)]+)\)\);", body):
+        try:
+            x, y = evaluate(m.group(2), env), evaluate(m.group(3), env)
+            w, h = evaluate(m.group(4), env), evaluate(m.group(5), env)
+            if w >= 20.0 and h >= 12.0:      # a thin text readout is not a screen
+                out.append(("screen", (x + w / 2) * MM, (y + h / 2) * MM, w * MM, h * MM))
+        except Exception:
+            pass
+
+    loops = loop_ranges(body, env, extra_defs)
+
+    for call in re.finditer(r"(add(?:Param|Input|Output|Child))\((.*?)\);", body, re.S):
+        text = call.group(2)
+        pos = re.search(r"mm2px\(Vec\(([^,]+),\s*([^)]+)\)\)", text)
+        comp = component(text)
+        if not pos or not comp:
+            continue
+        size = None
+        for key, val in SIZES.items():
+            if key in comp:
+                size = val
+                break
+        if size is None:
+            size = SIZES["PJ301MPort"] if "Port" in comp else SIZES["Trimpot"]
+
+        # innermost enclosing loop, plus any `float v = ...;` it declares
+        var, count, locals_src = None, 1, ""
+        for lv, lc, ls, le in loops:
+            if ls <= call.start() <= le:
+                var, count = lv, lc
+                locals_src = body[ls:le]
+        decls = re.findall(r"float\s+(\w+)\s*=\s*([^;]+);", locals_src) if var else []
+
+        for i in range(count):
+            e = dict(env)
+            if var:
+                e[var] = i
+                for name, expr in decls:
+                    try:
+                        e[name] = evaluate(expr, e)
+                    except Exception:
+                        pass
+            try:
+                x, y = evaluate(pos.group(1), e), evaluate(pos.group(2), e)
+            except Exception:
+                break
+            kind = "round" if any(r in comp for r in ROUND) else "flat"
+            out.append((kind, x * MM, y * MM, size[0], size[1]))
+    return out
+
+
+def group_range(svg, gid):
+    """Balanced <g id="gid"> ... </g> span, tolerating nested groups."""
+    m = re.search(r'<g id="%s"[^>]*>' % re.escape(gid), svg)
+    if not m:
+        return None
+    i, depth = m.end(), 1
+    for tag in re.finditer(r"<g\b[^>]*>|</g>", svg[m.end():]):
+        depth += 1 if tag.group(0).startswith("<g") else -1
+        if depth == 0:
+            return (m.start(), m.end(), m.end() + tag.start(), m.end() + tag.end())
+    return None
+
+
+def shapes(elems, indent="    "):
+    ui, screens = [], []
+    for k, cx, cy, w, h in elems:
+        if k == "screen":
+            screens.append(f'{indent}<rect x="{cx-w/2:.2f}" y="{cy-h/2:.2f}" width="{w:.2f}" '
+                           f'height="{h:.2f}" rx="3" fill="{DISPLAY_BLUE}"/>')
+        elif k == "round":
+            ui.append(f'{indent}<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{w/2*SCALE:.2f}" '
+                      f'fill="none" stroke="{RETICULE}" stroke-width=".5"/>')
+        else:
+            ui.append(f'{indent}<rect x="{cx-w*SCALE/2:.2f}" y="{cy-h*SCALE/2:.2f}" '
+                      f'width="{w*SCALE:.2f}" height="{h*SCALE:.2f}" rx="{w*0.12:.2f}" '
+                      f'fill="none" stroke="{RETICULE}" stroke-width=".5"/>')
+    return ui, screens
+
+
+def splice(path, old, elems):
+    """Replace only the reticule layers of a panel that already has artwork."""
+    ui, screens = shapes(elems, "      ")
+    out = old
+    r = group_range(out, "Reticules")
+    if r:
+        out = out[:r[1]] + "\n" + "\n".join(ui) + "\n    " + out[r[2]:]
+    else:
+        out = out.replace("</svg>", '  <g id="Reticules">\n' + "\n".join(ui) + "\n  </g>\n</svg>")
+    r = group_range(out, "Screens")
+    if r:
+        out = out[:r[1]] + "\n" + "\n".join(screens) + "\n    " + out[r[2]:]
+    elif screens:
+        m = re.search(r'<g id="Reticules"[^>]*>', out)
+        block = '  <g id="Screens">\n' + "\n".join(screens) + "\n  </g>\n"
+        out = out[:m.start()] + block + out[m.start():]
+    open(path, "w").write(out)
+    return sum(1 for e in elems if e[0] != "screen"), sum(1 for e in elems if e[0] == "screen")
+
+
+MODULES = {
+    "crystal": ("Crystal", "src/crystal.cpp", "res/crystal.svg", {"CR_NL": 4}),
+    "chime":   ("Chime",   "src/chime.cpp",   "res/chime.svg",   {"CHIME_NCH": 8}),
+    "fill":    ("Fill",    "src/fill.cpp",    "res/fill.svg",    {"FILL_NCH": 8}),
+    "chance":  ("Chance",  "src/chance.cpp",  "res/chance.svg",  {"NUM_NODES": 8}),
+}
+
+if __name__ == "__main__":
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for key in (sys.argv[1:] or MODULES.keys()):
+        mod, cpp, svg, defs = MODULES[key]
+        src = open(os.path.join(root, cpp)).read()
+        body = widget_source(src, mod)
+        if not body:
+            print(f"{key}: could not find {mod}Widget"); continue
+        # Panel size in mm comes from the existing file (so HP never changes by
+        # accident), but the viewBox is rebuilt at Rack's own 75dpi. That makes a
+        # coordinate in the SVG the same number as in mm2px() — Illustrator's
+        # default 72dpi export silently breaks that correspondence.
+        p = os.path.join(root, svg)
+        old = open(p).read()
+        wmm = float(re.search(r'width="([0-9.]+)mm"', old).group(1))
+        vb = re.search(r'viewBox="0 0 ([0-9.]+) ([0-9.]+)"', old)
+        # Work in the panel's own coordinate space. Illustrator exports at 72dpi
+        # while Rack's mm2px() is 75dpi, so this factor is what keeps generated
+        # shapes aligned with hand-drawn artwork.
+        upmm = float(vb.group(1)) / wmm
+        env = constants(defs, body, src)
+        elems = [(k, x / MM * upmm, y / MM * upmm, w / MM * upmm, h / MM * upmm)
+                 for (k, x, y, w, h) in collect(body, env, defs)]
+        nc, ns = splice(p, old, elems)
+        print(f"{key:8} {nc:3} controls, {ns} screen(s) -> {svg}  ({upmm:.4f} units/mm)")

@@ -103,6 +103,17 @@ to every module in the plugin.
 
 See **`docs/conventions/browser-preview-pattern.md`** for the full pattern, examples from every shipped module, and testing instructions. Treat this as a required part of the display widget contract from day one of any new module.
 
+### Panel Reticule Conventions
+Panel SVGs carry **reticules** — the placement guides the art is drawn around. They are generated from the widget constructor by `tools/panel_reticules.py`, never hand-placed, so they cannot drift from the code:
+
+```bash
+python3 tools/panel_reticules.py            # every registered panel
+```
+
+Controls are drawn at **99%** of the real component as a **single shape**; screens are **full size** filled with the display blue (`#1a1a32`). The tool owns only the `Screens` and `Reticules` layers and never touches the designer's artwork.
+
+See **`docs/conventions/panel-reticules.md`** for the rules, the component size table, and the 72dpi-vs-75dpi coordinate-space trap.
+
 ### Scale Conventions
 **Any module exposing a SCALE control MUST use the shared canonical list in `src/scales.hpp`** (namespace `sfs`) — never define its own scale table. The list is append-only; reordering breaks cross-module SCALE CV compatibility and saved patches. Note, Fugue, Fugue's MetaFugue variant, Muse, Chance, and Arrange all alias `sfs::Scale` / `sfs::SCALES[]`, so a SCALE CV (1V/scale) and ROOT CV (1V/oct, semitone-quantized) are interchangeable across all of them. (Fugue was migrated onto the canonical list in 2026-07; a `scaleCanonical` JSON flag + `LEGACY_SCALE_REMAP` translate pre-migration patches.)
 
