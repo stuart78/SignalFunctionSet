@@ -20,3 +20,6 @@ Reference/
 SVG/
 ~ai-*.tmp
 __pycache__/
+
+# Local sample libraries used for testing Play (multi-GB, third-party)
+/Broken SZF/
