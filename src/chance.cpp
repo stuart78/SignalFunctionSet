@@ -128,7 +128,9 @@ struct Chance : Module {
 	enum InputId {
 		CLOCK_INPUT, RESET_INPUT, RANDOMIZE_INPUT, ROOT_CV_INPUT,
 		GRAVITY_CV_INPUT, DRIFT_CV_INPUT, BRANCH_CV_INPUT, SCALE_CV_INPUT,
-		RESTS_CV_INPUT, EVEN_REST_CV_INPUT, OCT_CV_INPUT, REPEAT_CV_INPUT, INPUTS_LEN
+		RESTS_CV_INPUT, EVEN_REST_CV_INPUT, OCT_CV_INPUT, REPEAT_CV_INPUT,
+		// Appended — never insert mid-enum, cables serialise by index.
+		START_CV_INPUT, END_CV_INPUT, INPUTS_LEN
 	};
 	enum OutputId { CV_OUTPUT, GATE_OUTPUT, HARMONY_OUTPUT, HARM_GATE_OUTPUT, OUTPUTS_LEN };
 	enum LightId {
@@ -251,6 +253,8 @@ struct Chance : Module {
 		configInput(EVEN_REST_CV_INPUT, "Even-note rests CV");
 		configInput(OCT_CV_INPUT, "Octave leaps CV");
 		configInput(REPEAT_CV_INPUT, "Ratchet CV");
+		configInput(START_CV_INPUT, "Start step CV (1V/step, offsets the trimpot)");
+		configInput(END_CV_INPUT, "End step CV (1V/step, offsets the trimpot) — end before start plays the window backwards");
 		configOutput(CV_OUTPUT, "CV (1V/oct)");
 		configOutput(GATE_OUTPUT, "Gate");
 		configOutput(HARMONY_OUTPUT, "Harmony CV — the 2nd voice (diatonic interval)");
@@ -268,14 +272,20 @@ struct Chance : Module {
 		return (float)curRoot / 12.f + semis / 12.f;
 	}
 
+	// The play window: trimpot + CV at 1V/step. END before START is not an error —
+	// it plays the window backwards, which is the whole point of having both.
+	void windowIdx(int& sIdx, int& eIdx) {
+		sIdx = clamp((int)std::round(params[START_PARAM].getValue() + inputs[START_CV_INPUT].getVoltage()), 0, NUM_NODES - 1);
+		eIdx = clamp((int)std::round(params[END_PARAM].getValue()   + inputs[END_CV_INPUT].getVoltage()),   0, NUM_NODES - 1);
+	}
+
 	// Build the window order + the deterministic core skeleton (stable per seed).
 	void computeCore() {
 		const sfs::Scale& sc = sfs::SCALES[curScale];
 		int sz = sc.size;
 		maxPosDeg = sz * rangeOctaves;
 
-		int sIdx = clamp((int)std::round(params[START_PARAM].getValue()), 0, NUM_NODES - 1);
-		int eIdx = clamp((int)std::round(params[END_PARAM].getValue()), 0, NUM_NODES - 1);
+		int sIdx, eIdx; windowIdx(sIdx, eIdx);
 		int dir = (eIdx >= sIdx) ? 1 : -1;
 		seqLen = std::abs(eIdx - sIdx) + 1;
 		for (int k = 0; k < seqLen; k++) seq[k] = sIdx + dir * k;
@@ -303,8 +313,7 @@ struct Chance : Module {
 		float gDrift = clamp(params[DRIFT_PARAM].getValue() + inputs[DRIFT_CV_INPUT].getVoltage() / 10.f, 0.f, 1.f);
 		float gBranch = clamp(params[BRANCH_PARAM].getValue() + inputs[BRANCH_CV_INPUT].getVoltage() / 10.f, 0.f, 1.f);
 		float gOct = clamp(params[OCTAVE_PARAM].getValue() + inputs[OCT_CV_INPUT].getVoltage() / 10.f, 0.f, 1.f);
-		int sIdx = clamp((int)std::round(params[START_PARAM].getValue()), 0, NUM_NODES - 1);
-		int eIdx = clamp((int)std::round(params[END_PARAM].getValue()), 0, NUM_NODES - 1);
+		int sIdx, eIdx; windowIdx(sIdx, eIdx);
 		int dir = (eIdx >= sIdx) ? 1 : -1, len = std::abs(eIdx - sIdx) + 1;
 		int sq[NUM_NODES]; for (int k = 0; k < len; k++) sq[k] = sIdx + dir * k;
 		int cr[NUM_NODES] = {}, pos = 0;
@@ -938,6 +947,12 @@ void ChanceDisplay::onHoverScroll(const HoverScrollEvent& e) {
 }
 
 // ─── Widget ──────────────────────────────────────────────────────────────────
+// Menu slider over a module param — for controls that earn their keep but don't
+// earn panel space. `quantity` is borrowed, not owned (see ui/Slider.hpp).
+struct ChanceParamSlider : ui::Slider {
+	ChanceParamSlider(Quantity* q) { quantity = q; box.size.x = 200.f; }
+};
+
 struct ChanceWidget : ModuleWidget {
 	ChanceWidget(Chance* module) {
 		setModule(module);
@@ -963,12 +978,13 @@ struct ChanceWidget : ModuleWidget {
 			Chance::OCTAVE_PARAM, Chance::REPEAT_PARAM};
 		for (int i = 0; i < 9; i++) addParam(createParamCentered<Trimpot>(mm2px(Vec(CX[i], 76.31f)), module, rowA[i]));
 
-		// Row B (y=90) — GATE LEN + GLIDE trims (cols 0-1), then the 7 sequence CV inputs
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(CX[0], 90.f)), module, Chance::GATE_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(CX[1], 90.f)), module, Chance::GLIDE_PARAM));
-		const int rowBcv[7] = {Chance::GRAVITY_CV_INPUT, Chance::DRIFT_CV_INPUT, Chance::BRANCH_CV_INPUT,
+		// Row B (y=90) — one CV input per row-A trimpot, sharing its column label.
+		// (GATE LEN + GLIDE used to sit in cols 0-1; they moved to the context menu
+		// so START/END could have CV like every other sequence control.)
+		const int rowBcv[9] = {Chance::START_CV_INPUT, Chance::END_CV_INPUT,
+			Chance::GRAVITY_CV_INPUT, Chance::DRIFT_CV_INPUT, Chance::BRANCH_CV_INPUT,
 			Chance::RESTS_CV_INPUT, Chance::EVEN_REST_CV_INPUT, Chance::OCT_CV_INPUT, Chance::REPEAT_CV_INPUT};
-		for (int i = 0; i < 7; i++) addInput(createInputCentered<PJ301MPort>(mm2px(Vec(CX[i + 2], 90.f)), module, rowBcv[i]));
+		for (int i = 0; i < 9; i++) addInput(createInputCentered<PJ301MPort>(mm2px(Vec(CX[i], 90.f)), module, rowBcv[i]));
 
 		// Row C (y=106.67) — KEY ROOT trims · RND RST buttons · CV GATE outs (dark inset)
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(CX[1], 106.67f)), module, Chance::KEY_PARAM));
@@ -996,6 +1012,11 @@ struct ChanceWidget : ModuleWidget {
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Pattern cell: click = edit · dbl-click = on/off · boxes = repeats · R = reseed"));
 		menu->addChild(createMenuLabel("Gate row (focused pattern): click = on/off · shift-click = tie"));
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuLabel("Gate length"));
+		menu->addChild(new ChanceParamSlider(m->getParamQuantity(Chance::GATE_PARAM)));
+		menu->addChild(createMenuLabel("Glide"));
+		menu->addChild(new ChanceParamSlider(m->getParamQuantity(Chance::GLIDE_PARAM)));
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createBoolPtrMenuItem("Start each cycle on root", "", &m->startOnRoot));
 		menu->addChild(createBoolPtrMenuItem("Vary shaping each run (rests/holds/octaves/ratchets)", "", &m->perRunVary));
