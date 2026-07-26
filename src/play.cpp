@@ -1,13 +1,18 @@
 #include "plugin.hpp"
 #include "dr_wav.h"        // implementation lives in phase.cpp; headers only here
+#include "dr_flac.h"       // implementation lives in dr_flac.cpp; headers only here
 #include "scales.hpp"      // canonical sfs::SCALES (shared) — for the In-Key grid
 #include <osdialog.h>
 #include <vector>
 #include <string>
 #include <map>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <thread>
 
 // ─── Play — polyphonic multisample (SFZ) player ──────────────────────────────
 // Loads SFZ instruments (e.g. those written by Record, or simple third-party
@@ -34,14 +39,33 @@ struct SfzRegion {
 	float tuneCents = 0.f, volumeDb = 0.f;
 	int   loopMode = 0;              // 0 = one-shot / no loop, 1 = loop
 	long  loopStart = -1, loopEnd = -1;
+	long  offsetFrames = 0;          // SFZ `offset` — playback starts here, not at 0
 	int   seqLength = 1, seqPos = 1; // round-robin
-	// loaded audio
-	std::vector<float> L, R;
-	long  frames = 0; float srcRate = 48000.f; bool loaded = false;
+	int   swLast = -1;               // SFZ `sw_last` (keyswitch articulation), -1 = none
+	// SFZ `amp_veltrack` as 0..1 (negative = inverted). <0 means the file didn't say —
+	// see playVelGain(): we only apply velocity tracking when it's actually stated.
+	float velTrack = -2.f;
+	// Loaded audio, stored as int16 rather than float: these libraries run to
+	// gigabytes (Salamander is 1.8 GB of 24-bit WAV) and float32 doubles that.
+	std::vector<int16_t> L, R;
+	long  frames = 0; float srcRate = 48000.f;
+	bool  loaded = false;            // written last by the loader thread — see startLoader()
 	float volGain = 1.f;
 	// Amp envelope (SFZ ampeg / DecentSampler): attack·decay·release in seconds, sustain 0..1.
 	float egAttack = 0.f, egDecay = 0.f, egSustain = 1.f, egRelease = 0.f;
 };
+
+// Velocity → gain. SFZ's amp_veltrack blends between "velocity does nothing" (0)
+// and a square law, vel²/127² (100); negative values invert the curve. When the
+// instrument doesn't state it we keep Play's historical linear response, because
+// Record bakes velocity into the samples it writes.
+static inline float playVelGain(int vel, float velTrack) {
+	float x = clamp(vel / 127.f, 0.f, 1.f);
+	if (velTrack < -1.f) return x;                    // opcode absent → linear
+	float a = std::fabs(velTrack);
+	if (velTrack < 0.f) x = 1.f - x;
+	return clamp((1.f - a) + a * x * x, 0.f, 1.f);
+}
 
 struct Instrument {
 	std::string name, dir, srcPath;
@@ -52,6 +76,12 @@ struct Instrument {
 static void sfzStripComments(std::string& s) {
 	for (size_t i = 0; i + 1 < s.size(); i++)
 		if (s[i] == '/' && s[i + 1] == '/') { while (i < s.size() && s[i] != '\n') s[i++] = ' '; }
+}
+// SFZ mandates '\' as the sample-path separator (the format grew up on Windows),
+// and plenty of libraries — Salamander among them — write it that way. Nothing
+// else on macOS/Linux treats a backslash as a separator, so translate on load.
+static void sfzFixSeparators(std::string& s) {
+	for (char& c : s) if (c == '\\') c = '/';
 }
 static int sfzKeyNum(const std::string& v) {
 	if (v.empty()) return -1;
@@ -78,6 +108,7 @@ static bool parseSfz(const std::string& path, Instrument& inst) {
 	std::string defaultPath;
 	std::map<std::string, std::string> gGlobal, gGroup, gRegion;
 	bool inRegion = false;
+	int  swDefault = -1;   // file-wide `sw_default` — the keyswitch that's active at load
 
 	auto geti = [](std::map<std::string, std::string>& m, const char* k, int d) {
 		auto it = m.find(k); return it == m.end() ? d : atoi(it->second.c_str()); };
@@ -89,15 +120,29 @@ static bool parseSfz(const std::string& path, Instrument& inst) {
 		std::map<std::string, std::string> m = gGlobal;
 		for (auto& kv : gGroup) m[kv.first] = kv.second;
 		for (auto& kv : gRegion) m[kv.first] = kv.second;
+		if (m.count("sw_default")) swDefault = sfzKeyNum(m["sw_default"]);   // capture before the filters below
+		// Regions Play has no state to drive are dropped rather than mapped as
+		// ordinary notes — otherwise they overlap the sustains and get picked by
+		// the round-robin, so every other note-on plays a release resonance or a
+		// pedal noise instead of the note.
+		std::string trig = m.count("trigger") ? m["trigger"] : "attack";
+		if (trig != "attack") return;                                  // release / first / legato
+		for (auto& kv : m)                                             // CC-gated (pedal noises)
+			if (kv.first.compare(0, 6, "on_loc") == 0 || kv.first.compare(0, 6, "on_hic") == 0) return;
+
 		SfzRegion r;
 		if (m.count("sample")) r.sample = m["sample"];
+		if (m.count("sw_last")) r.swLast = sfzKeyNum(m["sw_last"]);
 		if (m.count("key")) { int k = sfzKeyNum(m["key"]); r.lokey = r.hikey = r.keycenter = k; }
 		if (m.count("lokey")) r.lokey = sfzKeyNum(m["lokey"]);
 		if (m.count("hikey")) r.hikey = sfzKeyNum(m["hikey"]);
 		if (m.count("pitch_keycenter")) r.keycenter = sfzKeyNum(m["pitch_keycenter"]);
 		r.lovel = geti(m, "lovel", 0); r.hivel = geti(m, "hivel", 127);
-		r.tuneCents = getf(m, "tune", 0.f); r.volumeDb = getf(m, "volume", 0.f);
+		r.tuneCents = getf(m, "tune", 0.f);
+		r.volumeDb = getf(m, "volume", 0.f) + getf(m, "global_volume", 0.f);
 		r.volGain = std::pow(10.f, r.volumeDb / 20.f);
+		if (m.count("amp_veltrack")) r.velTrack = clamp(getf(m, "amp_veltrack", 100.f) / 100.f, -1.f, 1.f);
+		r.offsetFrames = std::max(0L, (long)geti(m, "offset", 0));
 		r.egAttack  = getf(m, "ampeg_attack", 0.f);
 		r.egDecay   = getf(m, "ampeg_decay", 0.f);
 		r.egSustain = clamp(getf(m, "ampeg_sustain", 100.f) / 100.f, 0.f, 1.f);
@@ -141,7 +186,18 @@ static bool parseSfz(const std::string& path, Instrument& inst) {
 		}
 	}
 	flush();
-	if (!defaultPath.empty()) for (auto& r : inst.regions) r.sample = defaultPath + r.sample;
+	if (!defaultPath.empty()) {
+		sfzFixSeparators(defaultPath);
+		if (defaultPath.back() != '/') defaultPath += '/';
+		for (auto& r : inst.regions) r.sample = defaultPath + r.sample;
+	}
+	for (auto& r : inst.regions) sfzFixSeparators(r.sample);
+	// Keyswitched libraries stack every articulation on the same keys. With no
+	// keyswitch state to track, keep only the one the file says starts active.
+	if (swDefault >= 0) {
+		inst.regions.erase(std::remove_if(inst.regions.begin(), inst.regions.end(),
+			[&](const SfzRegion& r) { return r.swLast >= 0 && r.swLast != swDefault; }), inst.regions.end());
+	}
 	return !inst.regions.empty();
 }
 
@@ -222,6 +278,8 @@ static bool parseDecentSampler(const std::string& path, Instrument& inst) {
 			return std::string();
 		};
 		std::string sp = pick("path"); if (sp.empty()) continue;
+		{ std::string t = pick("trigger"); if (!t.empty() && t != "attack") continue; }   // as in parseSfz()
+		sfzFixSeparators(sp);
 		SfzRegion r;
 		r.sample = sp;
 		int root = -1;
@@ -271,20 +329,48 @@ static std::string findDspresetIn(const std::string& dir) {
 	return "";
 }
 
+// Decode one region's file to interleaved int16. WAV and FLAC are both common in
+// SFZ libraries (VCSL ships FLAC throughout); we pick by extension and fall back
+// to the other decoder, since a mislabelled extension is easier to hit than a
+// genuinely broken file. Caller frees with std::free().
+static int16_t* playDecodeFile(const std::string& p, unsigned int& ch, unsigned int& sr, uint64_t& frames) {
+	std::string ext = string::lowercase(system::getExtension(p));
+	bool flacFirst = (ext == ".flac");
+	for (int attempt = 0; attempt < 2; attempt++) {
+		bool tryFlac = (attempt == 0) ? flacFirst : !flacFirst;
+		if (tryFlac) {
+			drflac_uint64 n = 0;
+			drflac_int16* d = drflac_open_file_and_read_pcm_frames_s16(p.c_str(), &ch, &sr, &n, NULL);
+			if (d && ch > 0 && n > 0) { frames = n; return (int16_t*)d; }
+			if (d) drflac_free(d, NULL);
+		} else {
+			drwav_uint64 n = 0;
+			drwav_int16* d = drwav_open_file_and_read_pcm_frames_s16(p.c_str(), &ch, &sr, &n, NULL);
+			if (d && ch > 0 && n > 0) { frames = n; return (int16_t*)d; }
+			if (d) drwav_free(d, NULL);
+		}
+	}
+	return nullptr;
+}
+
 static void loadRegionAudio(SfzRegion& r, const std::string& dir) {
 	std::string p = system::join(dir, r.sample);
-	unsigned int ch = 0, sr = 0; drwav_uint64 frames = 0;
-	float* data = drwav_open_file_and_read_pcm_frames_f32(p.c_str(), &ch, &sr, &frames, NULL);
-	if (!data || ch == 0) { if (data) drwav_free(data, NULL); return; }
+	unsigned int ch = 0, sr = 0; uint64_t frames = 0;
+	int16_t* data = playDecodeFile(p, ch, sr, frames);
+	if (!data) return;
 	r.srcRate = (float)sr; r.frames = (long)frames;
 	r.L.resize(frames); r.R.resize(frames);
-	for (drwav_uint64 i = 0; i < frames; i++) {
+	for (uint64_t i = 0; i < frames; i++) {
 		r.L[i] = data[i * ch];
 		r.R[i] = (ch > 1) ? data[i * ch + 1] : data[i * ch];
 	}
-	drwav_free(data, NULL);
+	std::free(data);
 	if (r.loopEnd <= 0 || r.loopEnd > r.frames) r.loopEnd = r.frames;
 	if (r.loopStart < 0) r.loopStart = 0;
+	if (r.offsetFrames >= r.frames) r.offsetFrames = 0;
+	// Publish the audio before the flag: the engine thread reads `loaded` first
+	// and only then touches L/R, so this pairs with the acquire in process().
+	std::atomic_thread_fence(std::memory_order_release);
 	r.loaded = true;
 }
 
@@ -347,8 +433,43 @@ struct Play : Module {
 	// (falls back to Off's shape if the region defines none); Default = one fixed smooth ADSR.
 	enum EnvMode { ENV_OFF, ENV_SFZ, ENV_DEFAULT };
 	int envMode = ENV_OFF;
-	bool suspended = false;                 // true while (re)loading on the GUI thread
+	bool suspended = false;                 // true while the instrument list is being restructured
 	bool gateWas[PLAY_MAX_VOICES] = {};
+
+	// Sample decoding runs on its own thread — a full piano library is gigabytes,
+	// and doing that inline would freeze Rack's UI for the duration. Regions are
+	// silent until their `loaded` flag flips, so the instrument fades in as it
+	// decodes. Every structural change to `instruments` joins the loader first,
+	// which is what keeps the captured Instrument& valid.
+	std::thread loader;
+	std::atomic<bool> loaderRun{false}, loaderCancel{false};
+	std::atomic<int>  loadDone{0}, loadTotal{0};
+
+	~Play() { joinLoader(); }
+
+	void joinLoader() {
+		if (loader.joinable()) { loaderCancel = true; loader.join(); }
+		loaderCancel = false; loaderRun = false;
+	}
+
+	void startLoader(int idx) {
+		loadDone = 0;
+		loadTotal = (int)instruments[idx].regions.size();
+		loaderRun = true;
+		loader = std::thread([this, idx]() {
+			Instrument& in = instruments[idx];
+			int failed = 0;
+			for (auto& r : in.regions) {
+				if (loaderCancel) break;
+				loadRegionAudio(r, in.dir);
+				if (!r.loaded && ++failed <= 8)
+					WARN("Play: could not load sample \"%s\"", system::join(in.dir, r.sample).c_str());
+				loadDone++;
+			}
+			if (failed) WARN("Play: %d/%d samples failed to load in \"%s\"", failed, (int)in.regions.size(), in.name.c_str());
+			loaderRun = false;
+		});
+	}
 
 	// Keyboard surface view (tab-switched on the display) + Push grid config
 	int kbView = 1;        // 0 = piano, 1 = grid (grid is the default)
@@ -396,6 +517,7 @@ struct Play : Module {
 			if (r.loaded && note >= r.lokey && note <= r.hikey && vel >= r.lovel && vel <= r.hivel) matches.push_back(i);
 		}
 		if (matches.empty()) return;
+		std::atomic_thread_fence(std::memory_order_acquire);   // pairs with loadRegionAudio()'s release
 		std::sort(matches.begin(), matches.end(), [&](int a, int b) { return regs[a].seqPos < regs[b].seqPos; });
 		int regIdx = matches[(matches.size() > 1) ? (rrCounter++ % (int)matches.size()) : 0];
 		SfzRegion* r = &regs[regIdx];
@@ -404,7 +526,8 @@ struct Play : Module {
 		if (slot < 0) { double best = -1; for (int i = 0; i < PLAY_MAX_VOICES; i++) if (voices[i].pos > best) { best = voices[i].pos; slot = i; } }
 		Voice& v = voices[slot];
 		v.active = true; v.held = true; v.chan = chan; v.instr = curInstrument; v.reg = regIdx; v.note = note;
-		v.pos = 0; v.amp = clamp(vel / 127.f, 0.f, 1.f); v.envStage = 0;   // attack from wherever env is (smooth on steal)
+		v.pos = (double)r->offsetFrames; v.amp = playVelGain(vel, r->velTrack);
+		v.envStage = 0;                                                   // attack from wherever env is (smooth on steal)
 		v.ratio = std::pow(2.0, (note - r->keycenter) / 12.0 + r->tuneCents / 1200.0) * (r->srcRate / APP->engine->getSampleRate());
 		resolveEnv(v, *r, (float)APP->engine->getSampleRate());
 	}
@@ -466,9 +589,10 @@ struct Play : Module {
 			SfzRegion& r = in.regions[v.reg];
 			long i0 = (long)v.pos;
 			if (i0 < 0 || i0 >= r.frames - 1) { v.active = false; continue; }
-			double f = v.pos - i0;
-			float sl = r.L[i0] * (1 - f) + r.L[i0 + 1] * f;
-			float sr = r.R[i0] * (1 - f) + r.R[i0 + 1] * f;
+			float f = (float)(v.pos - i0);
+			const float S16 = 1.f / 32768.f;
+			float sl = (r.L[i0] * (1.f - f) + r.L[i0 + 1] * f) * S16;
+			float sr = (r.R[i0] * (1.f - f) + r.R[i0 + 1] * f) * S16;
 			// Per-voice ADSR (coefficients resolved at note-on). Gate-off starts the
 			// release; one-shot mode ignores gate-off and plays the sample through.
 			if (!v.held && !oneShot && v.envStage < 3) v.envStage = 3;
@@ -509,8 +633,9 @@ struct Play : Module {
 			snprintf(dispName, sizeof(dispName), "%d/%d %s", curInstrument + 1, (int)instruments.size(), in.name.c_str());
 			int loaded = 0, tot = (int)in.regions.size();
 			for (auto& r : in.regions) if (r.loaded) loaded++;
-			if (loaded < tot) snprintf(dispInfo, sizeof(dispInfo), "%d/%d loaded", loaded, tot);
-			else snprintf(dispInfo, sizeof(dispInfo), "%d regions", tot);
+			if (loaderRun.load())          snprintf(dispInfo, sizeof(dispInfo), "loading %d/%d…", loadDone.load(), loadTotal.load());
+			else if (loaded < tot)         snprintf(dispInfo, sizeof(dispInfo), "%d/%d loaded", loaded, tot);
+			else                           snprintf(dispInfo, sizeof(dispInfo), "%d regions", tot);
 		} else { snprintf(dispName, sizeof(dispName), "no instrument"); snprintf(dispInfo, sizeof(dispInfo), "load .sfz"); }
 		int cnt = 0;
 		for (auto& v : voices) if (v.active) { cnt++; if (v.note >= 0 && v.note < 128) dispPlaying[v.note] = 1; }
@@ -518,6 +643,7 @@ struct Play : Module {
 	}
 
 	void loadInstrument(const std::string& path) {
+		joinLoader();                         // no structural change while the loader holds a reference
 		suspended = true;
 		for (auto& v : voices) v.active = false;
 		Instrument in;
@@ -533,19 +659,18 @@ struct Play : Module {
 		if (ok) {
 			in.srcPath = path;                    // persist what the user picked (bundle or file)
 			if (bundle) in.name = system::getStem(path);
-			int failed = 0;
-			for (auto& r : in.regions) {
-				loadRegionAudio(r, in.dir);
-				if (!r.loaded) { failed++; WARN("Play: could not load sample \"%s\"", system::join(in.dir, r.sample).c_str()); }
-			}
-			if (failed) WARN("Play: %d/%d samples failed to load in \"%s\"", failed, (int)in.regions.size(), in.name.c_str());
 			instruments.push_back(std::move(in));
-		} else WARN("Play: failed to parse \"%s\"", path.c_str());
-		suspended = false;
+			suspended = false;                    // regions are still unloaded, so still silent
+			startLoader((int)instruments.size() - 1);
+		} else {
+			WARN("Play: failed to parse \"%s\"", path.c_str());
+			suspended = false;
+		}
 		refreshDisplay();
 	}
 	void removeInstrument(int idx) {
 		if (idx < 0 || idx >= (int)instruments.size()) return;
+		joinLoader();
 		suspended = true;
 		for (auto& v : voices) v.active = false;
 		instruments.erase(instruments.begin() + idx);
@@ -577,6 +702,7 @@ struct Play : Module {
 		if (json_t* j = json_object_get(root, "gridBase")) gridBase = clamp((int)json_integer_value(j), 0, 115);
 		json_t* arr = json_object_get(root, "sfzPaths");
 		if (!arr) return;
+		joinLoader();
 		instruments.clear();
 		size_t n = json_array_size(arr);
 		for (size_t i = 0; i < n; i++) { json_t* p = json_array_get(arr, i); if (p) loadInstrument(json_string_value(p)); }
