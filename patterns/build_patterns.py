@@ -8,7 +8,8 @@ Authoring convention matches fill.cpp's fillRow(): velocity strings with
 Ruler for 16-step 4/4 grids:   1e&a2e&a3e&a4e&a
 Ruler for 12-step 12/8 grids:  1..2..3..4..  (3 steps per pulse)
 """
-import json, sys
+import json
+import os, sys
 
 LANES = ["kick", "snare", "chh", "ohh", "lo", "hi", "cp", "bell"]
 
@@ -83,6 +84,10 @@ def std_roles(prefix):
             "lift": f"{prefix}.lift", "fill": [f"{prefix}.fill"]}
 
 
+MAIN_ARR = [{"role": "main", "bars": 8, "fillEvery": 4}]
+MAIN_LIFT_ARR = [{"role": "main", "bars": 8, "fillEvery": 4},
+                 {"role": "lift", "bars": 8, "fillEvery": 4},
+                 {"role": "main", "bars": 8}]
 STD_ARR = [
     {"role": "sparse", "bars": 4},
     {"role": "main", "bars": 8, "fillEvery": 4},
@@ -313,11 +318,13 @@ P("hiphop.boombap.sparse", "Boom bap — sparse", "hiphop", ["boombap"], {
     "chh":   {"v": "6...6...6...6..."},
 }, swing=0.35, bpm=(84, 96))
 P("hiphop.boombap.main", "Boom bap — main", "hiphop", ["boombap"], {
-    "kick":  {"v": "9......6..9....."},
-    "snare": {"v": "....9.......9...", "a": "....A.......A..."},
-    "chh":   {"v": "7.5.7.5.7.5.7.5."},
+    "kick":  {"v": "9..3..6...9..3..", "a": "A.....A........."},
+    "snare": {"v": "....9...3...9..3", "a": "....A.......A..."},
+    "chh":   {"v": "7.5.7.4.7.5.7.4."},
     "ohh":   {"v": "..............6."},
-}, swing=0.35, bpm=(84, 96))
+}, swing=0.40, bpm=(84, 96),
+   notes="Ghost kick on the 16th before a main hit gives the 'ba-boom'; "
+         "ghost snares at 3/9 velocity between the backbeats.")
 P("hiphop.boombap.lift", "Boom bap — lift", "hiphop", ["boombap"], {
     "kick":  {"v": "9......6..9..6.."},
     "snare": {"v": "....9.......9..3", "a": "....A.......A..."},
@@ -1463,6 +1470,292 @@ def _gridkey(p):
 _pat_by_id = {p["id"]: p for p in patterns}
 _set_mains = {_gridkey(_pat_by_id[s["roles"]["main"]]) for s in sets
               if isinstance(s["roles"].get("main"), str) and s["roles"]["main"] in _pat_by_id}
+# ═══════════════════════════ HIP-HOP ═══════════════════════════
+# Each sub-genre gets the grid it actually needs: boom bap and lo-fi on swung
+# 16ths, drill on 16ths with `r` rolls, crunk on 24ths because its rolls are
+# triplet-subdivided (12ths and 24ths, not 32nds).
+
+P("hiphop.lofi.main", "Lo-fi \u2014 main", "hiphop", ["lofi", "chillhop"], {
+    "kick":  {"v": "7......6..6....."},
+    "snare": {"v": "....7...2...7..2"},
+    "chh":   {"v": "5.4.5.3.5.4.5.3."},
+}, swing=0.50, bpm=(70, 90), notes="Restraint is the style \u2014 often no fill for eight bars.")
+P("hiphop.lofi.fill", "Lo-fi \u2014 fill", "hiphop", ["lofi", "fill"], {
+    "kick":  {"v": "7......6........"},
+    "snare": {"v": "....7...2.3.7.32"},
+    "chh":   {"v": "5.4.5.3.5.4....."},
+}, swing=0.50, bpm=(70, 90))
+S("hiphop.lofi", "Lo-fi / chillhop", "hiphop", 80,
+  {"main": "hiphop.lofi.main", "fill": ["hiphop.lofi.fill"]},
+  [{"role": "main", "bars": 16, "fillEvery": 8}], vary=0.40)
+
+P("hiphop.ukdrill.main", "UK drill \u2014 main", "hiphop", ["drill", "uk"], {
+    "kick":  {"v": "9....8..7...8...", "a": "A..............."},
+    "snare": {"v": "........9.......", "a": "........A......."},
+    "chh":   {"v": "6..5..5.6..5..5.", "r": "..............3."},
+}, swing=0.10, bpm=(138, 145), notes="Hats on the 3+3+2 tresillo inherited from grime.")
+P("hiphop.ukdrill.lift", "UK drill \u2014 snare on 4", "hiphop", ["drill", "uk"], {
+    "kick":  {"v": "9....8..7...8...", "a": "A..............."},
+    "snare": {"v": "............9...", "a": "............A..."},
+    "chh":   {"v": "6..5..5.6..5..5.", "r": "......4.......4."},
+}, swing=0.10, bpm=(138, 145),
+   notes="The snare slides from beat 3 to beat 4 on alternate bars \u2014 a UK marker.")
+P("hiphop.ukdrill.fill", "UK drill \u2014 fill", "hiphop", ["drill", "fill"], {
+    "kick":  {"v": "9...............", "a": "A..............."},
+    "snare": {"v": "........9......8", "a": "........A......."},
+    "chh":   {"v": "6..5..5.6.5.5.65", "r": "..........4.4.56"},
+}, swing=0.10, bpm=(138, 145))
+S("hiphop.ukdrill", "UK drill", "hiphop", 142,
+  {"main": "hiphop.ukdrill.main", "lift": "hiphop.ukdrill.lift",
+   "fill": ["hiphop.ukdrill.fill"]}, MAIN_LIFT_ARR, vary=0.40)
+
+P("hiphop.chidrill.main", "Chicago drill \u2014 main", "hiphop", ["drill", "chicago"], {
+    "kick":  {"v": "9.......8...6...", "a": "A..............."},
+    "snare": {"v": "........9.......", "a": "........A......."},
+    "chh":   {"v": "6.5.6.5.6.5.6.5.", "r": "..............3."},
+    "bell":  {"v": "9..............."},
+}, swing=0.05, bpm=(130, 145), notes="Crash is structural punctuation, not decoration.")
+P("hiphop.chidrill.fill", "Chicago drill \u2014 fill", "hiphop", ["drill", "fill"], {
+    "kick":  {"v": "9...............", "a": "A..............."},
+    "snare": {"v": "........9...9.99", "a": "........A......."},
+    "chh":   {"v": "6.5.6.5.6......."},
+    "bell":  {"v": "9..............."},
+}, swing=0.05, bpm=(130, 145))
+S("hiphop.chidrill", "Chicago drill", "hiphop", 138,
+  {"main": "hiphop.chidrill.main", "fill": ["hiphop.chidrill.fill"]}, MAIN_ARR, vary=0.35)
+
+P("hiphop.gfunk.main", "G-funk \u2014 main", "hiphop", ["westcoast", "gfunk"], {
+    "kick":  {"v": "8....3..7..3...."},
+    "cp":    {"v": "....9.......9..."},
+    "chh":   {"v": "5.4.5.4.5.4.5.4."},
+    "ohh":   {"v": "....6.......6..."},
+    "hi":    {"v": "..4...4...4...4."},
+}, swing=0.45, bpm=(90, 105), notes="Tambourine rushes; open hats double the clap.")
+P("hiphop.gfunk.fill", "G-funk \u2014 fill", "hiphop", ["gfunk", "fill"], {
+    "kick":  {"v": "8....3.........."},
+    "cp":    {"v": "....9.......9.99"},
+    "chh":   {"v": "5.4.5.4.5......."},
+    "hi":    {"v": "..4...4...4.4.44"},
+}, swing=0.45, bpm=(90, 105))
+S("hiphop.gfunk", "West Coast / G-funk", "hiphop", 96,
+  {"main": "hiphop.gfunk.main", "fill": ["hiphop.gfunk.fill"]}, MAIN_ARR, vary=0.45)
+
+# crunk: 24 steps per bar, because its rolls are 12ths and 24ths
+P("hiphop.crunk.main", "Crunk \u2014 main", "hiphop", ["crunk", "southern"], {
+    "kick":  {"v": "9...........8.....9.....", "a": "A......................."},
+    "cp":    {"v": "......9...........9.....", "a": "......A...........A....."},
+    "chh":   {"v": "5.....5.....5.....5....."},
+}, beats=4, spb=6, bpm=(135, 160), notes="Bare on purpose, so the triplet rolls detonate.")
+P("hiphop.crunk.fill", "Crunk \u2014 triplet roll", "hiphop", ["crunk", "fill"], {
+    "kick":  {"v": "9......................."},
+    "snare": {"v": "......7.7.7.8.8.8.9.9.99", "a": "....................A..A"},
+    "chh":   {"v": "5.....5................."},
+}, beats=4, spb=6, bpm=(135, 160))
+S("hiphop.crunk", "Southern / crunk", "hiphop", 145,
+  {"main": "hiphop.crunk.main", "fill": ["hiphop.crunk.fill"]}, MAIN_ARR, vary=0.30)
+
+# ═══════════════════════════ ELECTRONIC ═══════════════════════════
+# House/techno keep the kick on every beat and put the identity in the offbeat
+# open hat. Electro and 2-step deliberately break that pulse. Footwork gets 32nds
+# because its kick is a rhythmic voice, not a pulse.
+
+P("electronic.house.main", "House \u2014 main", "electronic", ["house", "4x4"], {
+    "kick":  {"v": "9...9...9...9...", "a": "A...A...A...A..."},
+    "cp":    {"v": "....9.......9..."},
+    "chh":   {"v": "5.4.5.4.5.4.5.4."},
+    "ohh":   {"v": "..7...7...7...7."},
+}, swing=0.15, bpm=(118, 128),
+   notes="Open hat on every 8th offbeat is the single most identifying element.")
+P("electronic.house.lift", "House \u2014 lift", "electronic", ["house"], {
+    "kick":  {"v": "9...9...9...9...", "a": "A...A...A...A..."},
+    "cp":    {"v": "....9.......9..."},
+    "chh":   {"v": "5454545454545454"},
+    "ohh":   {"v": "..7...7...7...7."},
+    "hi":    {"v": "..3...3...3...3."},
+}, swing=0.15, bpm=(118, 128))
+P("electronic.house.fill", "House \u2014 clap build", "electronic", ["house", "fill"], {
+    "kick":  {"v": "9...9...9...9...", "a": "A...A...A...A..."},
+    "cp":    {"v": "....9.......5679", "a": "...............A"},
+    "chh":   {"v": "5.4.5.4.5......."},
+}, swing=0.15, bpm=(118, 128),
+   notes="The kick survives the fill \u2014 muting it reads as a mistake.")
+S("electronic.house", "House", "electronic", 124,
+  {"main": "electronic.house.main", "lift": "electronic.house.lift",
+   "fill": ["electronic.house.fill"]}, MAIN_LIFT_ARR, vary=0.20)
+
+P("electronic.deephouse.main", "Deep house \u2014 main", "electronic", ["deephouse"], {
+    "kick":  {"v": "8...8...8...8...", "a": "A...A...A...A..."},
+    "cp":    {"v": "....7.......7..."},
+    "chh":   {"v": "4...4...4...4..."},
+    "ohh":   {"v": "..6...6...6...6."},
+    "lo":    {"v": "...3....3...3..3"},
+}, swing=0.45, bpm=(118, 125), notes="Shuffled and warm; the perc layer is organic.")
+S("electronic.deephouse", "Deep house", "electronic", 122,
+  {"main": "electronic.deephouse.main"}, MAIN_ARR, vary=0.35)
+
+P("electronic.techhouse.main", "Tech house \u2014 main", "electronic", ["techhouse"], {
+    "kick":  {"v": "9...9...9...9...", "a": "A...A...A...A..."},
+    "cp":    {"v": "....9.......9..."},
+    "chh":   {"v": "5454545454545454"},
+    "ohh":   {"v": "..7...7...7...7."},
+    "hi":    {"v": "..4.3...4.3.4..3"},
+}, swing=0.30, bpm=(124, 130), notes="Mechanical, with a busy percussion top-line.")
+S("electronic.techhouse", "Tech house", "electronic", 127,
+  {"main": "electronic.techhouse.main"}, MAIN_ARR, vary=0.40)
+
+P("electronic.techno.main", "Techno \u2014 main", "electronic", ["techno"], {
+    "kick":  {"v": "9...9...9...9...", "a": "A...A...A...A..."},
+    "chh":   {"v": "5.5.5.5.5.5.5.5."},
+    "ohh":   {"v": "..6...6...6...6."},
+    "hi":    {"v": "......4.......4."},
+}, swing=0.05, bpm=(130, 145),
+   notes="Tension comes from timbre and silence, not fills \u2014 the 'fill' is a kick drop.")
+P("electronic.techno.fill", "Techno \u2014 kick drop", "electronic", ["techno", "fill"], {
+    "chh":   {"v": "5.5.5.5.5.5.5.5."},
+    "ohh":   {"v": "..6...6...6...6."},
+}, swing=0.05, bpm=(130, 145))
+S("electronic.techno", "Techno", "electronic", 138,
+  {"main": "electronic.techno.main", "fill": ["electronic.techno.fill"]},
+  MAIN_ARR, vary=0.18)
+
+P("electronic.dubtechno.main", "Dub techno \u2014 main", "electronic", ["dubtechno"], {
+    "kick":  {"v": "8...8...8...8..."},
+    "chh":   {"v": "..4...4...4...4."},
+    "lo":    {"v": "......5........."},
+}, swing=0.05, bpm=(118, 128),
+   notes="The fewest notes of any 4/4 style; movement comes from delay, not groove.")
+S("electronic.dubtechno", "Dub techno", "electronic", 122,
+  {"main": "electronic.dubtechno.main"},
+  [{"role": "main", "bars": 16}], vary=0.20)
+
+P("electronic.minimal.main", "Minimal \u2014 main", "electronic", ["minimal"], {
+    "kick":  {"v": "9...9...9...9..."},
+    "cp":    {"v": "............7..."},
+    "hi":    {"v": ".2.2.3.2.2.3.2.2"},
+    "lo":    {"v": "..2....2..2....2"},
+}, swing=0.25, bpm=(125, 132),
+   notes="Almost everything audible is a ghost note, 20dB under the kick.")
+S("electronic.minimal", "Minimal techno", "electronic", 128,
+  {"main": "electronic.minimal.main"}, MAIN_ARR, vary=0.35)
+
+P("electronic.electro.main", "Electro \u2014 main", "electronic", ["electro", "808"], {
+    "kick":  {"v": "9......8..9.....", "a": "A..............."},
+    "snare": {"v": "....9.......9...", "a": "....A.......A..."},
+    "cp":    {"v": "....7.......7..."},
+    "chh":   {"v": "5.5.5.5.5.5.5.55"},
+}, swing=0.0, bpm=(118, 135),
+   notes="Syncopated kick against a rigid backbeat \u2014 not four-on-the-floor.")
+P("electronic.electro.fill", "Electro \u2014 808 toms", "electronic", ["electro", "fill"], {
+    "kick":  {"v": "9......8........"},
+    "snare": {"v": "....9..........."},
+    "lo":    {"v": "........7.6.5.4."},
+    "hi":    {"v": ".........7.6.5.4"[:16]},
+}, swing=0.0, bpm=(118, 135), notes="Tom cascades are idiomatic here, unlike most electronic styles.")
+S("electronic.electro", "Electro", "electronic", 128,
+  {"main": "electronic.electro.main", "fill": ["electronic.electro.fill"]},
+  MAIN_ARR, vary=0.40)
+
+P("electronic.nudisco.main", "Nu-disco \u2014 main", "electronic", ["nudisco"], {
+    "kick":  {"v": "9...8...9...8...", "a": "A.......A......."},
+    "snare": {"v": "....9.......9...", "a": "....A.......A..."},
+    "chh":   {"v": "5454545454545454"},
+    "ohh":   {"v": "..7...7...7...7."},
+    "hi":    {"v": "4...4...4...4..."},
+}, swing=0.35, bpm=(105, 125), notes="House with a live drummer's vocabulary bolted on.")
+P("electronic.nudisco.fill", "Nu-disco \u2014 tom cascade", "electronic", ["nudisco", "fill"], {
+    "kick":  {"v": "9...8...9......."},
+    "snare": {"v": "....9..........."},
+    "hi":    {"v": "........8.7.6..."},
+    "lo":    {"v": "...........7.6.5"},
+}, swing=0.35, bpm=(105, 125),
+   notes="The descending disco tom fill \u2014 correct here, wrong almost everywhere else.")
+S("electronic.nudisco", "Nu-disco", "electronic", 115,
+  {"main": "electronic.nudisco.main", "fill": ["electronic.nudisco.fill"]},
+  MAIN_ARR, vary=0.45)
+
+P("electronic.breakbeat.main", "Breakbeat \u2014 main", "electronic", ["breakbeat", "bigbeat"], {
+    "kick":  {"v": "9..8..7...9....."},
+    "snare": {"v": "...39..29..39..3", "a": "....A.......A..."},
+    "chh":   {"v": "5.4.5.4.5.4.5.4."},
+    "ohh":   {"v": "......6.......6."},
+}, swing=0.30, bpm=(125, 140), notes="Ghost snares inherited from the sampled funk break.")
+S("electronic.breakbeat", "Breakbeat / big beat", "electronic", 132,
+  {"main": "electronic.breakbeat.main"}, MAIN_ARR, vary=0.55)
+
+P("electronic.jungle.main", "Jungle \u2014 main", "electronic", ["jungle", "amen"], {
+    "kick":  {"v": "9.....7...8....."},
+    "snare": {"v": "...39..3.2.39..2", "a": "....A.......A..."},
+    "chh":   {"v": "5.4.5.4.5.4.5.4."},
+    "ohh":   {"v": ".....6.........."},
+}, swing=0.35, bpm=(155, 175),
+   notes="Ghost snares outnumber accented ones; no two bars identical.")
+P("electronic.jungle.fill", "Jungle \u2014 snare rush", "electronic", ["jungle", "fill"], {
+    "kick":  {"v": "9..............."},
+    "snare": {"v": "...39..3.2.37777", "a": "...............A", "r": "..............34"},
+    "chh":   {"v": "5.4.5.4.5......."},
+}, swing=0.35, bpm=(155, 175))
+S("electronic.jungle", "Jungle", "electronic", 168,
+  {"main": "electronic.jungle.main", "fill": ["electronic.jungle.fill"]},
+  MAIN_ARR, vary=0.70)
+
+P("electronic.dnb.main", "Drum & bass \u2014 two-step", "electronic", ["dnb", "twostep"], {
+    "kick":  {"v": "9.........8....."},
+    "snare": {"v": "...39......39...", "a": "....A.......A..."},
+    "chh":   {"v": "5.4.5.4.5.4.5.4."},
+}, swing=0.15, bpm=(170, 176),
+   notes="Ghost snare on the 16th before each backbeat is what makes it roll.")
+P("electronic.dnb.fill", "Drum & bass \u2014 roll", "electronic", ["dnb", "fill"], {
+    "kick":  {"v": "9..............."},
+    "snare": {"v": "...39......39.77", "a": "....A.......A..."},
+    "chh":   {"v": "5.4.5.4.5.4.5.55", "r": "..............34"},
+}, swing=0.15, bpm=(170, 176))
+S("electronic.dnb", "Drum & bass", "electronic", 174,
+  {"main": "electronic.dnb.main", "fill": ["electronic.dnb.fill"]}, MAIN_ARR, vary=0.70)
+
+P("electronic.garage.main", "UK garage \u2014 2-step", "electronic", ["garage", "2step"], {
+    "kick":  {"v": "9.........8....."},
+    "snare": {"v": "....9.......9..."},
+    "chh":   {"v": "5.45.4.55.4.5.4."},
+    "cp":    {"v": "......3....3...3"},
+}, swing=0.65, bpm=(130, 138),
+   notes="The missing kicks on beats 2 and 3 are the identity; heavy shuffle.")
+S("electronic.garage", "UK garage / 2-step", "electronic", 134,
+  {"main": "electronic.garage.main"}, MAIN_ARR, vary=0.50)
+
+# footwork: 32 steps per bar \u2014 the kick is a voice, not a pulse
+P("electronic.footwork.main", "Footwork \u2014 main", "electronic", ["footwork", "juke"], {
+    "kick":  {"v": "9.......8.......9.....8.......8.",
+              "a": "A..............................."},
+    "cp":    {"v": "......7.....7.....7.....7.....7."},
+    "chh":   {"v": "4...4...4...4...4...4...4...4..."},
+}, beats=4, spb=8, bpm=(155, 165),
+   notes="Claps grouped in threes against 4/4; kick bursts ratchet, not the hat.")
+P("electronic.footwork.fill", "Footwork \u2014 kick burst", "electronic", ["footwork", "fill"], {
+    "kick":  {"v": "9.......8.......999999999999999.",
+              "r": "..............................3."},
+    "cp":    {"v": "......7.....7..................."},
+}, beats=4, spb=8, bpm=(155, 165))
+S("electronic.footwork", "Footwork / juke", "electronic", 160,
+  {"main": "electronic.footwork.main", "fill": ["electronic.footwork.fill"]},
+  MAIN_ARR, vary=0.60)
+
+P("electronic.dubstep.main", "Dubstep \u2014 halftime", "electronic", ["dubstep", "halftime"], {
+    "kick":  {"v": "9......7........", "a": "A..............."},
+    "snare": {"v": "........9.......", "a": "........A......."},
+    "chh":   {"v": "..5..5....5..5.5"},
+}, swing=0.30, bpm=(138, 142),
+   notes="Enormous space; the hats pause on beat 3 to clear room for the snare.")
+S("electronic.dubstep", "Dubstep / halftime", "electronic", 140,
+  {"main": "electronic.dubstep.main"}, MAIN_ARR, vary=0.40)
+
+P("electronic.triphop.main", "Trip-hop \u2014 main", "electronic", ["triphop", "downtempo"], {
+    "kick":  {"v": "8......6..7....."},
+    "snare": {"v": "....8...2...8..2"},
+    "chh":   {"v": "4.3.4.3.4.3.4.3."},
+}, swing=0.35, bpm=(70, 100), notes="A slowed, degraded funk break \u2014 the rhythm is found, not programmed.")
+S("electronic.triphop", "Trip-hop", "electronic", 88,
+  {"main": "electronic.triphop.main"}, MAIN_ARR, vary=0.50)
+
 for _p in [p for p in patterns if p.get("kind") == "timeline"]:
     if _gridkey(_p) in _set_mains:
         continue                     # a groove set already plays this exact grid
@@ -1495,7 +1788,10 @@ for s in sets:
     for ref in refs:
         assert ref in ids, f"set {s['id']}: unresolved ref {ref}"
 
-out = sys.argv[1] if len(sys.argv) > 1 else "drum-patterns-v2.json"
+# Resolve relative to this file, not the shell's cwd: running it from the repo
+# root silently wrote the library to the top level and left patterns/ stale.
+out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "drum-patterns-v2.json")
 with open(out, "w") as f:
     json.dump(lib, f, indent=1, ensure_ascii=False)
 print(f"{len(patterns)} patterns, {len(sets)} sets -> {out}")

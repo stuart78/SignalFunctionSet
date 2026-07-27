@@ -41,7 +41,12 @@ GENRE_VARY = {"afrocuban": 0.3, "ballad": 0.3, "blues": 0.4, "boogie": 0.4, "bos
 # style lives in exactly one browser bank (set names keep the genre identity).
 FAMILY_FOLD = {"afrocuban": "latin", "bossa": "latin", "samba": "latin",
                "chacha": "latin", "tango": "latin", "pasodoble": "europe",
-               "reggae": "caribbean", "ska": "caribbean"}
+               "reggae": "caribbean", "ska": "caribbean",
+               # "Slow" is a tempo, not a genre: these are 12/8 slow-rock and
+               # doo-wop ballads, so they belong with the other ballads.
+               "slow": "ballad",
+               # "Endings" is a song position -- one-shot cadences, not loops.
+               "endings": "cadence"}
 # Families shown on the Region tab; everything else is a Genre bank.
 REGION_FAMILIES = {"latin", "caribbean", "africa", "mena", "europe", "asia",
                    "oceania", "usa", "indian"}
@@ -226,7 +231,9 @@ def main():
 
     def title(g):
         names = {"afrocuban": "Afro-Cuban", "rnb": "R&B", "chacha": "Cha-cha",
-                 "pasodoble": "Paso doble"}
+                 "pasodoble": "Paso doble", "slow": "Slow rock (12/8)",
+                 "endings": "Ending", "twist": "Twist (early-60s)",
+                 "charleston": "Charleston (20s)", "boogie": "Boogie-woogie"}
         return names.get(g, g.capitalize())
 
     # triples -> full sets

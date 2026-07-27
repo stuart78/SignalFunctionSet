@@ -1146,7 +1146,7 @@
    "beats": 4,
    "stepsPerBeat": 4,
    "bars": 1,
-   "swing": 0.35,
+   "swing": 0.4,
    "bpm": [
     84,
     96
@@ -1154,19 +1154,21 @@
    "kind": "groove",
    "grid": {
     "kick": {
-     "v": "9......6..9....."
+     "v": "9..3..6...9..3..",
+     "a": "A.....A........."
     },
     "snare": {
-     "v": "....9.......9...",
+     "v": "....9...3...9..3",
      "a": "....A.......A..."
     },
     "chh": {
-     "v": "7.5.7.5.7.5.7.5."
+     "v": "7.5.7.4.7.5.7.4."
     },
     "ohh": {
      "v": "..............6."
     }
-   }
+   },
+   "notes": "Ghost kick on the 16th before a main hit gives the 'ba-boom'; ghost snares at 3/9 velocity between the backbeats."
   },
   {
    "id": "hiphop.boombap.lift",
@@ -6933,6 +6935,1142 @@
     }
    },
    "notes": "Unison run — the interlock collapses into one line into the gong."
+  },
+  {
+   "id": "hiphop.lofi.main",
+   "name": "Lo-fi — main",
+   "family": "hiphop",
+   "tags": [
+    "lofi",
+    "chillhop"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.5,
+   "bpm": [
+    70,
+    90
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "7......6..6....."
+    },
+    "snare": {
+     "v": "....7...2...7..2"
+    },
+    "chh": {
+     "v": "5.4.5.3.5.4.5.3."
+    }
+   },
+   "notes": "Restraint is the style — often no fill for eight bars."
+  },
+  {
+   "id": "hiphop.lofi.fill",
+   "name": "Lo-fi — fill",
+   "family": "hiphop",
+   "tags": [
+    "lofi",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.5,
+   "bpm": [
+    70,
+    90
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "7......6........"
+    },
+    "snare": {
+     "v": "....7...2.3.7.32"
+    },
+    "chh": {
+     "v": "5.4.5.3.5.4....."
+    }
+   }
+  },
+  {
+   "id": "hiphop.ukdrill.main",
+   "name": "UK drill — main",
+   "family": "hiphop",
+   "tags": [
+    "drill",
+    "uk"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.1,
+   "bpm": [
+    138,
+    145
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9....8..7...8...",
+     "a": "A..............."
+    },
+    "snare": {
+     "v": "........9.......",
+     "a": "........A......."
+    },
+    "chh": {
+     "v": "6..5..5.6..5..5.",
+     "r": "..............3."
+    }
+   },
+   "notes": "Hats on the 3+3+2 tresillo inherited from grime."
+  },
+  {
+   "id": "hiphop.ukdrill.lift",
+   "name": "UK drill — snare on 4",
+   "family": "hiphop",
+   "tags": [
+    "drill",
+    "uk"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.1,
+   "bpm": [
+    138,
+    145
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9....8..7...8...",
+     "a": "A..............."
+    },
+    "snare": {
+     "v": "............9...",
+     "a": "............A..."
+    },
+    "chh": {
+     "v": "6..5..5.6..5..5.",
+     "r": "......4.......4."
+    }
+   },
+   "notes": "The snare slides from beat 3 to beat 4 on alternate bars — a UK marker."
+  },
+  {
+   "id": "hiphop.ukdrill.fill",
+   "name": "UK drill — fill",
+   "family": "hiphop",
+   "tags": [
+    "drill",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.1,
+   "bpm": [
+    138,
+    145
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9...............",
+     "a": "A..............."
+    },
+    "snare": {
+     "v": "........9......8",
+     "a": "........A......."
+    },
+    "chh": {
+     "v": "6..5..5.6.5.5.65",
+     "r": "..........4.4.56"
+    }
+   }
+  },
+  {
+   "id": "hiphop.chidrill.main",
+   "name": "Chicago drill — main",
+   "family": "hiphop",
+   "tags": [
+    "drill",
+    "chicago"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.05,
+   "bpm": [
+    130,
+    145
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9.......8...6...",
+     "a": "A..............."
+    },
+    "snare": {
+     "v": "........9.......",
+     "a": "........A......."
+    },
+    "chh": {
+     "v": "6.5.6.5.6.5.6.5.",
+     "r": "..............3."
+    },
+    "bell": {
+     "v": "9..............."
+    }
+   },
+   "notes": "Crash is structural punctuation, not decoration."
+  },
+  {
+   "id": "hiphop.chidrill.fill",
+   "name": "Chicago drill — fill",
+   "family": "hiphop",
+   "tags": [
+    "drill",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.05,
+   "bpm": [
+    130,
+    145
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9...............",
+     "a": "A..............."
+    },
+    "snare": {
+     "v": "........9...9.99",
+     "a": "........A......."
+    },
+    "chh": {
+     "v": "6.5.6.5.6......."
+    },
+    "bell": {
+     "v": "9..............."
+    }
+   }
+  },
+  {
+   "id": "hiphop.gfunk.main",
+   "name": "G-funk — main",
+   "family": "hiphop",
+   "tags": [
+    "westcoast",
+    "gfunk"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.45,
+   "bpm": [
+    90,
+    105
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "8....3..7..3...."
+    },
+    "cp": {
+     "v": "....9.......9..."
+    },
+    "chh": {
+     "v": "5.4.5.4.5.4.5.4."
+    },
+    "ohh": {
+     "v": "....6.......6..."
+    },
+    "hi": {
+     "v": "..4...4...4...4."
+    }
+   },
+   "notes": "Tambourine rushes; open hats double the clap."
+  },
+  {
+   "id": "hiphop.gfunk.fill",
+   "name": "G-funk — fill",
+   "family": "hiphop",
+   "tags": [
+    "gfunk",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.45,
+   "bpm": [
+    90,
+    105
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "8....3.........."
+    },
+    "cp": {
+     "v": "....9.......9.99"
+    },
+    "chh": {
+     "v": "5.4.5.4.5......."
+    },
+    "hi": {
+     "v": "..4...4...4.4.44"
+    }
+   }
+  },
+  {
+   "id": "hiphop.crunk.main",
+   "name": "Crunk — main",
+   "family": "hiphop",
+   "tags": [
+    "crunk",
+    "southern"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 6,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    135,
+    160
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9...........8.....9.....",
+     "a": "A......................."
+    },
+    "cp": {
+     "v": "......9...........9.....",
+     "a": "......A...........A....."
+    },
+    "chh": {
+     "v": "5.....5.....5.....5....."
+    }
+   },
+   "notes": "Bare on purpose, so the triplet rolls detonate."
+  },
+  {
+   "id": "hiphop.crunk.fill",
+   "name": "Crunk — triplet roll",
+   "family": "hiphop",
+   "tags": [
+    "crunk",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 6,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    135,
+    160
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9......................."
+    },
+    "snare": {
+     "v": "......7.7.7.8.8.8.9.9.99",
+     "a": "....................A..A"
+    },
+    "chh": {
+     "v": "5.....5................."
+    }
+   }
+  },
+  {
+   "id": "electronic.house.main",
+   "name": "House — main",
+   "family": "electronic",
+   "tags": [
+    "house",
+    "4x4"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.15,
+   "bpm": [
+    118,
+    128
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9...",
+     "a": "A...A...A...A..."
+    },
+    "cp": {
+     "v": "....9.......9..."
+    },
+    "chh": {
+     "v": "5.4.5.4.5.4.5.4."
+    },
+    "ohh": {
+     "v": "..7...7...7...7."
+    }
+   },
+   "notes": "Open hat on every 8th offbeat is the single most identifying element."
+  },
+  {
+   "id": "electronic.house.lift",
+   "name": "House — lift",
+   "family": "electronic",
+   "tags": [
+    "house"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.15,
+   "bpm": [
+    118,
+    128
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9...",
+     "a": "A...A...A...A..."
+    },
+    "cp": {
+     "v": "....9.......9..."
+    },
+    "chh": {
+     "v": "5454545454545454"
+    },
+    "ohh": {
+     "v": "..7...7...7...7."
+    },
+    "hi": {
+     "v": "..3...3...3...3."
+    }
+   }
+  },
+  {
+   "id": "electronic.house.fill",
+   "name": "House — clap build",
+   "family": "electronic",
+   "tags": [
+    "house",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.15,
+   "bpm": [
+    118,
+    128
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9...",
+     "a": "A...A...A...A..."
+    },
+    "cp": {
+     "v": "....9.......5679",
+     "a": "...............A"
+    },
+    "chh": {
+     "v": "5.4.5.4.5......."
+    }
+   },
+   "notes": "The kick survives the fill — muting it reads as a mistake."
+  },
+  {
+   "id": "electronic.deephouse.main",
+   "name": "Deep house — main",
+   "family": "electronic",
+   "tags": [
+    "deephouse"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.45,
+   "bpm": [
+    118,
+    125
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "8...8...8...8...",
+     "a": "A...A...A...A..."
+    },
+    "cp": {
+     "v": "....7.......7..."
+    },
+    "chh": {
+     "v": "4...4...4...4..."
+    },
+    "ohh": {
+     "v": "..6...6...6...6."
+    },
+    "lo": {
+     "v": "...3....3...3..3"
+    }
+   },
+   "notes": "Shuffled and warm; the perc layer is organic."
+  },
+  {
+   "id": "electronic.techhouse.main",
+   "name": "Tech house — main",
+   "family": "electronic",
+   "tags": [
+    "techhouse"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.3,
+   "bpm": [
+    124,
+    130
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9...",
+     "a": "A...A...A...A..."
+    },
+    "cp": {
+     "v": "....9.......9..."
+    },
+    "chh": {
+     "v": "5454545454545454"
+    },
+    "ohh": {
+     "v": "..7...7...7...7."
+    },
+    "hi": {
+     "v": "..4.3...4.3.4..3"
+    }
+   },
+   "notes": "Mechanical, with a busy percussion top-line."
+  },
+  {
+   "id": "electronic.techno.main",
+   "name": "Techno — main",
+   "family": "electronic",
+   "tags": [
+    "techno"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.05,
+   "bpm": [
+    130,
+    145
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9...",
+     "a": "A...A...A...A..."
+    },
+    "chh": {
+     "v": "5.5.5.5.5.5.5.5."
+    },
+    "ohh": {
+     "v": "..6...6...6...6."
+    },
+    "hi": {
+     "v": "......4.......4."
+    }
+   },
+   "notes": "Tension comes from timbre and silence, not fills — the 'fill' is a kick drop."
+  },
+  {
+   "id": "electronic.techno.fill",
+   "name": "Techno — kick drop",
+   "family": "electronic",
+   "tags": [
+    "techno",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.05,
+   "bpm": [
+    130,
+    145
+   ],
+   "kind": "groove",
+   "grid": {
+    "chh": {
+     "v": "5.5.5.5.5.5.5.5."
+    },
+    "ohh": {
+     "v": "..6...6...6...6."
+    }
+   }
+  },
+  {
+   "id": "electronic.dubtechno.main",
+   "name": "Dub techno — main",
+   "family": "electronic",
+   "tags": [
+    "dubtechno"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.05,
+   "bpm": [
+    118,
+    128
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "8...8...8...8..."
+    },
+    "chh": {
+     "v": "..4...4...4...4."
+    },
+    "lo": {
+     "v": "......5........."
+    }
+   },
+   "notes": "The fewest notes of any 4/4 style; movement comes from delay, not groove."
+  },
+  {
+   "id": "electronic.minimal.main",
+   "name": "Minimal — main",
+   "family": "electronic",
+   "tags": [
+    "minimal"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.25,
+   "bpm": [
+    125,
+    132
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "cp": {
+     "v": "............7..."
+    },
+    "hi": {
+     "v": ".2.2.3.2.2.3.2.2"
+    },
+    "lo": {
+     "v": "..2....2..2....2"
+    }
+   },
+   "notes": "Almost everything audible is a ghost note, 20dB under the kick."
+  },
+  {
+   "id": "electronic.electro.main",
+   "name": "Electro — main",
+   "family": "electronic",
+   "tags": [
+    "electro",
+    "808"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    118,
+    135
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9......8..9.....",
+     "a": "A..............."
+    },
+    "snare": {
+     "v": "....9.......9...",
+     "a": "....A.......A..."
+    },
+    "cp": {
+     "v": "....7.......7..."
+    },
+    "chh": {
+     "v": "5.5.5.5.5.5.5.55"
+    }
+   },
+   "notes": "Syncopated kick against a rigid backbeat — not four-on-the-floor."
+  },
+  {
+   "id": "electronic.electro.fill",
+   "name": "Electro — 808 toms",
+   "family": "electronic",
+   "tags": [
+    "electro",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    118,
+    135
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9......8........"
+    },
+    "snare": {
+     "v": "....9..........."
+    },
+    "lo": {
+     "v": "........7.6.5.4."
+    },
+    "hi": {
+     "v": ".........7.6.5.4"
+    }
+   },
+   "notes": "Tom cascades are idiomatic here, unlike most electronic styles."
+  },
+  {
+   "id": "electronic.nudisco.main",
+   "name": "Nu-disco — main",
+   "family": "electronic",
+   "tags": [
+    "nudisco"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.35,
+   "bpm": [
+    105,
+    125
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9...8...9...8...",
+     "a": "A.......A......."
+    },
+    "snare": {
+     "v": "....9.......9...",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "5454545454545454"
+    },
+    "ohh": {
+     "v": "..7...7...7...7."
+    },
+    "hi": {
+     "v": "4...4...4...4..."
+    }
+   },
+   "notes": "House with a live drummer's vocabulary bolted on."
+  },
+  {
+   "id": "electronic.nudisco.fill",
+   "name": "Nu-disco — tom cascade",
+   "family": "electronic",
+   "tags": [
+    "nudisco",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.35,
+   "bpm": [
+    105,
+    125
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9...8...9......."
+    },
+    "snare": {
+     "v": "....9..........."
+    },
+    "hi": {
+     "v": "........8.7.6..."
+    },
+    "lo": {
+     "v": "...........7.6.5"
+    }
+   },
+   "notes": "The descending disco tom fill — correct here, wrong almost everywhere else."
+  },
+  {
+   "id": "electronic.breakbeat.main",
+   "name": "Breakbeat — main",
+   "family": "electronic",
+   "tags": [
+    "breakbeat",
+    "bigbeat"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.3,
+   "bpm": [
+    125,
+    140
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9..8..7...9....."
+    },
+    "snare": {
+     "v": "...39..29..39..3",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "5.4.5.4.5.4.5.4."
+    },
+    "ohh": {
+     "v": "......6.......6."
+    }
+   },
+   "notes": "Ghost snares inherited from the sampled funk break."
+  },
+  {
+   "id": "electronic.jungle.main",
+   "name": "Jungle — main",
+   "family": "electronic",
+   "tags": [
+    "jungle",
+    "amen"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.35,
+   "bpm": [
+    155,
+    175
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9.....7...8....."
+    },
+    "snare": {
+     "v": "...39..3.2.39..2",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "5.4.5.4.5.4.5.4."
+    },
+    "ohh": {
+     "v": ".....6.........."
+    }
+   },
+   "notes": "Ghost snares outnumber accented ones; no two bars identical."
+  },
+  {
+   "id": "electronic.jungle.fill",
+   "name": "Jungle — snare rush",
+   "family": "electronic",
+   "tags": [
+    "jungle",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.35,
+   "bpm": [
+    155,
+    175
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9..............."
+    },
+    "snare": {
+     "v": "...39..3.2.37777",
+     "a": "...............A",
+     "r": "..............34"
+    },
+    "chh": {
+     "v": "5.4.5.4.5......."
+    }
+   }
+  },
+  {
+   "id": "electronic.dnb.main",
+   "name": "Drum & bass — two-step",
+   "family": "electronic",
+   "tags": [
+    "dnb",
+    "twostep"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.15,
+   "bpm": [
+    170,
+    176
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9.........8....."
+    },
+    "snare": {
+     "v": "...39......39...",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "5.4.5.4.5.4.5.4."
+    }
+   },
+   "notes": "Ghost snare on the 16th before each backbeat is what makes it roll."
+  },
+  {
+   "id": "electronic.dnb.fill",
+   "name": "Drum & bass — roll",
+   "family": "electronic",
+   "tags": [
+    "dnb",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.15,
+   "bpm": [
+    170,
+    176
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9..............."
+    },
+    "snare": {
+     "v": "...39......39.77",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "5.4.5.4.5.4.5.55",
+     "r": "..............34"
+    }
+   }
+  },
+  {
+   "id": "electronic.garage.main",
+   "name": "UK garage — 2-step",
+   "family": "electronic",
+   "tags": [
+    "garage",
+    "2step"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.65,
+   "bpm": [
+    130,
+    138
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9.........8....."
+    },
+    "snare": {
+     "v": "....9.......9..."
+    },
+    "chh": {
+     "v": "5.45.4.55.4.5.4."
+    },
+    "cp": {
+     "v": "......3....3...3"
+    }
+   },
+   "notes": "The missing kicks on beats 2 and 3 are the identity; heavy shuffle."
+  },
+  {
+   "id": "electronic.footwork.main",
+   "name": "Footwork — main",
+   "family": "electronic",
+   "tags": [
+    "footwork",
+    "juke"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 8,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    155,
+    165
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9.......8.......9.....8.......8.",
+     "a": "A..............................."
+    },
+    "cp": {
+     "v": "......7.....7.....7.....7.....7."
+    },
+    "chh": {
+     "v": "4...4...4...4...4...4...4...4..."
+    }
+   },
+   "notes": "Claps grouped in threes against 4/4; kick bursts ratchet, not the hat."
+  },
+  {
+   "id": "electronic.footwork.fill",
+   "name": "Footwork — kick burst",
+   "family": "electronic",
+   "tags": [
+    "footwork",
+    "fill"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 8,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    155,
+    165
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9.......8.......999999999999999.",
+     "r": "..............................3."
+    },
+    "cp": {
+     "v": "......7.....7..................."
+    }
+   }
+  },
+  {
+   "id": "electronic.dubstep.main",
+   "name": "Dubstep — halftime",
+   "family": "electronic",
+   "tags": [
+    "dubstep",
+    "halftime"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.3,
+   "bpm": [
+    138,
+    142
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9......7........",
+     "a": "A..............."
+    },
+    "snare": {
+     "v": "........9.......",
+     "a": "........A......."
+    },
+    "chh": {
+     "v": "..5..5....5..5.5"
+    }
+   },
+   "notes": "Enormous space; the hats pause on beat 3 to clear room for the snare."
+  },
+  {
+   "id": "electronic.triphop.main",
+   "name": "Trip-hop — main",
+   "family": "electronic",
+   "tags": [
+    "triphop",
+    "downtempo"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.35,
+   "bpm": [
+    70,
+    100
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "8......6..7....."
+    },
+    "snare": {
+     "v": "....8...2...8..2"
+    },
+    "chh": {
+     "v": "4.3.4.3.4.3.4.3."
+    }
+   },
+   "notes": "A slowed, degraded funk break — the rhythm is found, not programmed."
   }
  ],
  "sets": [
@@ -8812,6 +9950,421 @@
     {
      "role": "sparse",
      "bars": 4
+    }
+   ]
+  },
+  {
+   "id": "hiphop.lofi",
+   "name": "Lo-fi / chillhop",
+   "family": "hiphop",
+   "bpm": 80,
+   "vary": 0.4,
+   "axis": "genre",
+   "roles": {
+    "main": "hiphop.lofi.main",
+    "fill": [
+     "hiphop.lofi.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 16,
+     "fillEvery": 8
+    }
+   ]
+  },
+  {
+   "id": "hiphop.ukdrill",
+   "name": "UK drill",
+   "family": "hiphop",
+   "bpm": 142,
+   "vary": 0.4,
+   "axis": "genre",
+   "roles": {
+    "main": "hiphop.ukdrill.main",
+    "lift": "hiphop.ukdrill.lift",
+    "fill": [
+     "hiphop.ukdrill.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "lift",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "main",
+     "bars": 8
+    }
+   ]
+  },
+  {
+   "id": "hiphop.chidrill",
+   "name": "Chicago drill",
+   "family": "hiphop",
+   "bpm": 138,
+   "vary": 0.35,
+   "axis": "genre",
+   "roles": {
+    "main": "hiphop.chidrill.main",
+    "fill": [
+     "hiphop.chidrill.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "hiphop.gfunk",
+   "name": "West Coast / G-funk",
+   "family": "hiphop",
+   "bpm": 96,
+   "vary": 0.45,
+   "axis": "genre",
+   "roles": {
+    "main": "hiphop.gfunk.main",
+    "fill": [
+     "hiphop.gfunk.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "hiphop.crunk",
+   "name": "Southern / crunk",
+   "family": "hiphop",
+   "bpm": 145,
+   "vary": 0.3,
+   "axis": "genre",
+   "roles": {
+    "main": "hiphop.crunk.main",
+    "fill": [
+     "hiphop.crunk.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.house",
+   "name": "House",
+   "family": "electronic",
+   "bpm": 124,
+   "vary": 0.2,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.house.main",
+    "lift": "electronic.house.lift",
+    "fill": [
+     "electronic.house.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "lift",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "main",
+     "bars": 8
+    }
+   ]
+  },
+  {
+   "id": "electronic.deephouse",
+   "name": "Deep house",
+   "family": "electronic",
+   "bpm": 122,
+   "vary": 0.35,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.deephouse.main"
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.techhouse",
+   "name": "Tech house",
+   "family": "electronic",
+   "bpm": 127,
+   "vary": 0.4,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.techhouse.main"
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.techno",
+   "name": "Techno",
+   "family": "electronic",
+   "bpm": 138,
+   "vary": 0.18,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.techno.main",
+    "fill": [
+     "electronic.techno.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.dubtechno",
+   "name": "Dub techno",
+   "family": "electronic",
+   "bpm": 122,
+   "vary": 0.2,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.dubtechno.main"
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 16
+    }
+   ]
+  },
+  {
+   "id": "electronic.minimal",
+   "name": "Minimal techno",
+   "family": "electronic",
+   "bpm": 128,
+   "vary": 0.35,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.minimal.main"
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.electro",
+   "name": "Electro",
+   "family": "electronic",
+   "bpm": 128,
+   "vary": 0.4,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.electro.main",
+    "fill": [
+     "electronic.electro.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.nudisco",
+   "name": "Nu-disco",
+   "family": "electronic",
+   "bpm": 115,
+   "vary": 0.45,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.nudisco.main",
+    "fill": [
+     "electronic.nudisco.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.breakbeat",
+   "name": "Breakbeat / big beat",
+   "family": "electronic",
+   "bpm": 132,
+   "vary": 0.55,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.breakbeat.main"
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.jungle",
+   "name": "Jungle",
+   "family": "electronic",
+   "bpm": 168,
+   "vary": 0.7,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.jungle.main",
+    "fill": [
+     "electronic.jungle.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.dnb",
+   "name": "Drum & bass",
+   "family": "electronic",
+   "bpm": 174,
+   "vary": 0.7,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.dnb.main",
+    "fill": [
+     "electronic.dnb.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.garage",
+   "name": "UK garage / 2-step",
+   "family": "electronic",
+   "bpm": 134,
+   "vary": 0.5,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.garage.main"
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.footwork",
+   "name": "Footwork / juke",
+   "family": "electronic",
+   "bpm": 160,
+   "vary": 0.6,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.footwork.main",
+    "fill": [
+     "electronic.footwork.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.dubstep",
+   "name": "Dubstep / halftime",
+   "family": "electronic",
+   "bpm": 140,
+   "vary": 0.4,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.dubstep.main"
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "electronic.triphop",
+   "name": "Trip-hop",
+   "family": "electronic",
+   "bpm": 88,
+   "vary": 0.5,
+   "axis": "genre",
+   "roles": {
+    "main": "electronic.triphop.main"
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
     }
    ]
   },

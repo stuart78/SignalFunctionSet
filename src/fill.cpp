@@ -25,7 +25,8 @@
 // yet played; the on-screen browser is the next step.
 
 static const int FILL_NCH       = 8;    // role lanes: kick snare chh ohh lo hi cp bell
-static const int FILL_MAX_STEPS = 128;  // beats·stepsPerBeat·bars ceiling (e.g. 64ths, 2-bar)
+static const int FILL_MAX_STEPS = 256;  // beats·stepsPerBeat·bars ceiling: 64ths over 2 bars,
+                                        // or 64th-triplets over one (4·24·1 = 96)
 
 // ── Library data model ───────────────────────────────────────────────────────
 struct LibPattern {
@@ -410,7 +411,8 @@ static inline uint32_t strHash(const std::string& s) { uint32_t h = 2166136261u;
 struct Fill : Module {
 	enum ParamId { ACCUM_PARAM, DISCHARGE_PARAM, TIER_PARAM, PHRASE_PARAM, SYNC_PARAM, SET_PARAM, EXTRAS_PARAM, ENUMS(SWING_PARAM, FILL_NCH), PARAMS_LEN };
 	enum InputId { CLOCK_INPUT, BAR_INPUT, RESET_INPUT, RESEED_INPUT, ACCUM_CV_INPUT, DISCHARGE_CV_INPUT, TIER_CV_INPUT, SET_CV_INPUT, EXTRAS_CV_INPUT, INPUTS_LEN };
-	enum OutputId { ENUMS(GATE_OUTPUT, FILL_NCH), ENUMS(VEL_OUTPUT, FILL_NCH), ENUMS(ACC_OUTPUT, FILL_NCH), FILL_OUTPUT, SET_OUTPUT, NUM_OUTPUT, DEN_OUTPUT, OUTPUTS_LEN };
+	enum OutputId { ENUMS(GATE_OUTPUT, FILL_NCH), ENUMS(VEL_OUTPUT, FILL_NCH), ENUMS(ACC_OUTPUT, FILL_NCH), FILL_OUTPUT, SET_OUTPUT, NUM_OUTPUT, DEN_OUTPUT,
+		BPM_OUTPUT, OUTPUTS_LEN };
 	enum LightId { SYNC_LIGHT, FILL_LIGHT, LIGHTS_LEN };
 
 	Library lib;
@@ -535,6 +537,7 @@ struct Fill : Module {
 		configOutput(SET_OUTPUT, "Pattern set (1V per set)");
 		configOutput(NUM_OUTPUT, "Time-signature numerator (0.5V/count — Meter's 'Time signature CV absolute')");
 		configOutput(DEN_OUTPUT, "Time-signature denominator (1V per denom index: 1,2,4,8,16,32)");
+		configOutput(BPM_OUTPUT, "Set tempo (0.01V/BPM — Meter's \"BPM CV absolute\")");
 		for (int c = 0; c < FILL_NCH; c++) for (int s = 0; s < FILL_MAX_STEPS; s++) { curProb[c][s] = 1.f; curRat[c][s] = 1; }
 
 		loadAllLibraries(lib);
@@ -913,6 +916,10 @@ struct Fill : Module {
 		}
 		outputs[FILL_OUTPUT].setVoltage(fillActive ? 10.f : 0.f);
 		outputs[SET_OUTPUT].setVoltage(clamp((float)curSet, 0.f, 10.f));   // 1V per set
+		if (!lib.sets.empty()) {                                          // 0.01V per BPM
+			float bpm = lib.sets[clamp(curSet, 0, (int)lib.sets.size() - 1)].bpm;
+			outputs[BPM_OUTPUT].setVoltage(clamp(bpm * 0.01f, 0.f, 10.f));
+		}
 		// Time signature of the active set's main pattern → Meter's absolute NUM/DEN CV.
 		{
 			int num = 4, den = 4;
@@ -1331,6 +1338,7 @@ struct FillWidget : ModuleWidget {
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(gateX, yb)), module, Fill::NUM_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(velX, yb)),  module, Fill::DEN_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(accX, yb)),  module, Fill::SET_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(123.f, yb)), module, Fill::BPM_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {

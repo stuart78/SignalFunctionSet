@@ -5815,7 +5815,7 @@
   },
   {
    "id": "gm.twist.1.main",
-   "name": "Twist 1 — main",
+   "name": "Twist (early-60s) 1 — main",
    "family": "twist",
    "tags": [
     "twist",
@@ -5846,7 +5846,7 @@
   },
   {
    "id": "gm.twist.1.lift",
-   "name": "Twist 1 — lift",
+   "name": "Twist (early-60s) 1 — lift",
    "family": "twist",
    "tags": [
     "twist",
@@ -5876,7 +5876,7 @@
   },
   {
    "id": "gm.twist.1.fill",
-   "name": "Twist 1 — fill",
+   "name": "Twist (early-60s) 1 — fill",
    "family": "twist",
    "tags": [
     "twist",
@@ -5910,7 +5910,7 @@
   },
   {
    "id": "gm.twist.2.main",
-   "name": "Twist 2 — main",
+   "name": "Twist (early-60s) 2 — main",
    "family": "twist",
    "tags": [
     "twist",
@@ -5941,7 +5941,7 @@
   },
   {
    "id": "gm.twist.2.lift",
-   "name": "Twist 2 — lift",
+   "name": "Twist (early-60s) 2 — lift",
    "family": "twist",
    "tags": [
     "twist",
@@ -5972,7 +5972,7 @@
   },
   {
    "id": "gm.twist.2.fill",
-   "name": "Twist 2 — fill",
+   "name": "Twist (early-60s) 2 — fill",
    "family": "twist",
    "tags": [
     "twist",
@@ -6289,7 +6289,7 @@
   },
   {
    "id": "gm.boogie.break1",
-   "name": "Boogie break 1",
+   "name": "Boogie-woogie break 1",
    "family": "boogie",
    "tags": [
     "boogie",
@@ -6323,7 +6323,7 @@
   },
   {
    "id": "gm.boogie.break2",
-   "name": "Boogie break 2",
+   "name": "Boogie-woogie break 2",
    "family": "boogie",
    "tags": [
     "boogie",
@@ -6351,7 +6351,7 @@
   },
   {
    "id": "gm.boogie.break3",
-   "name": "Boogie break 3",
+   "name": "Boogie-woogie break 3",
    "family": "boogie",
    "tags": [
     "boogie",
@@ -6584,7 +6584,7 @@
   },
   {
    "id": "gm.charleston.break1",
-   "name": "Charleston break 1",
+   "name": "Charleston (20s) break 1",
    "family": "charleston",
    "tags": [
     "charleston",
@@ -9029,8 +9029,8 @@
   },
   {
    "id": "gm.slow.break1",
-   "name": "Slow break 1",
-   "family": "slow",
+   "name": "Slow rock (12/8) break 1",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm",
@@ -9060,8 +9060,8 @@
   },
   {
    "id": "gm.slow.break2",
-   "name": "Slow break 2",
-   "family": "slow",
+   "name": "Slow rock (12/8) break 2",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm",
@@ -9094,8 +9094,8 @@
   },
   {
    "id": "gm.slow.break3",
-   "name": "Slow break 3",
-   "family": "slow",
+   "name": "Slow rock (12/8) break 3",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm",
@@ -9125,8 +9125,8 @@
   },
   {
    "id": "gm.slow.break4",
-   "name": "Slow break 4",
-   "family": "slow",
+   "name": "Slow rock (12/8) break 4",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm",
@@ -9165,8 +9165,8 @@
   },
   {
    "id": "gm.slow.break5",
-   "name": "Slow break 5",
-   "family": "slow",
+   "name": "Slow rock (12/8) break 5",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm",
@@ -9202,8 +9202,8 @@
   },
   {
    "id": "gm.slow.break6",
-   "name": "Slow break 6",
-   "family": "slow",
+   "name": "Slow rock (12/8) break 6",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm",
@@ -9358,7 +9358,7 @@
   },
   {
    "id": "gm.twist.break1",
-   "name": "Twist break 1",
+   "name": "Twist (early-60s) break 1",
    "family": "twist",
    "tags": [
     "twist",
@@ -9386,7 +9386,7 @@
   },
   {
    "id": "gm.twist.break2",
-   "name": "Twist break 2",
+   "name": "Twist (early-60s) break 2",
    "family": "twist",
    "tags": [
     "twist",
@@ -9414,7 +9414,7 @@
   },
   {
    "id": "gm.twist.break3",
-   "name": "Twist break 3",
+   "name": "Twist (early-60s) break 3",
    "family": "twist",
    "tags": [
     "twist",
@@ -10022,7 +10022,7 @@
   },
   {
    "id": "gm.boogie.s1.main",
-   "name": "Boogie 1",
+   "name": "Boogie-woogie 1",
    "family": "boogie",
    "tags": [
     "boogie",
@@ -10052,7 +10052,7 @@
   },
   {
    "id": "gm.boogie.s2.main",
-   "name": "Boogie 2",
+   "name": "Boogie-woogie 2",
    "family": "boogie",
    "tags": [
     "boogie",
@@ -10082,7 +10082,7 @@
   },
   {
    "id": "gm.boogie.s3.main",
-   "name": "Boogie 3",
+   "name": "Boogie-woogie 3",
    "family": "boogie",
    "tags": [
     "boogie",
@@ -10377,7 +10377,7 @@
   },
   {
    "id": "gm.charleston.s1.main",
-   "name": "Charleston 1",
+   "name": "Charleston (20s) 1",
    "family": "charleston",
    "tags": [
     "charleston",
@@ -10795,8 +10795,8 @@
   },
   {
    "id": "gm.endings.s1.main",
-   "name": "Endings 1",
-   "family": "endings",
+   "name": "Ending 1",
+   "family": "cadence",
    "tags": [
     "endings",
     "gm"
@@ -10823,8 +10823,8 @@
   },
   {
    "id": "gm.endings.s2.main",
-   "name": "Endings 2",
-   "family": "endings",
+   "name": "Ending 2",
+   "family": "cadence",
    "tags": [
     "endings",
     "gm"
@@ -10849,8 +10849,8 @@
   },
   {
    "id": "gm.endings.s3.main",
-   "name": "Endings 3",
-   "family": "endings",
+   "name": "Ending 3",
+   "family": "cadence",
    "tags": [
     "endings",
     "gm"
@@ -13588,8 +13588,8 @@
   },
   {
    "id": "gm.slow.s1.main",
-   "name": "Slow 1",
-   "family": "slow",
+   "name": "Slow rock (12/8) 1",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm"
@@ -13618,8 +13618,8 @@
   },
   {
    "id": "gm.slow.s3.main",
-   "name": "Slow 2",
-   "family": "slow",
+   "name": "Slow rock (12/8) 2",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm"
@@ -13648,8 +13648,8 @@
   },
   {
    "id": "gm.slow.s4.main",
-   "name": "Slow 3",
-   "family": "slow",
+   "name": "Slow rock (12/8) 3",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm"
@@ -13681,8 +13681,8 @@
   },
   {
    "id": "gm.slow.s5.main",
-   "name": "Slow 4",
-   "family": "slow",
+   "name": "Slow rock (12/8) 4",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm"
@@ -13711,8 +13711,8 @@
   },
   {
    "id": "gm.slow.s6.main",
-   "name": "Slow 5",
-   "family": "slow",
+   "name": "Slow rock (12/8) 5",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm"
@@ -13744,8 +13744,8 @@
   },
   {
    "id": "gm.slow.s7.main",
-   "name": "Slow 6",
-   "family": "slow",
+   "name": "Slow rock (12/8) 6",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm"
@@ -13777,8 +13777,8 @@
   },
   {
    "id": "gm.slow.s8.main",
-   "name": "Slow 7",
-   "family": "slow",
+   "name": "Slow rock (12/8) 7",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm"
@@ -13807,8 +13807,8 @@
   },
   {
    "id": "gm.slow.s9.main",
-   "name": "Slow 8",
-   "family": "slow",
+   "name": "Slow rock (12/8) 8",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm"
@@ -13840,8 +13840,8 @@
   },
   {
    "id": "gm.slow.s10.main",
-   "name": "Slow 9",
-   "family": "slow",
+   "name": "Slow rock (12/8) 9",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm"
@@ -13873,8 +13873,8 @@
   },
   {
    "id": "gm.slow.s11.main",
-   "name": "Slow 10",
-   "family": "slow",
+   "name": "Slow rock (12/8) 10",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm"
@@ -13906,8 +13906,8 @@
   },
   {
    "id": "gm.slow.s12.main",
-   "name": "Slow 11",
-   "family": "slow",
+   "name": "Slow rock (12/8) 11",
+   "family": "ballad",
    "tags": [
     "slow",
     "gm"
@@ -14114,7 +14114,7 @@
   },
   {
    "id": "gm.twist.s1.main",
-   "name": "Twist 3",
+   "name": "Twist (early-60s) 3",
    "family": "twist",
    "tags": [
     "twist",
@@ -14147,7 +14147,7 @@
   },
   {
    "id": "gm.twist.s2.main",
-   "name": "Twist 4",
+   "name": "Twist (early-60s) 4",
    "family": "twist",
    "tags": [
     "twist",
@@ -14177,7 +14177,7 @@
   },
   {
    "id": "gm.twist.s3.main",
-   "name": "Twist 5",
+   "name": "Twist (early-60s) 5",
    "family": "twist",
    "tags": [
     "twist",
@@ -14600,7 +14600,7 @@
    "name": "Disco 1",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.1.main",
@@ -14622,7 +14622,7 @@
    "name": "Disco 2",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.2.main",
@@ -14644,7 +14644,7 @@
    "name": "Disco 3",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.3.main",
@@ -14666,7 +14666,7 @@
    "name": "Disco 4",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.4.main",
@@ -14688,7 +14688,7 @@
    "name": "Disco 5",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.5.main",
@@ -15653,10 +15653,10 @@
   },
   {
    "id": "gm.twist.1",
-   "name": "Twist 1",
+   "name": "Twist (early-60s) 1",
    "family": "twist",
    "bpm": 152,
-   "vary": 0.35,
+   "vary": 0.15,
    "axis": "genre",
    "roles": {
     "main": "gm.twist.1.main",
@@ -15675,10 +15675,10 @@
   },
   {
    "id": "gm.twist.2",
-   "name": "Twist 2",
+   "name": "Twist (early-60s) 2",
    "family": "twist",
    "bpm": 152,
-   "vary": 0.35,
+   "vary": 0.15,
    "axis": "genre",
    "roles": {
     "main": "gm.twist.2.main",
@@ -16069,10 +16069,10 @@
   },
   {
    "id": "gm.boogie.s1",
-   "name": "Boogie 1",
+   "name": "Boogie-woogie 1",
    "family": "boogie",
    "bpm": 132,
-   "vary": 0.4,
+   "vary": 0.25,
    "axis": "genre",
    "roles": {
     "main": "gm.boogie.s1.main",
@@ -16092,10 +16092,10 @@
   },
   {
    "id": "gm.boogie.s2",
-   "name": "Boogie 2",
+   "name": "Boogie-woogie 2",
    "family": "boogie",
    "bpm": 132,
-   "vary": 0.4,
+   "vary": 0.25,
    "axis": "genre",
    "roles": {
     "main": "gm.boogie.s2.main",
@@ -16115,10 +16115,10 @@
   },
   {
    "id": "gm.boogie.s3",
-   "name": "Boogie 3",
+   "name": "Boogie-woogie 3",
    "family": "boogie",
    "bpm": 132,
-   "vary": 0.4,
+   "vary": 0.25,
    "axis": "genre",
    "roles": {
     "main": "gm.boogie.s3.main",
@@ -16325,7 +16325,7 @@
   },
   {
    "id": "gm.charleston.s1",
-   "name": "Charleston 1",
+   "name": "Charleston (20s) 1",
    "family": "charleston",
    "bpm": 200,
    "vary": 0.3,
@@ -16349,7 +16349,7 @@
    "name": "Disco 6",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.s1.main",
@@ -16378,7 +16378,7 @@
    "name": "Disco 7",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.s3.main",
@@ -16407,7 +16407,7 @@
    "name": "Disco 8",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.s4.main",
@@ -16436,7 +16436,7 @@
    "name": "Disco 9",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.s5.main",
@@ -16465,7 +16465,7 @@
    "name": "Disco 10",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.s6.main",
@@ -16494,7 +16494,7 @@
    "name": "Disco 11",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.s7.main",
@@ -16523,7 +16523,7 @@
    "name": "Disco 12",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.s8.main",
@@ -16552,7 +16552,7 @@
    "name": "Disco 13",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.s9.main",
@@ -16581,7 +16581,7 @@
    "name": "Disco 14",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.s10.main",
@@ -16610,7 +16610,7 @@
    "name": "Disco 15",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.s11.main",
@@ -16639,7 +16639,7 @@
    "name": "Disco 16",
    "family": "disco",
    "bpm": 118,
-   "vary": 0.45,
+   "vary": 0.2,
    "axis": "genre",
    "roles": {
     "main": "gm.disco.s12.main",
@@ -16665,8 +16665,8 @@
   },
   {
    "id": "gm.endings.s1",
-   "name": "Endings 1",
-   "family": "endings",
+   "name": "Ending 1",
+   "family": "cadence",
    "bpm": 120,
    "vary": 0.2,
    "axis": "genre",
@@ -16683,8 +16683,8 @@
   },
   {
    "id": "gm.endings.s2",
-   "name": "Endings 2",
-   "family": "endings",
+   "name": "Ending 2",
+   "family": "cadence",
    "bpm": 120,
    "vary": 0.2,
    "axis": "genre",
@@ -16701,8 +16701,8 @@
   },
   {
    "id": "gm.endings.s3",
-   "name": "Endings 3",
-   "family": "endings",
+   "name": "Ending 3",
+   "family": "cadence",
    "bpm": 120,
    "vary": 0.2,
    "axis": "genre",
@@ -17212,7 +17212,7 @@
    "name": "Jazz 1",
    "family": "jazz",
    "bpm": 132,
-   "vary": 0.5,
+   "vary": 0.85,
    "axis": "genre",
    "roles": {
     "main": "gm.jazz.s1.main",
@@ -17235,7 +17235,7 @@
    "name": "Jazz 2",
    "family": "jazz",
    "bpm": 132,
-   "vary": 0.5,
+   "vary": 0.85,
    "axis": "genre",
    "roles": {
     "main": "gm.jazz.s2.main",
@@ -17258,7 +17258,7 @@
    "name": "Jazz 3",
    "family": "jazz",
    "bpm": 132,
-   "vary": 0.5,
+   "vary": 0.85,
    "axis": "genre",
    "roles": {
     "main": "gm.jazz.s3.main",
@@ -17281,7 +17281,7 @@
    "name": "Jazz 4",
    "family": "jazz",
    "bpm": 132,
-   "vary": 0.5,
+   "vary": 0.85,
    "axis": "genre",
    "roles": {
     "main": "gm.jazz.s4.main",
@@ -17304,7 +17304,7 @@
    "name": "Jazz 5",
    "family": "jazz",
    "bpm": 132,
-   "vary": 0.5,
+   "vary": 0.85,
    "axis": "genre",
    "roles": {
     "main": "gm.jazz.s5.main",
@@ -17327,7 +17327,7 @@
    "name": "Jazz 6",
    "family": "jazz",
    "bpm": 132,
-   "vary": 0.5,
+   "vary": 0.85,
    "axis": "genre",
    "roles": {
     "main": "gm.jazz.s6.main",
@@ -19151,8 +19151,8 @@
   },
   {
    "id": "gm.slow.s1",
-   "name": "Slow 1",
-   "family": "slow",
+   "name": "Slow rock (12/8) 1",
+   "family": "ballad",
    "bpm": 64,
    "vary": 0.3,
    "axis": "genre",
@@ -19177,8 +19177,8 @@
   },
   {
    "id": "gm.slow.s3",
-   "name": "Slow 2",
-   "family": "slow",
+   "name": "Slow rock (12/8) 2",
+   "family": "ballad",
    "bpm": 64,
    "vary": 0.3,
    "axis": "genre",
@@ -19203,8 +19203,8 @@
   },
   {
    "id": "gm.slow.s4",
-   "name": "Slow 3",
-   "family": "slow",
+   "name": "Slow rock (12/8) 3",
+   "family": "ballad",
    "bpm": 64,
    "vary": 0.3,
    "axis": "genre",
@@ -19229,8 +19229,8 @@
   },
   {
    "id": "gm.slow.s5",
-   "name": "Slow 4",
-   "family": "slow",
+   "name": "Slow rock (12/8) 4",
+   "family": "ballad",
    "bpm": 64,
    "vary": 0.3,
    "axis": "genre",
@@ -19255,8 +19255,8 @@
   },
   {
    "id": "gm.slow.s6",
-   "name": "Slow 5",
-   "family": "slow",
+   "name": "Slow rock (12/8) 5",
+   "family": "ballad",
    "bpm": 64,
    "vary": 0.3,
    "axis": "genre",
@@ -19281,8 +19281,8 @@
   },
   {
    "id": "gm.slow.s7",
-   "name": "Slow 6",
-   "family": "slow",
+   "name": "Slow rock (12/8) 6",
+   "family": "ballad",
    "bpm": 64,
    "vary": 0.3,
    "axis": "genre",
@@ -19307,8 +19307,8 @@
   },
   {
    "id": "gm.slow.s8",
-   "name": "Slow 7",
-   "family": "slow",
+   "name": "Slow rock (12/8) 7",
+   "family": "ballad",
    "bpm": 64,
    "vary": 0.3,
    "axis": "genre",
@@ -19333,8 +19333,8 @@
   },
   {
    "id": "gm.slow.s9",
-   "name": "Slow 8",
-   "family": "slow",
+   "name": "Slow rock (12/8) 8",
+   "family": "ballad",
    "bpm": 64,
    "vary": 0.3,
    "axis": "genre",
@@ -19359,8 +19359,8 @@
   },
   {
    "id": "gm.slow.s10",
-   "name": "Slow 9",
-   "family": "slow",
+   "name": "Slow rock (12/8) 9",
+   "family": "ballad",
    "bpm": 64,
    "vary": 0.3,
    "axis": "genre",
@@ -19385,8 +19385,8 @@
   },
   {
    "id": "gm.slow.s11",
-   "name": "Slow 10",
-   "family": "slow",
+   "name": "Slow rock (12/8) 10",
+   "family": "ballad",
    "bpm": 64,
    "vary": 0.3,
    "axis": "genre",
@@ -19411,8 +19411,8 @@
   },
   {
    "id": "gm.slow.s12",
-   "name": "Slow 11",
-   "family": "slow",
+   "name": "Slow rock (12/8) 11",
+   "family": "ballad",
    "bpm": 64,
    "vary": 0.3,
    "axis": "genre",
@@ -19573,10 +19573,10 @@
   },
   {
    "id": "gm.twist.s1",
-   "name": "Twist 3",
+   "name": "Twist (early-60s) 3",
    "family": "twist",
    "bpm": 152,
-   "vary": 0.35,
+   "vary": 0.15,
    "axis": "genre",
    "roles": {
     "main": "gm.twist.s1.main",
@@ -19596,10 +19596,10 @@
   },
   {
    "id": "gm.twist.s2",
-   "name": "Twist 4",
+   "name": "Twist (early-60s) 4",
    "family": "twist",
    "bpm": 152,
-   "vary": 0.35,
+   "vary": 0.15,
    "axis": "genre",
    "roles": {
     "main": "gm.twist.s2.main",
@@ -19619,10 +19619,10 @@
   },
   {
    "id": "gm.twist.s3",
-   "name": "Twist 5",
+   "name": "Twist (early-60s) 5",
    "family": "twist",
    "bpm": 152,
-   "vary": 0.35,
+   "vary": 0.15,
    "axis": "genre",
    "roles": {
     "main": "gm.twist.s3.main",
