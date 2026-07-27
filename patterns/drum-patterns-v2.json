@@ -8071,6 +8071,245 @@
     }
    },
    "notes": "A slowed, degraded funk break — the rhythm is found, not programmed."
+  },
+  {
+   "id": "jazz.five.main",
+   "name": "Jazz 5/4 — main",
+   "family": "jazz",
+   "tags": [
+    "jazz",
+    "5/4",
+    "odd"
+   ],
+   "meter": "5/4",
+   "beats": 5,
+   "stepsPerBeat": 3,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    120,
+    200
+   ],
+   "kind": "groove",
+   "grid": {
+    "bell": {
+     "v": "7..7.57..7.57.5"
+    },
+    "chh": {
+     "v": "...4.....4....."
+    },
+    "kick": {
+     "v": "2..2..2..2..2.."
+    },
+    "snare": {
+     "v": ".....4.....3..."
+    }
+   },
+   "notes": "Ride carries the 5; hi-hat foot on 2 and 4; kick feathered under it. Grouped 3+2 — the phrase leans on beat 4."
+  },
+  {
+   "id": "jazz.five.lift",
+   "name": "Jazz 5/4 — lift",
+   "family": "jazz",
+   "tags": [
+    "jazz",
+    "5/4"
+   ],
+   "meter": "5/4",
+   "beats": 5,
+   "stepsPerBeat": 3,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    120,
+    200
+   ],
+   "kind": "groove",
+   "grid": {
+    "bell": {
+     "v": "7.57.57.57.57.5"
+    },
+    "chh": {
+     "v": "...4.....4....."
+    },
+    "kick": {
+     "v": "2..2.32..2.32.."
+    },
+    "snare": {
+     "v": "..4..5..3..5..4"
+    }
+   },
+   "notes": "Comping fills in; the ride goes to a full triplet."
+  },
+  {
+   "id": "jazz.five.fill",
+   "name": "Jazz 5/4 — press roll",
+   "family": "jazz",
+   "tags": [
+    "jazz",
+    "5/4",
+    "fill"
+   ],
+   "meter": "5/4",
+   "beats": 5,
+   "stepsPerBeat": 3,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    120,
+    200
+   ],
+   "kind": "groove",
+   "grid": {
+    "bell": {
+     "v": "7..7.57........"
+    },
+    "snare": {
+     "v": ".....4..6778999",
+     "a": "..............A",
+     "r": "..........3.4.."
+    },
+    "kick": {
+     "v": "2..2..2........"
+    }
+   },
+   "notes": "A press roll, not a machine retrigger — it resolves onto the downbeat."
+  },
+  {
+   "id": "jazz.fivewaltz.main",
+   "name": "Jazz 5/4 — 2+3",
+   "family": "jazz",
+   "tags": [
+    "jazz",
+    "5/4",
+    "odd"
+   ],
+   "meter": "5/4",
+   "beats": 5,
+   "stepsPerBeat": 3,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    110,
+    180
+   ],
+   "kind": "groove",
+   "grid": {
+    "bell": {
+     "v": "7.57..7.57.57.."
+    },
+    "chh": {
+     "v": "......4........"
+    },
+    "kick": {
+     "v": "2.....2..2....."
+    },
+    "snare": {
+     "v": "...3.....4...5."
+    }
+   },
+   "notes": "The other grouping: 2+3 instead of 3+2, so the weight lands on beat 3."
+  },
+  {
+   "id": "rock.five.main",
+   "name": "Rock 5/4 — main",
+   "family": "rock",
+   "tags": [
+    "rock",
+    "5/4",
+    "odd"
+   ],
+   "meter": "5/4",
+   "beats": 5,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    100,
+    150
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9.......9.....9.....",
+     "a": "A..................."
+    },
+    "snare": {
+     "v": "....9.......9......."
+    },
+    "chh": {
+     "v": "6.4.6.4.6.4.6.4.6.4."
+    }
+   },
+   "notes": "3+2: the bar turns over after the fourth beat."
+  },
+  {
+   "id": "rock.five.fill",
+   "name": "Rock 5/4 — tom fill",
+   "family": "rock",
+   "tags": [
+    "rock",
+    "5/4",
+    "fill"
+   ],
+   "meter": "5/4",
+   "beats": 5,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    100,
+    150
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9.......9..........."
+    },
+    "snare": {
+     "v": "....9.......8.7....."
+    },
+    "hi": {
+     "v": "..............7.6..."
+    },
+    "lo": {
+     "v": "..................75"
+    }
+   }
+  },
+  {
+   "id": "funk.five.main",
+   "name": "Funk 5/4 — main",
+   "family": "funk",
+   "tags": [
+    "funk",
+    "5/4",
+    "odd"
+   ],
+   "meter": "5/4",
+   "beats": 5,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    95,
+    120
+   ],
+   "kind": "groove",
+   "grid": {
+    "kick": {
+     "v": "9..3...9.3..9......3",
+     "a": "A..................."
+    },
+    "snare": {
+     "v": "....9..2....9..2...2",
+     "a": "....A.......A......."
+    },
+    "chh": {
+     "v": "6.4.6.4.6.4.6.4.6.44"
+    }
+   },
+   "notes": "Ghost snares carry the groove; the extra beat lands as a pickup."
   }
  ],
  "sets": [
@@ -10359,6 +10598,95 @@
    "axis": "genre",
    "roles": {
     "main": "electronic.triphop.main"
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "jazz.five",
+   "name": "Jazz in 5",
+   "family": "jazz",
+   "bpm": 150,
+   "vary": 0.85,
+   "axis": "genre",
+   "roles": {
+    "main": "jazz.five.main",
+    "lift": "jazz.five.lift",
+    "fill": [
+     "jazz.five.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "lift",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "main",
+     "bars": 8
+    }
+   ],
+   "notes": "Comping is continuous invention; only the ride is fixed."
+  },
+  {
+   "id": "jazz.fivewaltz",
+   "name": "Jazz in 5 (2+3)",
+   "family": "jazz",
+   "bpm": 140,
+   "vary": 0.85,
+   "axis": "genre",
+   "roles": {
+    "main": "jazz.fivewaltz.main"
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "rock.five",
+   "name": "Rock in 5",
+   "family": "rock",
+   "bpm": 120,
+   "vary": 0.35,
+   "axis": "genre",
+   "roles": {
+    "main": "rock.five.main",
+    "fill": [
+     "rock.five.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    }
+   ]
+  },
+  {
+   "id": "funk.five",
+   "name": "Funk in 5",
+   "family": "funk",
+   "bpm": 104,
+   "vary": 0.7,
+   "axis": "genre",
+   "roles": {
+    "main": "funk.five.main"
    },
    "arrangement": [
     {

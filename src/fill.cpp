@@ -462,6 +462,8 @@ struct Fill : Module {
 	float curPatSwing = 0.f;                        // the pattern's authored swing (format: 0..1, 1 = triplet feel)
 	int   curSteps = 16, curBars = 1, curSpb = 4, curStepsPerBar = 16;
 	int   lastTierBias = 0;                         // tier is phrase-latched; offset changes break the latch
+	int   tierMode = 0;      // 0 = rise through the phrase, 1 = latch one tier per phrase
+	int   tierBalance = 1;   // 0 even thirds · 1 main-heavy · 2 slow build
 
 	// swung-hit + ratchet schedulers (per channel), timed off the measured clock interval
 	float clkMeasure = 0.f, clkInterval = 0.f;      // samples since last CLOCK / between CLOCKs
@@ -752,12 +754,27 @@ struct Fill : Module {
 		int bias = (int)std::round(params[TIER_PARAM].getValue() + tcv);
 		bool phraseStart = ((barsSinceReset - 1) % phraseLen()) == 0;
 		bool afterFill = fillActive;   // the cycle just ended was a fill
-		if (!started || bias != lastTierBias || (syncOn ? phraseStart : afterFill)) {
-			// Latch from the phrase's PEAK pressure (what the gauge showed), not the
-			// post-discharge remainder — otherwise the vent right before this point
-			// makes lift unreachable. Rungs match the meter ticks: <1/3 sparse,
-			// <2/3 main, top third lift.
-			int pTier = clamp((int)(peakPressure * 3.f), 0, 2);
+		// Where the tiers sit. Even thirds put everything in lift within a few bars,
+		// because pressure saturates at 1.0 and stays there; main-heavy keeps the
+		// basic groove for roughly the first half of a phrase.
+		static const float T0[3] = {0.33f, 0.12f, 0.20f};
+		static const float T1[3] = {0.67f, 0.56f, 0.72f};
+		int tb = clamp(tierBalance, 0, 2);
+
+		if (tierMode == 0) {
+			// Rise through the phrase: position leads, pressure colours it. On an
+			// 8-bar phrase with the default balance that is about four bars of the
+			// basic groove, three of lift, and the last bar venting as a fill.
+			int pl = std::max(1, phraseLen());
+			float prog = (float)(barsSinceReset % pl) / (float)pl;
+			float lvl = 0.65f * prog + 0.35f * peakPressure;
+			int pTier = (lvl < T0[tb]) ? 0 : (lvl < T1[tb]) ? 1 : 2;
+			curTier = clamp(pTier + bias, 0, 2);
+			lastTierBias = bias;
+		} else if (!started || bias != lastTierBias || (syncOn ? phraseStart : afterFill)) {
+			// Latched: one tier for the whole phrase, taken from the phrase's PEAK
+			// pressure (what the gauge showed), not the post-discharge remainder.
+			int pTier = (peakPressure < T0[tb]) ? 0 : (peakPressure < T1[tb]) ? 1 : 2;
 			curTier = clamp(pTier + bias, 0, 2);
 			lastTierBias = bias;
 			peakPressure = pressure;               // start tracking the new phrase
@@ -940,6 +957,8 @@ struct Fill : Module {
 	json_t* dataToJson() override {
 		json_t* root = json_object();
 		json_object_set_new(root, "setIdx", json_integer(curSet));
+		json_object_set_new(root, "tierMode", json_integer(tierMode));
+		json_object_set_new(root, "tierBalance", json_integer(tierBalance));
 		json_object_set_new(root, "pulseWidthIdx", json_integer(pulseWidthIdx));
 		json_object_set_new(root, "screenTab", json_integer(screenTab));
 		json_object_set_new(root, "browseBankG", json_integer(browseBank[0]));
@@ -949,6 +968,8 @@ struct Fill : Module {
 		return root;
 	}
 	void dataFromJson(json_t* root) override {
+		if (json_t* j = json_object_get(root, "tierMode")) tierMode = clamp((int)json_integer_value(j), 0, 1);
+		if (json_t* j = json_object_get(root, "tierBalance")) tierBalance = clamp((int)json_integer_value(j), 0, 2);
 		if (json_t* j = json_object_get(root, "setIdx")) { curSet = pendingSet = clamp((int)json_integer_value(j), 0, std::max(0, (int)lib.sets.size() - 1)); }
 		if (json_t* j = json_object_get(root, "pulseWidthIdx")) pulseWidthIdx = clamp((int)json_integer_value(j), 0, sfs::NUM_PULSE_WIDTHS - 1);
 		if (json_t* j = json_object_get(root, "screenTab")) screenTab = clamp((int)json_integer_value(j), 0, FILL_NAXIS);
@@ -1344,6 +1365,12 @@ struct FillWidget : ModuleWidget {
 	void appendContextMenu(Menu* menu) override {
 		Fill* module = dynamic_cast<Fill*>(this->module);
 		if (!module) return;
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuLabel("Intensity"));
+		menu->addChild(createIndexPtrSubmenuItem("Tier follows",
+			{"Rise through the phrase", "One tier per phrase"}, &module->tierMode));
+		menu->addChild(createIndexPtrSubmenuItem("Tier balance",
+			{"Even thirds", "Main-heavy (stays basic longer)", "Slow build"}, &module->tierBalance));
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Outputs"));
 		sfs::addPulseWidthMenu(menu, &module->pulseWidthIdx);

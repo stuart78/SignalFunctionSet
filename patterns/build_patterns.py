@@ -1756,6 +1756,70 @@ P("electronic.triphop.main", "Trip-hop \u2014 main", "electronic", ["triphop", "
 S("electronic.triphop", "Trip-hop", "electronic", 88,
   {"main": "electronic.triphop.main"}, MAIN_ARR, vary=0.50)
 
+# ═══════════════════════════ 5/4 ═══════════════════════════
+# Jazz in 5 sits on a triplet grid (5 beats x 3), so the ride's "ding, ding-da"
+# is real subdivision rather than swing applied on top of straight 16ths.
+
+P("jazz.five.main", "Jazz 5/4 \u2014 main", "jazz", ["jazz", "5/4", "odd"], {
+    "bell":  {"v": "7..7.57..7.57.5"},
+    "chh":   {"v": "...4.....4....."},
+    "kick":  {"v": "2..2..2..2..2.."},
+    "snare": {"v": ".....4.....3..."},
+}, beats=5, spb=3, meter="5/4", bpm=(120, 200),
+   notes="Ride carries the 5; hi-hat foot on 2 and 4; kick feathered under it. "
+         "Grouped 3+2 \u2014 the phrase leans on beat 4.")
+P("jazz.five.lift", "Jazz 5/4 \u2014 lift", "jazz", ["jazz", "5/4"], {
+    "bell":  {"v": "7.57.57.57.57.5"},
+    "chh":   {"v": "...4.....4....."},
+    "kick":  {"v": "2..2.32..2.32.."},
+    "snare": {"v": "..4..5..3..5..4"},
+}, beats=5, spb=3, meter="5/4", bpm=(120, 200),
+   notes="Comping fills in; the ride goes to a full triplet.")
+P("jazz.five.fill", "Jazz 5/4 \u2014 press roll", "jazz", ["jazz", "5/4", "fill"], {
+    "bell":  {"v": "7..7.57........"},
+    "snare": {"v": ".....4..6778999", "a": "..............A", "r": "..........3.4.."},
+    "kick":  {"v": "2..2..2........"},
+}, beats=5, spb=3, meter="5/4", bpm=(120, 200),
+   notes="A press roll, not a machine retrigger \u2014 it resolves onto the downbeat.")
+S("jazz.five", "Jazz in 5", "jazz", 150,
+  {"main": "jazz.five.main", "lift": "jazz.five.lift", "fill": ["jazz.five.fill"]},
+  MAIN_LIFT_ARR, vary=0.85,
+  notes="Comping is continuous invention; only the ride is fixed.")
+
+P("jazz.fivewaltz.main", "Jazz 5/4 \u2014 2+3", "jazz", ["jazz", "5/4", "odd"], {
+    "bell":  {"v": "7.57..7.57.57.."},
+    "chh":   {"v": "......4........"},
+    "kick":  {"v": "2.....2..2....."},
+    "snare": {"v": "...3.....4...5."},
+}, beats=5, spb=3, meter="5/4", bpm=(110, 180),
+   notes="The other grouping: 2+3 instead of 3+2, so the weight lands on beat 3.")
+S("jazz.fivewaltz", "Jazz in 5 (2+3)", "jazz", 140,
+  {"main": "jazz.fivewaltz.main"}, MAIN_ARR, vary=0.85)
+
+P("rock.five.main", "Rock 5/4 \u2014 main", "rock", ["rock", "5/4", "odd"], {
+    "kick":  {"v": "9.......9.....9.....", "a": "A..................."},
+    "snare": {"v": "....9.......9......."},
+    "chh":   {"v": "6.4.6.4.6.4.6.4.6.4."},
+}, beats=5, spb=4, meter="5/4", bpm=(100, 150),
+   notes="3+2: the bar turns over after the fourth beat.")
+P("rock.five.fill", "Rock 5/4 \u2014 tom fill", "rock", ["rock", "5/4", "fill"], {
+    "kick":  {"v": "9.......9..........."},
+    "snare": {"v": "....9.......8.7....."},
+    "hi":    {"v": "..............7.6..."},
+    "lo":    {"v": "..................75"},
+}, beats=5, spb=4, meter="5/4", bpm=(100, 150))
+S("rock.five", "Rock in 5", "rock", 120,
+  {"main": "rock.five.main", "fill": ["rock.five.fill"]}, MAIN_ARR, vary=0.35)
+
+P("funk.five.main", "Funk 5/4 \u2014 main", "funk", ["funk", "5/4", "odd"], {
+    "kick":  {"v": "9..3...9.3..9......3", "a": "A..................."},
+    "snare": {"v": "....9..2....9..2...2", "a": "....A.......A......."},
+    "chh":   {"v": "6.4.6.4.6.4.6.4.6.44"},
+}, beats=5, spb=4, meter="5/4", bpm=(95, 120),
+   notes="Ghost snares carry the groove; the extra beat lands as a pickup.")
+S("funk.five", "Funk in 5", "funk", 104,
+  {"main": "funk.five.main"}, MAIN_ARR, vary=0.70)
+
 for _p in [p for p in patterns if p.get("kind") == "timeline"]:
     if _gridkey(_p) in _set_mains:
         continue                     # a groove set already plays this exact grid
