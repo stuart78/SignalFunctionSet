@@ -25,6 +25,7 @@
 
 #include "plugin.hpp"
 #include "scales.hpp"
+#include "panel-style.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -597,24 +598,6 @@ struct ChimeExciteSlider : app::SliderKnob {
 	}
 };
 
-// panel labels (SVG <text> is ignored by Rack — draw with nanovg)
-struct ChimeLabels : Widget {
-	std::shared_ptr<Font> font;
-	struct L { Vec p; std::string t; float sz; };
-	std::vector<L> labels;
-	void add(float x, float y, const std::string& t, float sz = 6.f) { labels.push_back({Vec(x, y), t, sz}); }
-	void draw(const DrawArgs& args) override {
-		if (!font || font->handle < 0)
-			font = APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
-		if (!font || font->handle < 0) return;
-		nvgFontFaceId(args.vg, font->handle);
-		nvgFillColor(args.vg, nvgRGB(0x40, 0x40, 0x40));
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		for (auto& l : labels) { nvgFontSize(args.vg, l.sz); nvgText(args.vg, mm2px(l.p.x), mm2px(l.p.y), l.t.c_str(), NULL); }
-		Widget::draw(args);
-	}
-};
-
 struct ChimeWidget : ModuleWidget {
 	ChimeWidget(Chime* module) {
 		setModule(module);
@@ -668,22 +651,31 @@ struct ChimeWidget : ModuleWidget {
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(118.f, 118.f)), module, Chime::MIX_L_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(131.f, 118.f)), module, Chime::MIX_R_OUTPUT));
 
-		ChimeLabels* lbl = new ChimeLabels();
-		lbl->box.pos = Vec(0, 0);
+		// Labels are stated at the CONTROL's position; the style header applies the
+		// gap, so moving a control moves its label with it.
+		sfs::PanelLabels* lbl = new sfs::PanelLabels();
 		lbl->box.size = box.size;
-		lbl->add(xa, 14.f, "RATE"); lbl->add(xa, 29.f, "SPREAD"); lbl->add(xa, 44.f, "DRIFT");
-		lbl->add(xa, 57.f, "RELATE", 5.f); lbl->add(xb, 57.f, "SEED", 5.f);
-		lbl->add(xa, 67.f, "CURVE", 5.f);
-		lbl->add(xa, 78.f, "OCT", 5.f); lbl->add(xb, 78.f, "OCT CV", 5.f);
-		lbl->add(xa, 89.f, "ROOT", 5.f); lbl->add(xa, 101.f, "SCALE", 5.f);
-		lbl->add(xa, 113.f, "CLOCK", 5.f); lbl->add(xb, 113.f, "DECAY", 5.f);
-		lbl->add(44.f, 111.5f, "V/OCT"); lbl->add(57.f, 111.5f, "GATE");
-		lbl->add(83.f, 110.f, "BOW ← → STRIKE", 5.f);
-		lbl->add(102.f, 111.5f, "EXC CV", 5.f);
-		lbl->add(40.5f + 3.5f * 13.f, 62.f, "SWING", 5.f);
-		lbl->add(40.5f + 3.5f * 13.f, 76.f, "TUBE LFO", 5.f);
-		lbl->add(40.5f + 3.5f * 13.f, 92.f, "AUDIO", 5.f);
-		lbl->add(124.5f, 111.5f, "MIX L/R");
+		lbl->title(4.5f, 7.f, "CHIME");
+
+		lbl->knob(xa, 20.f, "RATE");    lbl->knob(xa, 35.f, "SPREAD"); lbl->knob(xa, 50.f, "DRIFT");
+		lbl->trim(xa, 62.f, "RELATE");  lbl->trim(xb, 62.f, "SEED");
+		lbl->trim(xa, 72.f, "CURVE");   lbl->jack(xb, 72.f, "SEED CV");
+		lbl->trim(xa, 83.f, "OCT");     lbl->jack(xb, 83.f, "OCT CV");
+		lbl->knob(xa, 95.f, "ROOT");    lbl->jack(xb, 95.f, "ROOT CV");
+		lbl->knob(xa, 107.f, "SCALE");  lbl->jack(xb, 107.f, "SCALE CV");
+		lbl->jack(xa, 119.f, "CLOCK");  lbl->trim(xb, 119.f, "DECAY");
+		lbl->jack(xb, 20.f, "CV"); lbl->jack(xb, 35.f, "CV"); lbl->jack(xb, 50.f, "CV");
+
+		// the eight note columns: one label per row, centred over the block
+		const float mid = 40.5f + 3.5f * 13.f;
+		lbl->add(mid, 67.f - sfs::LABEL_GAP_TRIM, "SWING", sfs::PanelLabels::ON_PLATE);
+		lbl->add(mid, 82.f - sfs::LABEL_GAP_JACK, "TUBE LFO", sfs::PanelLabels::ON_PLATE);
+		lbl->add(mid, 98.f - sfs::LABEL_GAP_JACK, "AUDIO", sfs::PanelLabels::ON_PLATE);
+
+		lbl->jack(44.f, 118.f, "V/OCT"); lbl->jack(57.f, 118.f, "GATE");
+		lbl->jack(102.f, 118.f, "EXC CV");
+		lbl->jack(124.5f, 118.f, "MIX L / R");
+		lbl->note(83.f, 111.5f, "BOW  \u2190\u2192  STRIKE");
 		addChild(lbl);
 	}
 };

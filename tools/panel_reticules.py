@@ -22,6 +22,8 @@ SCALE = 0.99                       # controls sit at 99%
 DISPLAY_BLUE = "#1a1a32"           # the same deep blue the displays clear to
 PANEL = "#f0f0f0"
 RETICULE = "#b2b2b2"               # matches the existing hand-drawn panels
+PLATE = "#1a1a1a"                  # dark inset grouping a section
+PLATE_R = 6.0                      # corner radius, in panel units
 
 # Real component sizes, read from Rack's own ComponentLibrary (px).
 SIZES = {
@@ -184,9 +186,12 @@ def group_range(svg, gid):
     return None
 
 
-def shapes(elems, indent="    "):
-    """All reticules, screens first so a control can never be hidden by one."""
+def shapes(elems, indent="    ", plates=()):
+    """All reticules: plates, then screens, then controls, so nothing is buried."""
     out = []
+    for (x, y, w, h) in plates:
+        out.append(f'{indent}<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" '
+                   f'height="{h:.2f}" rx="{PLATE_R:.2f}" fill="{PLATE}"/>')
     for k, cx, cy, w, h in elems:
         if k == "screen":
             out.append(f'{indent}<rect x="{cx-w/2:.2f}" y="{cy-h/2:.2f}" width="{w:.2f}" '
@@ -202,9 +207,9 @@ def shapes(elems, indent="    "):
     return out
 
 
-def splice(path, old, elems):
+def splice(path, old, elems, plates=()):
     """Rewrite the single Reticules layer, leaving all other layers untouched."""
-    body = shapes(elems, "    ")
+    body = shapes(elems, "    ", plates)
     out = old
     r = group_range(out, "Screens")            # retire the old two-layer form
     if r:
@@ -218,6 +223,17 @@ def splice(path, old, elems):
     open(path, "w").write(out)
     return sum(1 for e in elems if e[0] != "screen"), sum(1 for e in elems if e[0] == "screen")
 
+
+# Dark plates: the inset slabs that group a section. Rack draws components on
+# top of their own footprint, so a plate is one of the few things in the SVG the
+# player actually sees. Stated in mm as (x, y, w, h) — design intent, so it lives
+# here rather than being inferred from control positions.
+PLATES = {
+    "chime": [(35.5, 63.5, 106.0, 41.0)],          # the eight note columns
+    "crystal": [],
+    "fill": [(117.0, 8.0, 43.0, 116.0)],           # swing + the three output columns
+    "chance": [],
+}
 
 MODULES = {
     "crystal": ("Crystal", "src/crystal.cpp", "res/crystal.svg", {"CR_NL": 4}),
@@ -249,5 +265,6 @@ if __name__ == "__main__":
         env = constants(defs, body, src)
         elems = [(k, x / MM * upmm, y / MM * upmm, w / MM * upmm, h / MM * upmm)
                  for (k, x, y, w, h) in collect(body, env, defs)]
-        nc, ns = splice(p, old, elems)
+        pl = [(x * upmm, y * upmm, w * upmm, h * upmm) for (x, y, w, h) in PLATES.get(key, [])]
+        nc, ns = splice(p, old, elems, pl)
         print(f"{key:8} {nc:3} controls, {ns} screen(s) -> {svg}  ({upmm:.4f} units/mm)")

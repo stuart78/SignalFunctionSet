@@ -103,6 +103,13 @@ to every module in the plugin.
 
 See **`docs/conventions/browser-preview-pattern.md`** for the full pattern, examples from every shipped module, and testing instructions. Treat this as a required part of the display widget contract from day one of any new module.
 
+### Panel Design Conventions
+Panels are **code**, not Illustrator files. Rack ignores `<text>` in a panel SVG, so labels are drawn at runtime in **Figtree** (bundled in `res/fonts/`, SIL OFL) from `src/panel-style.hpp` — which also holds the palette, the single label size (4.4mm), and the label gaps. Callers state a **control's** position and the header applies the gap, so a moved control takes its label with it.
+
+Remember that Rack draws each component over its own footprint: anything in the SVG the size of a knob or jack is invisible. The visible design is the faceplate, the dark **plates** grouping sections, the screens, and the labels.
+
+See **`docs/conventions/panel-design.md`**.
+
 ### Panel Reticule Conventions
 Panel SVGs carry **reticules** — the placement guides the art is drawn around. They are generated from the widget constructor by `tools/panel_reticules.py`, never hand-placed, so they cannot drift from the code:
 
