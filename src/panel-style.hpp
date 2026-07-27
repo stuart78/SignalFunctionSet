@@ -40,21 +40,36 @@ static const NVGcolor SCREEN_HOT  = nvgRGB(0xEC, 0x65, 0x2E);
 static const NVGcolor SCREEN_TEXT = nvgRGB(0xE8, 0xE8, 0xF0);
 static const NVGcolor SCREEN_DIM  = nvgRGB(0x8A, 0x8A, 0xA5);
 
+// ── grid ────────────────────────────────────────────────────────────────────
+// One grid, one unit: 1HP, in BOTH axes. Controls sit on intersections, so a
+// layout is stated in whole cells and scales with the panel instead of being a
+// pile of loose millimetre values. A panel is 128.5mm tall = 25.29HP, so there
+// are 25 usable rows and the remainder is left as a margin at the FOOT of the
+// panel rather than distributed.
+static const float HP = 5.08f;
+static inline float hp(float n) { return n * HP; }
+static const int GRID_ROWS = 25;
+
+// Jacks are 8.03mm and trimpots 6.05mm, so neighbours need 2 cells between them;
+// a pot and its own jack sit 2 cells apart on the same row and are joined by a
+// hairline, which is what says they belong together.
+static const float PAIR_SPAN = 2.f;      // cells from a pot to its jack
+
 // ── type ────────────────────────────────────────────────────────────────────
 // One label size across the plugin. Figtree has a far larger x-height than the
 // mono face the panels used before, so it reads bigger at the same nominal size
 // — hence 4.4mm rather than the old 6mm. NOTE is for the small annotations that
 // mark what a pot position means, and is the only other size in use.
-static const float TYPE_LABEL = 4.4f;   // mm
-static const float TYPE_NOTE  = 3.2f;   // mm — pot-position notes, ranges
-static const float TYPE_TITLE = 7.0f;   // mm — the module name
+static const float TYPE_LABEL = 3.3f;   // mm
+static const float TYPE_NOTE  = 2.5f;   // mm — pot-position notes, ranges
+static const float TYPE_TITLE = 5.6f;   // mm — the module name
 
 // ── spacing ─────────────────────────────────────────────────────────────────
 // Labels sit ABOVE their control; a jack's label clears the jack by a little
 // more because the jack's own bezel reads as part of the shape.
-static const float LABEL_GAP_KNOB = 6.6f;    // mm from control centre to label baseline
-static const float LABEL_GAP_JACK = 6.4f;
-static const float LABEL_GAP_TRIM = 5.2f;
+static const float LABEL_GAP_KNOB = 5.6f;    // mm from control centre to label baseline
+static const float LABEL_GAP_JACK = 5.4f;
+static const float LABEL_GAP_TRIM = 4.4f;
 static const float PLATE_PAD      = 2.6f;    // inset padding around a grouped section
 static const float PLATE_RADIUS   = 2.0f;
 
@@ -72,7 +87,9 @@ static inline std::shared_ptr<Font> panelFontBold() {
 struct PanelLabels : Widget {
 	enum Kind { LABEL, NOTE, TITLE, ON_PLATE };
 	struct Item { Vec pos; std::string text; Kind kind; int align; };
+	struct Link { Vec a, b; bool onPlate; };
 	std::vector<Item> items;
+	std::vector<Link> links;
 	std::shared_ptr<Font> font, bold;
 
 	void add(float x, float y, const std::string& t, Kind k = LABEL,
@@ -87,6 +104,16 @@ struct PanelLabels : Widget {
 		add(x, y - LABEL_GAP_JACK, t, ON_PLATE);
 	}
 	void note(float x, float y, const std::string& t)  { add(x, y, t, NOTE); }
+
+	// A pot and the jack that modulates it, tied together. The label goes on the
+	// pot; the jack does not need one, because the line already says what it is.
+	void pair(float x, float y, const std::string& t, bool onPlate = false) {
+		add(x, y - LABEL_GAP_TRIM, t, onPlate ? ON_PLATE : LABEL);
+		links.push_back({Vec(x, y), Vec(x + hp(PAIR_SPAN), y), onPlate});
+	}
+	void link(float x1, float y1, float x2, float y2, bool onPlate = false) {
+		links.push_back({Vec(x1, y1), Vec(x2, y2), onPlate});
+	}
 	void title(float x, float y, const std::string& t) {
 		add(x, y, t, TITLE, NVG_ALIGN_LEFT);
 	}
@@ -96,6 +123,14 @@ struct PanelLabels : Widget {
 		if (!bold || bold->handle < 0) bold = panelFontBold();
 		if (!font || font->handle < 0) return;
 		NVGcontext* vg = args.vg;
+		for (const Link& l : links) {          // drawn first, so a component covers its ends
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, mm2px(l.a.x), mm2px(l.a.y));
+			nvgLineTo(vg, mm2px(l.b.x), mm2px(l.b.y));
+			nvgStrokeColor(vg, l.onPlate ? nvgRGB(0x4A, 0x4A, 0x52) : nvgRGB(0x9A, 0x9A, 0xA6));
+			nvgStrokeWidth(vg, mm2px(0.35f));
+			nvgStroke(vg);
+		}
 		for (const Item& it : items) {
 			bool isTitle = it.kind == TITLE;
 			nvgFontFaceId(vg, isTitle && bold && bold->handle >= 0 ? bold->handle : font->handle);

@@ -27,6 +27,28 @@ those shapes is wasted. What the player sees is:
 Reticules are the exception that proves it: they are drawn at 99% precisely so a
 sliver stays visible around the component.
 
+## The grid
+
+**One grid, one unit: 1HP (5.08mm), in BOTH axes.** Controls sit on
+intersections, stated as `hp(n)` rather than loose millimetres, so a layout
+scales with the panel and reads as a layout in the source. A panel is 128.5mm =
+25.29HP, so there are **25 usable rows and the 1.5mm remainder is left at the
+foot** — never distributed.
+
+Jacks are 8.03mm and trimpots 6.05mm, so neighbours need **2 cells** between
+them. A pot and the jack that modulates it share a row two cells apart, joined by
+a hairline — and **the jack then needs no label**, because the line already says
+what it is:
+
+```cpp
+addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(6))), …));
+addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(6))), …));
+lbl->pair(potX, hp(6), "SPREAD");     // label + the connecting line
+```
+
+**Prefer trimpots.** Large pots eat two rows and a lot of width for no gain; the
+plugin's density suits trimpots, and the grid assumes them.
+
 ## Palette
 
 | Token | Value | Use |
@@ -70,10 +92,16 @@ and the plugin's density suits them.
 
 ## Plates
 
-Declared in `PLATES` in `tools/panel_reticules.py` as mm rects. Grouping is
-design intent, so it is stated rather than inferred. Leave ~3mm between a plate
-and a screen so the two read as separate objects, and remember that any label
-inside a plate needs `ON_PLATE` ink or it will be dark-on-dark.
+Declared in `PLATES` in `tools/panel_reticules.py`, on the grid via `hp()`.
+Grouping is design intent, so it is stated rather than inferred.
+
+**A plate should extend past the grid** — run it off the edge of the panel rather
+than stopping neatly at the outermost control. A plate that hugs its contents
+reads as a box; one that bleeds reads as a region.
+
+Outputs belong on a plate. Leave a row between a plate and a screen so the two
+read as separate objects, and remember any label inside a plate needs `ON_PLATE`
+ink or it will be dark-on-dark.
 
 ## Generating
 

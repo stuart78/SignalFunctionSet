@@ -18,6 +18,8 @@ import re
 import sys
 
 MM = 2.952756                      # Rack SVG px per mm (75 dpi)
+HPMM = 5.08                        # 1HP — the layout grid, in both axes
+def hp(n): return n * HPMM
 SCALE = 0.99                       # controls sit at 99%
 DISPLAY_BLUE = "#1a1a32"           # the same deep blue the displays clear to
 PANEL = "#f0f0f0"
@@ -55,10 +57,14 @@ def widget_source(src, module):
 
 
 def evaluate(expr, env):
+    """Positions may be written on the 1HP grid as hp(n), so the grid helper has
+    to exist in the evaluation namespace too."""
     # strip C++ float suffixes: 76.31f, 4.f and .5f all appear in these widgets
     e = re.sub(r"(?<=[\d.])f\b", "", expr)
     e = e.replace("M_PI", "3.141592653589793")
-    return float(eval(e, {"__builtins__": {}}, dict(env)))
+    ns = dict(env)
+    ns.setdefault("hp", hp)
+    return float(eval(e, {"__builtins__": {}}, ns))
 
 
 def constants(seed, *sources):
@@ -83,6 +89,30 @@ def constants(seed, *sources):
                 except Exception:
                     pass
     return env
+
+
+def vec_args(text, start=0):
+    """The two expressions inside the first mm2px(Vec( ... )) at or after `start`.
+    Split on the top-level comma with balanced parens -- a naive [^)]+ truncates
+    hp(2) to "hp(2" the moment positions are written on the grid."""
+    m = re.search(r"mm2px\(\s*Vec\(", text[start:])
+    if not m:
+        return None
+    i = start + m.end()
+    depth, j, comma = 1, i, -1
+    while j < len(text):
+        if text[j] == "(":
+            depth += 1
+        elif text[j] == ")":
+            depth -= 1
+            if depth == 0:
+                break
+        elif text[j] == "," and depth == 1:
+            comma = j
+        j += 1
+    if comma < 0 or depth != 0:
+        return None
+    return text[i:comma], text[comma + 1:j], j
 
 
 def loop_ranges(body, env, extra_defs):
@@ -121,11 +151,14 @@ def collect(body, env, extra_defs):
     env.update(extra_defs)
 
     # displays / custom children: box.pos + box.size in mm
-    for m in re.finditer(r"(\w+)->box\.pos\s*=\s*mm2px\(Vec\(([^,]+),([^)]+)\)\);\s*"
-                         r"\1->box\.size\s*=\s*mm2px\(Vec\(([^,]+),([^)]+)\)\);", body):
+    for m in re.finditer(r"(\w+)->box\.pos\s*=\s*(mm2px.*?);\s*\1->box\.size\s*=\s*(mm2px.*?);",
+                         body, re.S):
         try:
-            x, y = evaluate(m.group(2), env), evaluate(m.group(3), env)
-            w, h = evaluate(m.group(4), env), evaluate(m.group(5), env)
+            pv, sv = vec_args(m.group(2)), vec_args(m.group(3))
+            if not pv or not sv:
+                continue
+            x, y = evaluate(pv[0], env), evaluate(pv[1], env)
+            w, h = evaluate(sv[0], env), evaluate(sv[1], env)
             if w >= 20.0 and h >= 12.0:      # a thin text readout is not a screen
                 out.append(("screen", (x + w / 2) * MM, (y + h / 2) * MM, w * MM, h * MM))
         except Exception:
@@ -135,7 +168,7 @@ def collect(body, env, extra_defs):
 
     for call in re.finditer(r"(add(?:Param|Input|Output|Child))\((.*?)\);", body, re.S):
         text = call.group(2)
-        pos = re.search(r"mm2px\(Vec\(([^,]+),\s*([^)]+)\)\)", text)
+        pos = vec_args(text)
         comp = component(text)
         if not pos or not comp:
             continue
@@ -165,7 +198,7 @@ def collect(body, env, extra_defs):
                     except Exception:
                         pass
             try:
-                x, y = evaluate(pos.group(1), e), evaluate(pos.group(2), e)
+                x, y = evaluate(pos[0], e), evaluate(pos[1], e)
             except Exception:
                 break
             kind = "round" if any(r in comp for r in ROUND) else "flat"
@@ -229,7 +262,8 @@ def splice(path, old, elems, plates=()):
 # player actually sees. Stated in mm as (x, y, w, h) — design intent, so it lives
 # here rather than being inferred from control positions.
 PLATES = {
-    "chime": [(35.5, 63.5, 106.0, 41.0)],          # the eight note columns
+    "chime": [(hp(6.4), hp(11.6), hp(22.6), hp(6.8)),   # eight note columns, runs off the edge
+              (hp(16.6), hp(19.6), hp(12.4), hp(3.0))],  # the output cluster
     "crystal": [],
     "fill": [(117.0, 8.0, 43.0, 116.0)],           # swing + the three output columns
     "chance": [],
