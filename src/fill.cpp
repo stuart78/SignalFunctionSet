@@ -502,8 +502,8 @@ struct Fill : Module {
 		configSwitch(SYNC_PARAM, 0.f, 1.f, 1.f, "Sync fills to phrase", {"Free (russian roulette)", "Synced"});
 		configParam(EXTRAS_PARAM, 0.f, 8.f, 4.f, "Extra triggers (max engine-added notes per bar; 0 = variation off)");
 		getParamQuantity(EXTRAS_PARAM)->snapEnabled = true;
-		configInput(CLOCK_INPUT, "Clock (tempo reference; optional if BAR is patched)");
-		configInput(BAR_INPUT, "Bar");
+		configInput(CLOCK_INPUT, "Clock — steps fire on its edges (required)");
+		configInput(BAR_INPUT, "Bar (downbeat; also sets how many clocks make a bar)");
 		configInput(RESET_INPUT, "Reset");
 		configInput(RESEED_INPUT, "Reseed variation");
 		configInput(ACCUM_CV_INPUT, "Accumulate CV");
@@ -1254,28 +1254,28 @@ struct FillWidget : ModuleWidget {
 		// controls spread across the wider lower area.
 		FillDisplay* disp = new FillDisplay();
 		disp->module = module;
-		disp->box.pos = mm2px(Vec(25.4f, 11.f));
+		disp->box.pos = mm2px(Vec(4.f, 11.f));
 		disp->box.size = mm2px(Vec(104.f, 52.f));
 		addChild(disp);
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(14.f, 74.f)), module, Fill::ACCUM_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(36.f, 74.f)), module, Fill::DISCHARGE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(58.f, 74.f)), module, Fill::TIER_PARAM));
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(80.f, 74.f)), module, Fill::PHRASE_PARAM));
-		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(mm2px(Vec(100.f, 74.f)), module, Fill::SYNC_PARAM, Fill::SYNC_LIGHT));
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(120.f, 74.f)), module, Fill::SET_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.f, 74.f)), module, Fill::ACCUM_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(29.6f, 74.f)), module, Fill::DISCHARGE_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(47.2f, 74.f)), module, Fill::TIER_PARAM));
+		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(64.8f, 74.f)), module, Fill::PHRASE_PARAM));
+		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(mm2px(Vec(82.4f, 74.f)), module, Fill::SYNC_PARAM, Fill::SYNC_LIGHT));
+		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(100.f, 74.f)), module, Fill::SET_PARAM));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(14.f, 90.f)), module, Fill::ACCUM_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(36.f, 90.f)), module, Fill::DISCHARGE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(58.f, 90.f)), module, Fill::TIER_CV_INPUT));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(80.f, 90.f)), module, Fill::EXTRAS_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(100.f, 90.f)), module, Fill::EXTRAS_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(120.f, 90.f)), module, Fill::SET_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.f, 90.f)), module, Fill::ACCUM_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(29.6f, 90.f)), module, Fill::DISCHARGE_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(47.2f, 90.f)), module, Fill::TIER_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(64.8f, 90.f)), module, Fill::EXTRAS_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(82.4f, 90.f)), module, Fill::EXTRAS_CV_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(100.f, 90.f)), module, Fill::SET_CV_INPUT));
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(14.f, 108.f)), module, Fill::CLOCK_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(30.f, 108.f)), module, Fill::BAR_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(46.f, 108.f)), module, Fill::RESET_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(62.f, 108.f)), module, Fill::RESEED_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.f, 108.f)), module, Fill::CLOCK_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(28.f, 108.f)), module, Fill::BAR_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(44.f, 108.f)), module, Fill::RESET_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(60.f, 108.f)), module, Fill::RESEED_INPUT));
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(86.f, 102.f)), module, Fill::FILL_LIGHT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(86.f, 108.f)), module, Fill::FILL_OUTPUT));
 
@@ -1283,7 +1283,7 @@ struct FillWidget : ModuleWidget {
 		for (int c = 0; c < FILL_NCH; c++) {
 			float y = 14.f + c * 13.f;
 			// per-channel swing trimpot in the left margin, row-aligned with the outputs
-			addParam(createParamCentered<Trimpot>(mm2px(Vec(10.f, y)), module, Fill::SWING_PARAM + c));
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(123.f, y)), module, Fill::SWING_PARAM + c));
 			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(gateX, y)), module, Fill::GATE_OUTPUT + c));
 			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(velX, y)),  module, Fill::VEL_OUTPUT + c));
 			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(accX, y)),  module, Fill::ACC_OUTPUT + c));

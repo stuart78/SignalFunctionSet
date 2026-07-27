@@ -185,37 +185,36 @@ def group_range(svg, gid):
 
 
 def shapes(elems, indent="    "):
-    ui, screens = [], []
+    """All reticules, screens first so a control can never be hidden by one."""
+    out = []
     for k, cx, cy, w, h in elems:
         if k == "screen":
-            screens.append(f'{indent}<rect x="{cx-w/2:.2f}" y="{cy-h/2:.2f}" width="{w:.2f}" '
-                           f'height="{h:.2f}" rx="3" fill="{DISPLAY_BLUE}"/>')
-        elif k == "round":
-            ui.append(f'{indent}<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{w/2*SCALE:.2f}" '
-                      f'fill="none" stroke="{RETICULE}" stroke-width=".5"/>')
-        else:
-            ui.append(f'{indent}<rect x="{cx-w*SCALE/2:.2f}" y="{cy-h*SCALE/2:.2f}" '
-                      f'width="{w*SCALE:.2f}" height="{h*SCALE:.2f}" rx="{w*0.12:.2f}" '
-                      f'fill="none" stroke="{RETICULE}" stroke-width=".5"/>')
-    return ui, screens
+            out.append(f'{indent}<rect x="{cx-w/2:.2f}" y="{cy-h/2:.2f}" width="{w:.2f}" '
+                       f'height="{h:.2f}" rx="3" fill="{DISPLAY_BLUE}"/>')
+    for k, cx, cy, w, h in elems:
+        if k == "round":
+            out.append(f'{indent}<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{w/2*SCALE:.2f}" '
+                       f'fill="none" stroke="{RETICULE}" stroke-width=".5"/>')
+        elif k == "flat":
+            out.append(f'{indent}<rect x="{cx-w*SCALE/2:.2f}" y="{cy-h*SCALE/2:.2f}" '
+                       f'width="{w*SCALE:.2f}" height="{h*SCALE:.2f}" rx="{w*0.12:.2f}" '
+                       f'fill="none" stroke="{RETICULE}" stroke-width=".5"/>')
+    return out
 
 
 def splice(path, old, elems):
-    """Replace only the reticule layers of a panel that already has artwork."""
-    ui, screens = shapes(elems, "      ")
+    """Rewrite the single Reticules layer, leaving all other layers untouched."""
+    body = shapes(elems, "    ")
     out = old
+    r = group_range(out, "Screens")            # retire the old two-layer form
+    if r:
+        out = out[:r[0]] + out[r[3]:]
     r = group_range(out, "Reticules")
     if r:
-        out = out[:r[1]] + "\n" + "\n".join(ui) + "\n    " + out[r[2]:]
+        out = out[:r[1]] + "\n" + "\n".join(body) + "\n  " + out[r[2]:]
     else:
-        out = out.replace("</svg>", '  <g id="Reticules">\n' + "\n".join(ui) + "\n  </g>\n</svg>")
-    r = group_range(out, "Screens")
-    if r:
-        out = out[:r[1]] + "\n" + "\n".join(screens) + "\n    " + out[r[2]:]
-    elif screens:
-        m = re.search(r'<g id="Reticules"[^>]*>', out)
-        block = '  <g id="Screens">\n' + "\n".join(screens) + "\n  </g>\n"
-        out = out[:m.start()] + block + out[m.start():]
+        out = out.replace("</svg>", '  <g id="Reticules">\n' + "\n".join(body) + "\n  </g>\n</svg>")
+    out = re.sub(r"\n\s*\n", "\n", out)
     open(path, "w").write(out)
     return sum(1 for e in elems if e[0] != "screen"), sum(1 for e in elems if e[0] == "screen")
 

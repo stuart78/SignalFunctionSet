@@ -28,13 +28,14 @@ it looks in Rack. Full size, not 99%: nothing overlaps it.
 
 ## Layers
 
-The generator owns exactly two layers and never touches anything else:
+**One layer.** Everything the generator produces lives in `Reticules` — screens
+and controls together — so the whole guide can be shown or hidden with a single
+toggle. Screens are emitted first so a control is never buried under one.
 
 | Layer | Owner | Contents |
 |---|---|---|
 | `Background` | designer | the panel fill, base artwork |
-| `Screens` | **generator** | one filled rect per display |
-| `Reticules` | **generator** | one shape per control |
+| `Reticules` | **generator** | every screen and control guide |
 | `UI`, `Layer_*`, … | designer | labels, decoration, VCV's signal icons |
 
 Reticules deliberately do *not* live in `UI`: the VCV Illustrator template
