@@ -461,6 +461,8 @@ struct Fill : Module {
 	int   curRat[FILL_NCH][FILL_MAX_STEPS];        // per-step retrigger count (the format's `r` row)
 	float curPatSwing = 0.f;                        // the pattern's authored swing (format: 0..1, 1 = triplet feel)
 	int   curSteps = 16, curBars = 1, curSpb = 4, curStepsPerBar = 16;
+	int   curBeats = 4;                          // pulses per bar of the playing pattern
+	int   clockRes = 0;                          // 0 = measure; else clocks per beat
 	int   lastTierBias = 0;                         // tier is phrase-latched; offset changes break the latch
 	int   tierMode = 0;      // 0 = rise through the phrase, 1 = latch one tier per phrase
 	int   tierBalance = 1;   // 0 even thirds · 1 main-heavy · 2 slow build
@@ -562,6 +564,16 @@ struct Fill : Module {
 
 	const LibPattern* pat(int idx) { return (idx >= 0 && idx < (int)lib.pats.size()) ? &lib.pats[idx] : nullptr; }
 
+	// The clock rate per BEAT does not change when the pattern does; the number of
+	// beats in a bar does. Carrying the measured clocks-per-beat across a switch
+	// makes the first bar of a new meter correct, instead of mapping it against
+	// the old bar length until the next measurement lands.
+	void rescaleBarForMeter(int oldBeats) {
+		if (clockRes > 0) { clocksPerBar = clockRes * curBeats; return; }
+		if (oldBeats > 0 && curBeats != oldBeats && clocksPerBar > 0)
+			clocksPerBar = std::max(1, (int)std::lround((double)clocksPerBar * curBeats / oldBeats));
+	}
+
 	void copyPattern(const LibPattern& p) {
 		for (int c = 0; c < FILL_NCH; c++) for (int s = 0; s < FILL_MAX_STEPS; s++) {
 			curVel[c][s] = (s < p.steps) ? p.vel[c][s] : 0.f;
@@ -571,6 +583,7 @@ struct Fill : Module {
 			curRat[c][s] = (s < p.steps) ? p.rat[c][s] : 1;
 		}
 		curSteps = p.steps; curBars = std::max(1, p.bars); curSpb = std::max(1, p.spb);
+		curBeats = std::max(1, p.beats);
 		curStepsPerBar = std::max(1, curSteps / curBars);
 		curPatSwing = clamp(p.swing, 0.f, 1.f);
 	}
@@ -790,15 +803,19 @@ struct Fill : Module {
 			uint32_t fseed = reseedBase ^ (uint32_t)(barsSinceReset * 2654435761u);
 			const LibPattern* fp = set.fills.empty() ? nullptr
 			                     : pat(set.fills[fhash(reseedBase, barsSinceReset) % set.fills.size()]);
+			int prevBeats = curBeats;
 			if (fp && fhashF(fseed, 5) < 0.7f) { copyPattern(*fp); mutateFill(set.taste, fseed, pressure); }
 			else buildGeneratedFill(set.taste, pressure, pat(set.main));
+			rescaleBarForMeter(prevBeats);
 			fillActive = true; fillFlash = 1.f; barsSinceFill = 0;
 			float discharge = clamp(params[DISCHARGE_PARAM].getValue() + inputs[DISCHARGE_CV_INPUT].getVoltage() / 10.f, 0.f, 1.f);
 			pressure = clamp(pressure - discharge * pressure, 0.f, 1.f);
 		} else {
 			int idx = (curTier == 0) ? set.sparse : (curTier == 2) ? set.lift : set.main;
 			const LibPattern* p = pat(idx); if (!p) p = pat(set.main);
+			int prevBeats = curBeats;
 			if (p) copyPattern(*p);
+			rescaleBarForMeter(prevBeats);
 			// sets that only author a main groove get constructed outer tiers
 			if (p && set.vary > 0.f) {
 				uint32_t sid = strHash(set.id);
@@ -957,6 +974,7 @@ struct Fill : Module {
 	json_t* dataToJson() override {
 		json_t* root = json_object();
 		json_object_set_new(root, "setIdx", json_integer(curSet));
+		json_object_set_new(root, "clockRes", json_integer(clockRes));
 		json_object_set_new(root, "tierMode", json_integer(tierMode));
 		json_object_set_new(root, "tierBalance", json_integer(tierBalance));
 		json_object_set_new(root, "pulseWidthIdx", json_integer(pulseWidthIdx));
@@ -968,6 +986,7 @@ struct Fill : Module {
 		return root;
 	}
 	void dataFromJson(json_t* root) override {
+		if (json_t* j = json_object_get(root, "clockRes")) clockRes = clamp((int)json_integer_value(j), 0, 48);
 		if (json_t* j = json_object_get(root, "tierMode")) tierMode = clamp((int)json_integer_value(j), 0, 1);
 		if (json_t* j = json_object_get(root, "tierBalance")) tierBalance = clamp((int)json_integer_value(j), 0, 2);
 		if (json_t* j = json_object_get(root, "setIdx")) { curSet = pendingSet = clamp((int)json_integer_value(j), 0, std::max(0, (int)lib.sets.size() - 1)); }
@@ -1365,6 +1384,18 @@ struct FillWidget : ModuleWidget {
 	void appendContextMenu(Menu* menu) override {
 		Fill* module = dynamic_cast<Fill*>(this->module);
 		if (!module) return;
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuLabel("Clock"));
+		{
+			static const int RES[] = {0, 1, 2, 3, 4, 6, 8, 12, 16, 24};
+			std::vector<std::string> lbl = {"Measure from BAR"};
+			for (int i = 1; i < 10; i++) lbl.push_back(string::f("%d clocks per beat", RES[i]));
+			int sel = 0;
+			for (int i = 0; i < 10; i++) if (RES[i] == module->clockRes) sel = i;
+			menu->addChild(createIndexSubmenuItem("Clock resolution", lbl,
+				[=]() { return sel; },
+				[module](int i) { module->clockRes = RES[i]; }));
+		}
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Intensity"));
 		menu->addChild(createIndexPtrSubmenuItem("Tier follows",
