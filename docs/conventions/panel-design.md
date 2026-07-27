@@ -95,13 +95,27 @@ and the plugin's density suits them.
 Declared in `PLATES` in `tools/panel_reticules.py`, on the grid via `hp()`.
 Grouping is design intent, so it is stated rather than inferred.
 
-**A plate should extend past the grid** — run it off the edge of the panel rather
-than stopping neatly at the outermost control. A plate that hugs its contents
-reads as a box; one that bleeds reads as a region.
+**A plate should extend about a cell past its outermost control** — enough to
+read as a region rather than a box, but not so far that it runs the width of the
+panel and stops meaning anything.
 
 Outputs belong on a plate. Leave a row between a plate and a screen so the two
 read as separate objects, and remember any label inside a plate needs `ON_PLATE`
 ink or it will be dark-on-dark.
+
+## Two things that bite
+
+**A screen's internal columns must land on the controls beneath them.** A display
+that divides its own width into N columns puts centre *c* at `x + (c+0.5)·w/N`,
+which will not coincide with controls on the grid unless the box is chosen for
+it. For N columns on a 2-cell pitch starting at `hp(a)`, the display must be
+`hp(a-1)` wide `hp(2N)` — Chime's eight columns at hp(8)…hp(22) need a display
+at hp(7), 16 cells wide.
+
+**Add the label layer before any component.** Children draw in insertion order,
+so a `PanelLabels` added last paints its connecting hairlines *over* the knobs
+and jacks they join. Add it immediately after `setPanel` and populate it
+afterwards — the items are read at draw time, not at insertion.
 
 ## Generating
 

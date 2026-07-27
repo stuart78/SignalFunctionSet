@@ -609,19 +609,24 @@ struct ChimeWidget : ModuleWidget {
 		// jack needs no label of its own.
 		const float potX = hp(2), cvX = hp(4);
 
+		// Added before any component so the connecting hairlines draw underneath
+		// them rather than across their faces.
 		sfs::PanelLabels* lbl = new sfs::PanelLabels();
 		lbl->box.size = box.size;
+		addChild(lbl);
 		lbl->title(hp(1), hp(1.6f), "CHIME");
 
 		ChimeDisplay* disp = new ChimeDisplay();
 		disp->module = module;
-		disp->box.pos  = mm2px(Vec(hp(6), hp(2)));
-		disp->box.size = mm2px(Vec(hp(18), hp(9)));
+		// 16 cells wide starting at hp(7) puts the display's eight internal columns
+		// exactly over the eight control columns at hp(8), hp(10) ... hp(22).
+		disp->box.pos  = mm2px(Vec(hp(7), hp(2)));
+		disp->box.size = mm2px(Vec(hp(16), hp(9)));
 		addChild(disp);
 
 		ChimeKeyReadout* key = new ChimeKeyReadout();
 		key->module = module;
-		key->box.pos  = mm2px(Vec(hp(6), hp(1.1f)));
+		key->box.pos  = mm2px(Vec(hp(7), hp(1.1f)));
 		key->box.size = mm2px(Vec(hp(12), hp(1.2f)));
 		addChild(key);
 
@@ -668,9 +673,9 @@ struct ChimeWidget : ModuleWidget {
 			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, hp(15))), module, Chime::LFO_OUTPUT + c));
 			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, hp(17))), module, Chime::AUDIO_OUTPUT + c));
 		}
-		lbl->add(hp(7), hp(13), "SWING", sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
-		lbl->add(hp(7), hp(15), "LFO", sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
-		lbl->add(hp(7), hp(17), "AUDIO", sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
+		lbl->add(hp(7.1f), hp(13), "SWING", sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
+		lbl->add(hp(7.1f), hp(15), "LFO",   sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
+		lbl->add(hp(7.1f), hp(17), "AUDIO", sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
 
 		// ── bottom: excitation on the faceplate, outs on their own plate ────────
 		addParam(createParamCentered<ChimeExciteSlider>(mm2px(Vec(hp(10), hp(21))), module, Chime::EXCITE_PARAM));
@@ -686,7 +691,6 @@ struct ChimeWidget : ModuleWidget {
 		lbl->jackOnPlate(hp(20), hp(21), "GATE");
 		lbl->add(hp(24), hp(21) - sfs::LABEL_GAP_JACK, "MIX L / R", sfs::PanelLabels::ON_PLATE);
 
-		addChild(lbl);
 	}
 };
 

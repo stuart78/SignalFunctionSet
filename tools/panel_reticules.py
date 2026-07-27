@@ -262,8 +262,10 @@ def splice(path, old, elems, plates=()):
 # player actually sees. Stated in mm as (x, y, w, h) — design intent, so it lives
 # here rather than being inferred from control positions.
 PLATES = {
-    "chime": [(hp(6.4), hp(11.6), hp(22.6), hp(6.8)),   # eight note columns, runs off the edge
-              (hp(16.6), hp(19.6), hp(12.4), hp(3.0))],  # the output cluster
+    # A plate bleeds about a cell past its outermost control -- enough to read as
+    # a region rather than a box, without running the width of the panel.
+    "chime": [(hp(5.2), hp(11.7), hp(18.4), hp(6.6)),    # the eight note columns
+              (hp(16.8), hp(19.7), hp(9.4), hp(2.7))],   # the output cluster
     "crystal": [],
     "fill": [(117.0, 8.0, 43.0, 116.0)],           # swing + the three output columns
     "chance": [],
