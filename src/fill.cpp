@@ -1,5 +1,6 @@
 #include "plugin.hpp"
 #include "pulse-width.hpp"
+#include "drum-taste.hpp"
 #include <osdialog.h>
 #include <algorithm>
 #include <cctype>
@@ -44,6 +45,7 @@ struct LibSet {
 	std::vector<int> fills;
 	float bpm = 120.f;
 	float vary = 0.4f;                         // identity strength: how far the variation layer may bend this set
+	sfs::Taste taste;                          // how this style ornaments (see drum-taste.hpp)
 	int   axis = 0;                            // browser axis (AX_GENRE / AX_REGION / AX_USER)
 };
 
@@ -146,6 +148,17 @@ static void loadLibrary(const std::string& path, Library& lib, int forceAxis = -
 						for (size_t k = 0; k < fn; k++) { int idx = idOf(json_string_value(json_array_get(fj, k))); if (idx >= 0) s.fills.push_back(idx); }
 					} else if (json_is_string(fj)) { int idx = idOf(json_string_value(fj)); if (idx >= 0) s.fills.push_back(idx); }
 				}
+			}
+			{
+				std::string sub;
+				if (s.id.compare(0, s.family.size(), s.family) == 0
+				    && s.id.size() > s.family.size() + 1 && s.id[s.family.size()] == '.') {
+					sub = s.id.substr(s.family.size() + 1);
+					size_t dot = sub.find('.');
+					if (dot != std::string::npos) sub = sub.substr(0, dot);
+				}
+				s.taste = sfs::tasteFor(s.family, sub);
+				if (!json_object_get(sj, "vary")) s.vary = s.taste.vary;   // research default
 			}
 			bool dupId = false;                       // duplicate set ids break favorites (matched by id)
 			for (const LibSet& ex : lib.sets) if (ex.id == s.id) { dupId = true; break; }
@@ -562,7 +575,7 @@ struct Fill : Module {
 	// Typed generated fill, built ON the groove's own grid so odd meters and
 	// triplet grids keep their length. Four flavours — roll, stutter, drop,
 	// cascade — chosen and shaped by a per-fill seed, sized by pressure.
-	void buildGeneratedFill(float S, const LibPattern* base) {
+	void buildGeneratedFill(const sfs::Taste& taste, float S, const LibPattern* base) {
 		if (base) copyPattern(*base);
 		else {
 			for (int c = 0; c < FILL_NCH; c++) for (int s = 0; s < FILL_MAX_STEPS; s++) { curVel[c][s] = 0.f; curAcc[c][s] = false; curGen[c][s] = true; curProb[c][s] = 1.f; curRat[c][s] = 1; }
@@ -578,7 +591,16 @@ struct Fill : Module {
 			for (int c = 1; c < FILL_NCH; c++)
 				for (int st = start; st < barEnd; st++) { curVel[c][st] = 0.f; curAcc[c][st] = false; curRat[c][st] = 1; }
 		};
-		switch (fhash(seed, 17) % 4u) {
+		// Pick only from the shapes this style actually plays. A tom cascade is a
+		// rock and disco idiom that breaks the frame in MENA, Afro-Cuban, reggae,
+		// jazz and funk; a stutter tail reads as electronic almost everywhere else;
+		// and drop/silence is wrong in processional and dance-functional styles
+		// where the groove is not allowed to stop.
+		int allowed[4], nAllowed = 0;
+		static const sfs::FillShape MAP[4] = {sfs::F_ROLL, sfs::F_STUTTER, sfs::F_DROP, sfs::F_CASCADE};
+		for (int i = 0; i < 4; i++) if (sfs::allows(taste, MAP[i])) allowed[nAllowed++] = i;
+		if (!nAllowed) { allowed[nAllowed++] = 0; }                 // a roll is the safe default
+		switch (allowed[fhash(seed, 17) % (uint32_t)nAllowed]) {
 			case 0: {                                               // ROLL — accelerating run into the downbeat
 				clearTail();
 				for (int i = 0; i < len; i++) {
@@ -627,21 +649,29 @@ struct Fill : Module {
 		}
 	}
 
-	// Seeded per-fill mutation so a single authored fill doesn't play identically
-	// every phrase: ratchets, velocity jitter, occasional extra colour hit.
-	void mutateFill(uint32_t seed, float S) {
-		for (int c = 1; c < FILL_NCH; c++)                          // kick untouched
+	// Seeded per-fill mutation so one authored fill doesn't play identically every
+	// phrase. Ratchets go ONLY on the lane the style ratchets: trap and drill on
+	// the closed hat, crunk on the snare, footwork on the KICK. A blanket "ratchet
+	// anything but the kick" gets all three wrong, and gives every other style far
+	// more retriggers than it should ever have.
+	void mutateFill(const sfs::Taste& taste, uint32_t seed, float S) {
+		for (int c = 0; c < FILL_NCH; c++) {
+			if (sfs::frozen(taste, c)) continue;
 			for (int st = 0; st < curSteps; st++) {
 				if (curVel[c][st] > 0.f) {
-					if (curRat[c][st] == 1 && fhashF(seed, c * 977 + st * 13) < 0.15f * (0.5f + S)) {
-						curRat[c][st] = 2 + (int)(fhash(seed, c * 31 + st) % 2u);
+					bool canRatchet = (c == taste.ratchetLane) && taste.ratchet > 0.01f;
+					if (canRatchet && curRat[c][st] == 1
+					    && fhashF(seed, c * 977 + st * 13) < taste.ratchet * (0.35f + 0.65f * S)) {
+						curRat[c][st] = 2 + (int)(fhash(seed, c * 31 + st) % (taste.ratchet > 0.6f ? 3u : 2u));
 						curGen[c][st] = true;
 					}
-					curVel[c][st] = clamp(curVel[c][st] * (0.9f + 0.25f * fhashF(seed, c * 511 + st)), 0.15f, 1.f);
-				} else if ((c == 4 || c == 5 || c == 6) && fhashF(seed, c * 313 + st * 7) < 0.08f * (0.5f + S)) {
-					curVel[c][st] = 0.4f; curGen[c][st] = true;     // extra colour hit
+					curVel[c][st] = clamp(curVel[c][st] * (0.92f + 0.2f * fhashF(seed, c * 511 + st)), 0.15f, 1.f);
+				} else if ((taste.addedLanes & sfs::laneBit(c))
+				           && fhashF(seed, c * 313 + st * 7) < 0.06f * taste.added * (0.5f + S)) {
+					curVel[c][st] = 0.4f; curGen[c][st] = true;
 				}
 			}
+		}
 	}
 
 	// Constructed tiers for sets that only author a main groove (user imports, GM
@@ -681,22 +711,30 @@ struct Fill : Module {
 	// (identity strength): motorik at 0.1 stays nearly incorruptible, funk at 0.7
 	// breathes. Seeded by phrase position (form, not jitter); the kick lane is never
 	// touched. Engine additions are flagged in curGen so the display can show them.
-	void applyVariation(float vary) {
-		// EXTRAS is a HARD CEILING on engine-added notes (per bar; 0 = variation off).
+	// Added notes follow the style's taste: only the lanes that style actually
+	// ornaments, never a frozen one, and never the kick unless the style says so
+	// (in funk and trap the kick pattern IS the hook).
+	void applyVariation(const sfs::Taste& taste, float vary) {
 		int maxExtra = clamp((int)std::round(params[EXTRAS_PARAM].getValue() + inputs[EXTRAS_CV_INPUT].getVoltage() / 10.f * 8.f), 0, 8)
 		               * std::max(1, curBars);
-		if (maxExtra <= 0) return;
-		float intensity = pressure * clamp(vary, 0.f, 1.f);
-		uint32_t s = reseedBase ^ (uint32_t)((barsSinceReset) * 2654435761u) ^ ((uint32_t)curTier << 20);
+		if (maxExtra <= 0 || taste.added <= 0.f) return;
+		float intensity = pressure * clamp(vary, 0.f, 1.f) * taste.added;
+		uint32_t sd = reseedBase ^ (uint32_t)(barsSinceReset * 2654435761u) ^ ((uint32_t)curTier << 20);
 		int added = 0;
 		for (int st = 0; st < curSteps && added < maxExtra; st++) {
-			if (curVel[2][st] == 0.f && fhashF(s, st * 7 + 2) < intensity * 0.25f) { curVel[2][st] = 0.4f;  curGen[2][st] = true; if (++added >= maxExtra) break; }
-			if (curVel[1][st] == 0.f && (st % 4) && fhashF(s, st * 7 + 1) < intensity * 0.12f) { curVel[1][st] = 0.35f; curGen[1][st] = true; if (++added >= maxExtra) break; }
-			if (curVel[5][st] == 0.f && fhashF(s, st * 7 + 5) < intensity * 0.10f) { curVel[5][st] = 0.45f; curGen[5][st] = true; ++added; }
+			for (int c = 0; c < FILL_NCH && added < maxExtra; c++) {
+				if (!(taste.addedLanes & sfs::laneBit(c))) continue;   // not this style's business
+				if (sfs::frozen(taste, c)) continue;                   // timeline: never touched
+				if (curVel[c][st] > 0.f) continue;
+				float p = intensity * ((c == sfs::L_CHH) ? 0.22f : (c == sfs::L_SNARE) ? 0.12f : 0.14f);
+				if (fhashF(sd, c * 977 + st * 13) >= p) continue;
+				curVel[c][st] = (c == sfs::L_SNARE) ? 0.35f : 0.45f;   // added snares are ghosts
+				curGen[c][st] = true;
+				added++;
+			}
 		}
 	}
 
-	// Decide the cycle's content from pressure + the active set.
 	void resolveCycle() {
 		if (lib.sets.empty()) { curSteps = 16; curBars = 1; curStepsPerBar = 16; fillActive = false;
 			for (int c = 0; c < FILL_NCH; c++) for (int s = 0; s < FILL_MAX_STEPS; s++) curVel[c][s] = 0.f; return; }
@@ -732,8 +770,8 @@ struct Fill : Module {
 			uint32_t fseed = reseedBase ^ (uint32_t)(barsSinceReset * 2654435761u);
 			const LibPattern* fp = set.fills.empty() ? nullptr
 			                     : pat(set.fills[fhash(reseedBase, barsSinceReset) % set.fills.size()]);
-			if (fp && fhashF(fseed, 5) < 0.7f) { copyPattern(*fp); mutateFill(fseed, pressure); }
-			else buildGeneratedFill(pressure, pat(set.main));
+			if (fp && fhashF(fseed, 5) < 0.7f) { copyPattern(*fp); mutateFill(set.taste, fseed, pressure); }
+			else buildGeneratedFill(set.taste, pressure, pat(set.main));
 			fillActive = true; fillFlash = 1.f; barsSinceFill = 0;
 			float discharge = clamp(params[DISCHARGE_PARAM].getValue() + inputs[DISCHARGE_CV_INPUT].getVoltage() / 10.f, 0.f, 1.f);
 			pressure = clamp(pressure - discharge * pressure, 0.f, 1.f);
@@ -747,7 +785,7 @@ struct Fill : Module {
 				if (curTier == 0 && set.sparse == set.main) deriveSparse(sid, set.vary);
 				if (curTier == 2 && set.lift == set.main) deriveLift(sid, set.vary);
 			}
-			applyVariation(set.vary);
+			applyVariation(set.taste, set.vary);
 			fillActive = false;
 		}
 	}
