@@ -422,6 +422,7 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 	// nearly touching it. The display already drew them this way; the tracer did not.
 	float Rg = 1e-4f;
 	for (auto& b : g.bodies) for (auto& v : b.verts) Rg = std::max(Rg, len3(v));
+	int escaped = 0;                             // traced points that left the crystal
 	V3 L[CR_NL];
 	for (int i = 0; i < CR_NL; i++) L[i] = speakerPos(i) * (Rg * sizeM);
 
@@ -474,6 +475,14 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 			if (pv) {
 				ts.pathSecs = std::max(ts.pathSecs, pv->cum[pv->n - 1] / C_AIR);
 				for (int k = 0; k < pv->n; k++) pv->pt[k] = pv->pt[k] * (1.f / std::max(sizeM, 1e-6f));
+				// Every traced point must lie on the union's boundary. Counting the
+				// ones that do not says whether the escaping dots are a tracing bug
+				// or a drawing bug, which guessing has not settled.
+				for (int k = 1; k < pv->n; k++) {
+					bool in = false;
+					for (auto& bb : g.bodies) if (bb.contains(pv->pt[k], 1e-3f)) { in = true; break; }
+					if (!in) escaped++;
+				}
 			}
 		}
 
@@ -546,7 +555,8 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 			ts.earlyGain = std::max(ts.earlyGain, std::max(std::sqrt(sum[li]), 1.f));
 		}
 
-		// trapped pockets: spread across the arrival range so their periods differ
+
+	// trapped pockets: spread across the arrival range so their periods differ
 		{
 			std::sort(ev.begin(), ev.end(),
 			          [](const Ev& a, const Ev& b) { return a.t < b.t; });
@@ -580,6 +590,7 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 		avg += ts.fdnDelay[i] / (float)CR_FDN;
 	}
 	ts.fdnFb = clamp(std::pow(10.f, -3.f * (avg / sr) / t60), 0.f, 0.985f);
+	if (escaped) WARN("Crystal: %d of the traced path points lie outside the crystal", escaped);
 	ts.ready = true;
 }
 
@@ -666,6 +677,7 @@ struct Crystal : Module {
 	int   shimmer = 0;
 	bool  panelDraw = false;     // draw straight onto the faceplate, no dark screen
 	bool  solidFaces = true;     // near faces veil the far ones, so depth reads
+	float viewZoom = 1.f;        // display only
 	float psPhase[CR_NE][CR_LOOPS] = {};
 	// Random gives each pocket its own interval, held rather than re-rolled, so the
 	// repeats climb away as a chord instead of a scramble.
@@ -845,6 +857,7 @@ struct Crystal : Module {
 		json_object_set_new(r, "shimmer", json_integer(shimmer));
 		json_object_set_new(r, "panelDraw", json_boolean(panelDraw));
 		json_object_set_new(r, "solidFaces", json_boolean(solidFaces));
+		json_object_set_new(r, "viewZoom", json_real(viewZoom));
 		json_object_set_new(r, "pingAlternate", json_boolean(pingAlternate));
 		json_t* pk = json_array();
 		for (int e = 0; e < CR_NE; e++)
@@ -861,6 +874,7 @@ struct Crystal : Module {
 		if (json_t* j = json_object_get(r, "shimmer")) shimmer = (int)json_integer_value(j);
 		if (json_t* j = json_object_get(r, "panelDraw")) panelDraw = json_boolean_value(j);
 		if (json_t* j = json_object_get(r, "solidFaces")) solidFaces = json_boolean_value(j);
+		if (json_t* j = json_object_get(r, "viewZoom")) viewZoom = clamp((float)json_number_value(j), 0.35f, 4.f);
 		if (json_t* j = json_object_get(r, "pingAlternate")) pingAlternate = json_boolean_value(j);
 		if (json_t* pk = json_object_get(r, "shimmerPicks"))
 			for (int e = 0, i = 0; e < CR_NE; e++)
@@ -1465,7 +1479,7 @@ struct CrystalDisplay : Widget {
 		// the camera's pitch and the display is far wider than it is tall, so the
 		// speakers and the rim have room either side even when the crystal is large.
 		viewR = R;
-		float scale = box.size.y * 0.36f / R;
+		float scale = box.size.y * 0.36f / R * (module ? module->viewZoom : 1.f);
 
 		// The floor the speakers stand on. Without it the four cones float in the
 		// void and there is no way to read which way the crystal has been turned.
@@ -1487,9 +1501,9 @@ struct CrystalDisplay : Widget {
 				nvgStrokeWidth(vg, wdt); nvgStroke(vg);
 			};
 			for (int i = 1; i <= 5; i++) ring(i * RC / 5.f, i == 5 ? 0.22f : 0.09f, i == 5 ? 0.7f : 0.5f);
-			for (int k = 0; k < 12; k++) {                     // spokes, brighter on the speakers
-				float a = k * 30.f * (float)M_PI / 180.f;
-				bool onSpeaker = (k % 3) == 1;                 // 30/120/210/300 vs the 45 deg ring
+			for (int k = 0; k < 16; k++) {                     // 22.5 deg: 45 is a multiple
+				float a = k * 22.5f * (float)M_PI / 180.f;     // of it, so a speaker lands on
+				bool onSpeaker = (k % 2) == 1;                 // every other spoke
 				Vec p0 = project(cam(V3()), scale);
 				Vec p1 = project(cam(V3(std::cos(a) * RC * R, fy, std::sin(a) * RC * R)), scale);
 				nvgBeginPath(vg); nvgMoveTo(vg, p0.x, p0.y); nvgLineTo(vg, p1.x, p1.y);
@@ -1795,10 +1809,35 @@ struct CrystalDisplay : Widget {
 			}
 		}
 		nvgRestore(vg);
+
+		for (int i = 0; i < 2; i++) {                  // zoom out / in
+			Rect r = zoomRect(i);
+			nvgBeginPath(vg);
+			nvgRoundedRect(vg, r.pos.x, r.pos.y, r.size.x, r.size.y, 2.5f);
+			nvgFillColor(vg, lite ? nvgRGBA(0, 0, 0, 18) : nvgRGBA(255, 255, 255, 16));
+			nvgFill(vg);
+			nvgStrokeColor(vg, cGrid(0.5f)); nvgStrokeWidth(vg, 0.8f); nvgStroke(vg);
+			float cx = r.pos.x + r.size.x / 2, cy = r.pos.y + r.size.y / 2, a = 3.5f;
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, cx - a, cy); nvgLineTo(vg, cx + a, cy);
+			if (i) { nvgMoveTo(vg, cx, cy - a); nvgLineTo(vg, cx, cy + a); }
+			nvgStrokeColor(vg, cDim()); nvgStrokeWidth(vg, 1.3f); nvgStroke(vg);
+		}
 	}
 
+	// bottom-right corner: [-] [+]
+	Rect zoomRect(int i) const {
+		float sz = 13.f, pad = 5.f;
+		return Rect(Vec(box.size.x - pad - (2 - i) * (sz + 3.f), box.size.y - pad - sz), Vec(sz, sz));
+	}
 	void onButton(const event::Button& e) override {
 		if (module && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+			for (int i = 0; i < 2; i++)
+				if (zoomRect(i).contains(e.pos)) {
+					module->viewZoom = clamp(module->viewZoom * (i ? 1.25f : 0.8f), 0.35f, 4.f);
+					e.consume(this);
+					return;
+				}
 			dragEmitter = (e.mods & GLFW_MOD_SHIFT) != 0;      // shift-drag moves an emitter
 			dragB = (e.mods & GLFW_MOD_ALT) != 0;             // ...alt picks emitter B
 			dragging = true; spinY = spinX = 0.f;
