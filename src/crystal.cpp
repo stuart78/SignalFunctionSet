@@ -1174,6 +1174,14 @@ struct CrystalDisplay : Widget {
 	struct Poly { std::vector<V3> v; std::vector<char> edge; V3 n; };
 	std::vector<Poly> polys;
 	std::vector<std::pair<V3, V3>> wire;
+	// A strike is an EVENT. Deriving its flash from where the pulse sits along the
+	// path made it last a fraction of a segment — about 12ms, less than a frame,
+	// so it was usually never drawn at all. Trigger once when the pulse crosses a
+	// corner and decay in real time instead.
+	std::vector<float> glow;
+	struct Strike { V3 p, n; float a; };
+	Strike strikes[CR_NPULSE] = {};
+	int lastSeg[CR_NPULSE] = {};
 	int polysMat = -1;
 	// In a cluster the crystals intergrow, so a face or an edge can lie buried
 	// inside a neighbour where it is simply not visible. Painter's order cannot
@@ -1255,6 +1263,7 @@ struct CrystalDisplay : Widget {
 	}
 	void buildPolys(const Geom& g) {
 		polys.clear();
+		glow.clear();
 		wire.clear();
 		for (size_t bi = 0; bi < g.bodies.size(); bi++) {
 			const Body& b = g.bodies[bi];
@@ -1354,6 +1363,7 @@ struct CrystalDisplay : Widget {
 						}
 					}
 					polys.push_back({piece, flag, f.n});
+					glow.push_back(0.f);
 				}
 			}
 		}
@@ -1404,6 +1414,10 @@ struct CrystalDisplay : Widget {
 
 	// spin on after the mouse is released, decaying like a flicked object
 	void step() override {
+		float k = (1.f / 60.f) / 0.28f;                 // a strike glows for ~0.3s
+		for (auto& q : glow) q = std::max(0.f, q - k);
+		for (auto& q : strikes) q.a = std::max(0.f, q.a - k);
+
 		// A gentle, never-repeating drift when at rest — two slow incommensurate
 		// oscillators, so it wanders rather than cycles. Kept local to the display
 		// so it never touches (or dirties) the saved rotation params.
@@ -1538,6 +1552,12 @@ struct CrystalDisplay : Widget {
 				                          bg.g * 0.86f + wf.g * 0.14f,
 				                          bg.b * 0.86f + wf.b * 0.14f, 0.60f));
 				nvgFill(vg);
+				if (i < glow.size() && glow[i] > 0.01f) {      // struck a moment ago
+					nvgFillColor(vg, nvgRGBAf(0.98f, 0.70f, 0.28f, 0.55f * glow[i]));
+					nvgFill(vg);
+					nvgStrokeColor(vg, nvgRGBAf(1.f, 0.84f, 0.45f, 0.9f * glow[i]));
+					nvgStrokeWidth(vg, 1.6f); nvgStroke(vg);
+				}
 				// Two weights: the crystal's own edges, and the seams where one
 				// individual grows through another. The seams are real features of
 				// an intergrowth and worth seeing — just not at the same weight as
@@ -1572,7 +1592,7 @@ struct CrystalDisplay : Widget {
 				// follow the real audio timing (including DELAY mode's stretch), and
 				// only slow it further when the crystal is too small to watch
 				float realSecs = std::max(ts.pathSecs * ts.timeScale, 1e-5f);
-				float stretch = std::max(1.f, 0.9f / realSecs) * ts.timeScale;
+				float stretch = std::max(1.f, 2.6f / realSecs) * ts.timeScale;   // legible, not real-time
 				for (int pi = 0; pi < ts.nPaths; pi++) {
 					const PathViz& pv = ts.path[pi];
 					if (pv.n < 2) continue;
@@ -1609,67 +1629,24 @@ struct CrystalDisplay : Widget {
 						nvgStrokeColor(vg, nvgRGBAf(0.92f, 0.4f, 0.18f, 0.25f * lvl));
 						nvgStrokeWidth(vg, 0.8f); nvgStroke(vg);
 
-						// This is the whole mechanism: every wall strike sheds an
-						// echo toward each speaker standing on the outside of the
-						// face it hit, weighted by how squarely the face points at
-						// it. Drawn for a moment after the pulse passes a corner.
-						if (seg > 0) {
-							// Window relative to ONE segment. Against the whole path
-							// it was longer than the gap between bounces, so the wash
-							// never went out — always on at low alpha reads as
-							// nothing at all, rather than as a strike.
-							float win = 0.35f * span;
-							float since = travelled - pv.cum[seg];
-							if (since < win) {
-								float a = (1.f - since / win) * std::max(lvl, 0.35f);
-								V3 hitO = mul3(hi, pv.pt[seg]), hitN = mul3(hi, pv.nrm[seg]);
-								Vec hp = project(obj(hitO), scale);
-
-								// the wall itself lights up: find the face this
-								// strike landed on and wash it briefly
-								// The plane the strike landed on, taken from the
-								// geometry itself rather than back-computed from a
-								// carved piece's first vertex.
-								float bestErr = 1e9f; V3 bn; float bd = 0.f;
-								for (auto& bd2 : g.bodies)
-									for (auto& f2 : bd2.faces) {
-										if (dot3(f2.n, hitN) < 0.9f) continue;
-										float er = std::fabs(dot3(f2.n, hitO) - f2.d);
-										if (er < bestErr) { bestErr = er; bn = f2.n; bd = f2.d; }
-									}
-								for (size_t fj = 0; bestErr < 0.15f && fj < polys.size(); fj++) {
-									if (dot3(polys[fj].n, bn) < 0.999f) continue;
-									if (std::fabs(dot3(polys[fj].n, polys[fj].v[0]) - bd) > 1e-3f) continue;
-									nvgBeginPath(vg);
-									for (size_t k = 0; k < polys[fj].v.size(); k++) {
-										Vec q2 = project(obj(polys[fj].v[k]), scale);
-										if (k == 0) nvgMoveTo(vg, q2.x, q2.y);
-										else        nvgLineTo(vg, q2.x, q2.y);
-									}
-									nvgClosePath(vg);
-									nvgFillColor(vg, nvgRGBAf(0.98f, 0.72f, 0.30f, 0.55f * a));
-									nvgFill(vg);
-									nvgStrokeColor(vg, nvgRGBAf(1.f, 0.82f, 0.45f, 0.9f * a));
-									nvgStrokeWidth(vg, 1.4f); nvgStroke(vg);
+						// Fires once, when the pulse crosses a corner.
+						if (seg > 0 && seg != lastSeg[u]) {
+							V3 hitO = mul3(hi, pv.pt[seg]), hitN = mul3(hi, pv.nrm[seg]);
+							strikes[u] = {hitO, hitN, 1.f};
+							float bestErr = 1e9f; V3 bn; float bd = 0.f;
+							for (auto& bd2 : g.bodies)
+								for (auto& f2 : bd2.faces) {
+									if (dot3(f2.n, hitN) < 0.9f) continue;
+									float er = std::fabs(dot3(f2.n, hitO) - f2.d);
+									if (er < bestErr) { bestErr = er; bn = f2.n; bd = f2.d; }
 								}
-
-								nvgBeginPath(vg); nvgCircle(vg, hp.x, hp.y, 1.5f + 5.f * a);
-								nvgStrokeColor(vg, nvgRGBAf(0.95f, 0.72f, 0.3f, 0.55f * a));
-								nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
-								for (int li = 0; li < CR_NL; li++) {
-									V3 sp = speakerPos(li) * R;
-									V3 hw = obj(hitO);               // the strike, where it is now
-									float f = dot3(norm3(cam(sp) - hw), obj(hitN));
-									if (f <= 0.f) continue;          // behind the face
-									Vec se = project(cam(sp), scale);
-									nvgBeginPath(vg);
-									nvgMoveTo(vg, hp.x, hp.y); nvgLineTo(vg, se.x, se.y);
-									nvgStrokeColor(vg, nvgRGBAf(0.95f, 0.6f, 0.22f,
-									                            0.5f * a * f * f * f));
-									nvgStrokeWidth(vg, 0.8f); nvgStroke(vg);
-								}
-							}
+							if (bestErr < 0.15f)
+								for (size_t fj = 0; fj < polys.size() && fj < glow.size(); fj++)
+									if (dot3(polys[fj].n, bn) > 0.999f
+									    && std::fabs(dot3(polys[fj].n, polys[fj].v[0]) - bd) < 1e-3f)
+										glow[fj] = 1.f;
 						}
+						lastSeg[u] = seg;
 					}
 				}
 			}
@@ -1687,19 +1664,6 @@ struct CrystalDisplay : Widget {
 				nvgStrokeColor(vg, nvgRGBAf(0.92f, 0.4f, 0.18f, 0.7f * flash));
 				nvgStrokeWidth(vg, 1.2f); nvgStroke(vg);
 			}
-			// Heading arrow: which way this emitter travels under X/Y CV. Nothing to
-			// say when nothing is patched to move it, so it is just clutter then.
-			bool nav = module && (module->inputs[e ? Crystal::BX_INPUT : Crystal::AX_INPUT].isConnected()
-			                   || module->inputs[e ? Crystal::BY_INPUT : Crystal::AY_INPUT].isConnected());
-			if (nav) {
-				float hd = module->params[e ? Crystal::HEAD_B_PARAM : Crystal::HEAD_A_PARAM].getValue();
-				float aa = az[e] + std::cos(hd) * 0.16f, ee = clamp(el[e] + std::sin(hd) * 0.16f, -1.5f, 1.5f);
-				V3 d2 = norm3(V3(std::cos(aa) * std::cos(ee), std::sin(aa) * std::cos(ee), std::sin(ee)));
-				Vec q = project(obj(d2 * g.surfaceDist(d2)), scale);
-				nvgBeginPath(vg); nvgMoveTo(vg, pe.x, pe.y); nvgLineTo(vg, q.x, q.y);
-				nvgStrokeColor(vg, nvgRGBAf(col.r, col.g, col.b, 0.8f)); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
-				nvgBeginPath(vg); nvgCircle(vg, q.x, q.y, 1.3f); nvgFillColor(vg, col); nvgFill(vg);
-			}
 			nvgBeginPath(vg); nvgCircle(vg, pe.x, pe.y, 3.f);
 			nvgFillColor(vg, col); nvgFill(vg);
 			if (font) {
@@ -1707,6 +1671,30 @@ struct CrystalDisplay : Widget {
 				nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 				nvgFillColor(vg, col);
 				nvgText(vg, pe.x, pe.y - 8.f, e ? "B" : "A", NULL);
+			}
+		}
+
+		// Each strike sheds an echo toward every speaker on the outside of the face
+		// it hit, weighted by how squarely that face points at it — the same
+		// facing^3 the DSP uses. Drawn from the stored strike, not from where the
+		// pulse happens to be this frame.
+		if (live) {
+			for (auto& st : strikes) {
+				if (st.a <= 0.01f) continue;
+				Vec hp = project(obj(st.p), scale);
+				nvgBeginPath(vg); nvgCircle(vg, hp.x, hp.y, 1.5f + 6.f * st.a);
+				nvgStrokeColor(vg, nvgRGBAf(0.98f, 0.76f, 0.34f, 0.7f * st.a));
+				nvgStrokeWidth(vg, 1.2f); nvgStroke(vg);
+				V3 hw = obj(st.p), hn2 = obj(st.n);
+				for (int li = 0; li < CR_NL; li++) {
+					V3 sp = cam(speakerPos(li) * R);
+					float f2 = dot3(norm3(sp - hw), hn2);
+					if (f2 <= 0.f) continue;
+					Vec se = project(cam(speakerPos(li) * R), scale);
+					nvgBeginPath(vg); nvgMoveTo(vg, hp.x, hp.y); nvgLineTo(vg, se.x, se.y);
+					nvgStrokeColor(vg, nvgRGBAf(0.97f, 0.62f, 0.24f, 0.55f * st.a * f2 * f2 * f2));
+					nvgStrokeWidth(vg, 0.9f); nvgStroke(vg);
+				}
 			}
 		}
 
