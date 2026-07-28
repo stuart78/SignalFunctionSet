@@ -1162,9 +1162,17 @@ struct CrystalDisplay : Widget {
 	// In a cluster the crystals intergrow, so a face or an edge can lie buried
 	// inside a neighbour where it is simply not visible. Painter's order cannot
 	// sort those out — they have to be dropped. Static per habit, so done once.
-	static bool buried(const Geom& g, size_t self, const V3& p) {
-		for (size_t i = 0; i < g.bodies.size(); i++)
-			if (i != self && g.bodies[i].contains(p, -1e-3f)) return true;
+	// A convex body contains a segment or a polygon exactly when it contains every
+	// one of its corners — so test them all against ONE body. Testing a midpoint
+	// instead drops faces that are mostly in plain view, which is what made walls
+	// go missing.
+	static bool buried(const Geom& g, size_t self, const std::vector<V3>& pts) {
+		for (size_t i = 0; i < g.bodies.size(); i++) {
+			if (i == self) continue;
+			bool all = true;
+			for (auto& p : pts) if (!g.bodies[i].contains(p, -1e-3f)) { all = false; break; }
+			if (all) return true;
+		}
 		return false;
 	}
 	void buildPolys(const Geom& g) {
@@ -1174,11 +1182,11 @@ struct CrystalDisplay : Widget {
 			const Body& b = g.bodies[bi];
 			for (auto& e : b.edges) {
 				V3 p0 = b.verts[e.first], p1 = b.verts[e.second];
-				if (buried(g, bi, (p0 + p1) * 0.5f)) continue;
+				if (buried(g, bi, {p0, p1})) continue;
 				wire.push_back({p0, p1});
 			}
 			for (auto& f : b.faces) {
-				float eps = 1e-3f * std::max(1.f, std::fabs(f.d));
+				float eps = 2e-4f * std::max(1.f, std::fabs(f.d));
 				std::vector<V3> on;
 				for (auto& v : b.verts) {
 					if (std::fabs(dot3(f.n, v) - f.d) > eps) continue;
@@ -1190,12 +1198,15 @@ struct CrystalDisplay : Widget {
 				V3 c;
 				for (auto& v : on) c = c + v;
 				c = c * (1.f / (float)on.size());
-				V3 u = norm3(on[0] - c), w = cross3(f.n, u);
+				size_t seed = 0;                       // a corner at the centroid gives
+				for (size_t q = 0; q < on.size(); q++) // no basis to wind about
+					if (len3(on[q] - c) > len3(on[seed] - c)) seed = q;
+				V3 u = norm3(on[seed] - c), w = cross3(f.n, u);
 				std::sort(on.begin(), on.end(), [&](const V3& a, const V3& bb) {
 					return std::atan2(dot3(a - c, w), dot3(a - c, u))
 					     < std::atan2(dot3(bb - c, w), dot3(bb - c, u));
 				});
-				if (buried(g, bi, c)) continue;
+				if (buried(g, bi, on)) continue;
 				polys.push_back({on, f.n});
 			}
 		}
@@ -1341,8 +1352,8 @@ struct CrystalDisplay : Widget {
 			Vec pa = project(a, scale), pb = project(b, scale);
 			float t = clamp(0.5f - 0.5f * (0.5f * (a.z + b.z) / R), 0.f, 1.f);
 			nvgBeginPath(vg); nvgMoveTo(vg, pa.x, pa.y); nvgLineTo(vg, pb.x, pb.y);
-			nvgStrokeColor(vg, cWire(solid ? 0.16f : (live ? (0.28f + 0.62f * t) : 0.35f)));
-			nvgStrokeWidth(vg, solid ? 0.6f : (0.7f + 0.8f * t)); nvgStroke(vg);
+			nvgStrokeColor(vg, cWire(solid ? 0.15f : (live ? (0.28f + 0.62f * t) : 0.35f)));
+			nvgStrokeWidth(vg, solid ? 0.9f : (0.7f + 0.8f * t)); nvgStroke(vg);
 		}
 
 		if (solid) {
@@ -1373,10 +1384,15 @@ struct CrystalDisplay : Widget {
 					if (k == 0) nvgMoveTo(vg, pts[i][k].x, pts[i][k].y);
 					else        nvgLineTo(vg, pts[i][k].x, pts[i][k].y);
 				nvgClosePath(vg);
-				nvgFillColor(vg, nvgRGBAf(bg.r, bg.g, bg.b, 0.82f)); nvgFill(vg);
-				float t = clamp(0.5f - 0.5f * (zc[i] / R), 0.f, 1.f);
-				nvgStrokeColor(vg, cWire(live ? (0.34f + 0.6f * t) : 0.45f));
-				nvgStrokeWidth(vg, 0.7f + 0.8f * t); nvgStroke(vg);
+				// 60% fill, tinted a little toward the wire so it reads as glass
+				// rather than a hole, and one line weight throughout
+				NVGcolor wf = cWire(1.f);
+				nvgFillColor(vg, nvgRGBAf(bg.r * 0.86f + wf.r * 0.14f,
+				                          bg.g * 0.86f + wf.g * 0.14f,
+				                          bg.b * 0.86f + wf.b * 0.14f, 0.60f));
+				nvgFill(vg);
+				nvgStrokeColor(vg, cWire(live ? 0.85f : 0.5f));
+				nvgStrokeWidth(vg, 0.9f); nvgStroke(vg);
 			}
 		}
 
