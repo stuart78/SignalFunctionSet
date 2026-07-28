@@ -103,6 +103,11 @@ static inline M3 axisRot(int axis, float t) {
 	return r;
 }
 // repeated small rotations drift off the orthogonal manifold; pull them back
+static inline M3 transp(const M3& a) {
+	M3 r;
+	for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) r.m[i * 3 + j] = a.m[j * 3 + i];
+	return r;
+}
 static inline void orthonormalize(M3& a) {
 	V3 x(a.m[0], a.m[3], a.m[6]), y(a.m[1], a.m[4], a.m[7]);
 	x = norm3(x);
@@ -364,6 +369,10 @@ struct TapSet {
 	PathViz path[CR_NPATH];
 	int   nPaths = 0;
 	float pathSecs = 0.f;            // longest path, in real seconds
+	// The heading the crystal had when this was traced. The points and normals
+	// below are in THAT frame; by the time they are drawn the crystal has turned
+	// further, so the display has to undo it or nothing lines up.
+	M3 head;
 	int   n[CR_NE][CR_NL] = {};
 	int   delay[CR_NE][CR_NL][CR_TAPS] = {};
 	float gain[CR_NE][CR_NL][CR_TAPS] = {};
@@ -415,6 +424,7 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 	for (int i = 0; i < CR_NL; i++) L[i] = speakerPos(i) * (Rg * sizeM);
 
 	for (int em = 0; em < CR_NE; em++) {
+		ts.head = head;
 		V3 ed = norm3(mul3(head, emitDir[em]));   // rides with the crystal
 		V3 emit = ed * (sc.surfaceDist(ed) * 0.97f);
 
@@ -1548,6 +1558,7 @@ struct CrystalDisplay : Widget {
 		if (live && module) {
 			const TapSet& ts = module->sets[module->active.load()];
 			if (ts.ready && ts.nPaths > 0) {
+				M3 hi = transp(ts.head);       // undo the heading it was traced at
 				float now = module->vizTime.load();
 				// follow the real audio timing (including DELAY mode's stretch), and
 				// only slow it further when the crystal is too small to watch
@@ -1558,7 +1569,7 @@ struct CrystalDisplay : Widget {
 					if (pv.n < 2) continue;
 					nvgBeginPath(vg);                                  // the path itself, faint
 					for (int k = 0; k < pv.n; k++) {
-						Vec q = project(cam(pv.pt[k]), scale);   // room coordinates, camera only
+						Vec q = project(obj(mul3(hi, pv.pt[k])), scale);   // glued to the crystal
 						if (k == 0) nvgMoveTo(vg, q.x, q.y); else nvgLineTo(vg, q.x, q.y);
 					}
 					bool eB = pv.emitter != 0;
@@ -1579,7 +1590,7 @@ struct CrystalDisplay : Widget {
 						float span = std::max(pv.cum[seg + 1] - pv.cum[seg], 1e-6f);
 						float f = clamp((travelled - pv.cum[seg]) / span, 0.f, 1.f);
 						V3 p3 = pv.pt[seg] + (pv.pt[seg + 1] - pv.pt[seg]) * f;
-						Vec q = project(cam(p3), scale);
+						Vec q = project(obj(mul3(hi, p3)), scale);
 						float lvl = module->pulseLvl[u].load() * (1.f - age / total);
 						float rr = 1.6f + 2.6f * lvl;
 						nvgBeginPath(vg); nvgCircle(vg, q.x, q.y, rr);
@@ -1598,15 +1609,15 @@ struct CrystalDisplay : Widget {
 							            / std::max(pv.cum[pv.n - 1], 1e-6f);
 							if (since < 0.05f) {
 								float a = (1.f - since / 0.05f) * lvl;
-								Vec hp = project(cam(pv.pt[seg]), scale);
+								V3 hitO = mul3(hi, pv.pt[seg]), hitN = mul3(hi, pv.nrm[seg]);
+								Vec hp = project(obj(hitO), scale);
 
 								// the wall itself lights up: find the face this
 								// strike landed on and wash it briefly
 								for (size_t fj = 0; fj < polys.size(); fj++) {
-									V3 pn = mul3(head, polys[fj].n);
-									if (dot3(pn, pv.nrm[seg]) < 0.999f) continue;
+									if (dot3(polys[fj].n, hitN) < 0.995f) continue;
 									float pd = dot3(polys[fj].n, polys[fj].v[0]);
-									if (std::fabs(dot3(pn, pv.pt[seg]) - pd) > 0.02f) continue;
+									if (std::fabs(dot3(polys[fj].n, hitO) - pd) > 0.05f) continue;
 									nvgBeginPath(vg);
 									for (size_t k = 0; k < polys[fj].v.size(); k++) {
 										Vec q2 = project(obj(polys[fj].v[k]), scale);
@@ -1623,7 +1634,8 @@ struct CrystalDisplay : Widget {
 								nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
 								for (int li = 0; li < CR_NL; li++) {
 									V3 sp = speakerPos(li) * R;
-									float f = dot3(norm3(sp - pv.pt[seg]), pv.nrm[seg]);
+									V3 hw = obj(hitO);               // the strike, where it is now
+									float f = dot3(norm3(cam(sp) - hw), obj(hitN));
 									if (f <= 0.f) continue;          // behind the face
 									Vec se = project(cam(sp), scale);
 									nvgBeginPath(vg);
