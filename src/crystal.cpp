@@ -1166,6 +1166,68 @@ struct CrystalDisplay : Widget {
 	// one of its corners — so test them all against ONE body. Testing a midpoint
 	// instead drops faces that are mostly in plain view, which is what made walls
 	// go missing.
+	// Keep the part of a convex polygon on one side of a plane (Sutherland-Hodgman).
+	static std::vector<V3> clipPoly(const std::vector<V3>& p, const V3& n, float d, bool outside) {
+		std::vector<V3> out;
+		size_t m = p.size();
+		auto sd = [&](const V3& x) { float v = dot3(n, x) - d; return outside ? -v : v; };
+		for (size_t i = 0; i < m; i++) {
+			const V3& a = p[i];
+			const V3& b = p[(i + 1) % m];
+			float sa = sd(a), sb = sd(b);
+			if (sa <= 0.f) out.push_back(a);
+			if ((sa <= 0.f) != (sb <= 0.f)) {
+				float t = sa / (sa - sb);
+				out.push_back(a + (b - a) * t);
+			}
+		}
+		return out;
+	}
+	// The visible part of a face is the face minus every other body's interior.
+	// That is not convex, so it is decomposed: for each plane of the blocking body,
+	// the part OUTSIDE that plane is convex and certainly visible, and whatever is
+	// still inside carries on to the next plane. What survives every plane is
+	// inside the body, and is dropped. Pieces never overlap, so painter's order
+	// works on them — no polygon straddles an intersection any more.
+	static void carve(const Geom& g, size_t self, std::vector<std::vector<V3>>& work) {
+		for (size_t oi = 0; oi < g.bodies.size() && work.size() < 256; oi++) {
+			if (oi == self) continue;
+			std::vector<std::vector<V3>> next;
+			for (auto& piece : work) {
+				std::vector<V3> cur = piece;
+				for (auto& pl : g.bodies[oi].faces) {
+					if (cur.size() < 3) break;
+					float mn = 1e30f, mx = -1e30f;
+					for (auto& v : cur) {
+						float sv = dot3(pl.n, v) - pl.d;
+						mn = std::min(mn, sv); mx = std::max(mx, sv);
+					}
+					// A face lying ON this plane satisfies both <=0 and >=0, so a
+					// naive split emits it whole AND carries it on — the same area
+					// twice. Decide the degenerate cases before clipping.
+					if (mn >= -1e-5f) { next.push_back(cur); cur.clear(); break; }  // all outside
+					if (mx <= 1e-5f) continue;                                      // all inside
+					std::vector<V3> vis = clipPoly(cur, pl.n, pl.d, true);
+					if (vis.size() >= 3) next.push_back(vis);
+					cur = clipPoly(cur, pl.n, pl.d, false);
+				}
+			}
+			work.swap(next);
+		}
+	}
+	// A segment meets a convex body over one interval; return it if there is one.
+	static bool segCut(const Body& b, const V3& p0, const V3& p1, float& t0, float& t1) {
+		t0 = 0.f; t1 = 1.f;
+		V3 dv = p1 - p0;
+		for (auto& f : b.faces) {
+			float da = dot3(f.n, p0) - f.d, dd = dot3(f.n, dv);
+			if (std::fabs(dd) < 1e-9f) { if (da > -1e-5f) return false; continue; }   // on the face = not inside
+			float t = -da / dd;
+			if (dd > 0.f) t1 = std::min(t1, t); else t0 = std::max(t0, t);
+			if (t0 >= t1) return false;
+		}
+		return true;
+	}
 	static bool buried(const Geom& g, size_t self, const std::vector<V3>& pts) {
 		for (size_t i = 0; i < g.bodies.size(); i++) {
 			if (i == self) continue;
@@ -1182,8 +1244,23 @@ struct CrystalDisplay : Widget {
 			const Body& b = g.bodies[bi];
 			for (auto& e : b.edges) {
 				V3 p0 = b.verts[e.first], p1 = b.verts[e.second];
-				if (buried(g, bi, {p0, p1})) continue;
-				wire.push_back({p0, p1});
+				std::vector<std::pair<float, float>> vis = {{0.f, 1.f}};
+				for (size_t oi = 0; oi < g.bodies.size(); oi++) {
+					if (oi == bi) continue;
+					std::vector<std::pair<float, float>> nx;
+					for (auto& sp : vis) {
+						float c0, c1;
+						V3 a = p0 + (p1 - p0) * sp.first, b2 = p0 + (p1 - p0) * sp.second;
+						if (!segCut(g.bodies[oi], a, b2, c0, c1)) { nx.push_back(sp); continue; }
+						float w = sp.second - sp.first;
+						if (c0 > 1e-3f) nx.push_back({sp.first, sp.first + c0 * w});
+						if (c1 < 1.f - 1e-3f) nx.push_back({sp.first + c1 * w, sp.second});
+					}
+					vis.swap(nx);
+				}
+				for (auto& sp : vis)
+					if (sp.second - sp.first > 1e-3f)
+						wire.push_back({p0 + (p1 - p0) * sp.first, p0 + (p1 - p0) * sp.second});
 			}
 			for (auto& f : b.faces) {
 				float eps = 2e-4f * std::max(1.f, std::fabs(f.d));
@@ -1202,12 +1279,46 @@ struct CrystalDisplay : Widget {
 				for (size_t q = 0; q < on.size(); q++) // no basis to wind about
 					if (len3(on[q] - c) > len3(on[seed] - c)) seed = q;
 				V3 u = norm3(on[seed] - c), w = cross3(f.n, u);
-				std::sort(on.begin(), on.end(), [&](const V3& a, const V3& bb) {
-					return std::atan2(dot3(a - c, w), dot3(a - c, u))
-					     < std::atan2(dot3(bb - c, w), dot3(bb - c, u));
+
+				// Every face of a convex body is a convex polygon, so its convex
+				// hull IS the face. Taking the hull rather than trusting an angular
+				// sort drops any point that crept in from a nearly parallel plane,
+				// collapses near-duplicates, and cannot produce the bow-tie that
+				// shows up as a sharp spike at a termination.
+				std::vector<Vec> uv(on.size());
+				for (size_t q = 0; q < on.size(); q++)
+					uv[q] = Vec(dot3(on[q] - c, u), dot3(on[q] - c, w));
+				float ext = 0.f;
+				for (auto& q : uv) ext = std::max(ext, std::max(std::fabs(q.x), std::fabs(q.y)));
+				float tol = 1e-4f * std::max(ext, 1e-4f) * std::max(ext, 1e-4f);
+				std::vector<size_t> ord(on.size());
+				for (size_t q = 0; q < ord.size(); q++) ord[q] = q;
+				std::sort(ord.begin(), ord.end(), [&](size_t a, size_t b) {
+					return uv[a].x != uv[b].x ? uv[a].x < uv[b].x : uv[a].y < uv[b].y;
 				});
-				if (buried(g, bi, on)) continue;
-				polys.push_back({on, f.n});
+				auto crs = [&](size_t a, size_t b, size_t d) {
+					return (uv[b].x - uv[a].x) * (uv[d].y - uv[a].y)
+					     - (uv[b].y - uv[a].y) * (uv[d].x - uv[a].x);
+				};
+				std::vector<size_t> hull;
+				for (int pass = 0; pass < 2; pass++) {          // lower then upper
+					size_t start = hull.size();
+					for (size_t t = 0; t < ord.size(); t++) {
+						size_t q = pass ? ord[ord.size() - 1 - t] : ord[t];
+						while (hull.size() >= start + 2
+						       && crs(hull[hull.size() - 2], hull[hull.size() - 1], q) <= tol)
+							hull.pop_back();
+						hull.push_back(q);
+					}
+					hull.pop_back();
+				}
+				if (hull.size() < 3) continue;
+				std::vector<V3> poly;
+				for (size_t q : hull) poly.push_back(on[q]);
+				on.swap(poly);
+				std::vector<std::vector<V3>> work = {on};
+				carve(g, bi, work);
+				for (auto& piece : work) polys.push_back({piece, f.n});
 			}
 		}
 	}
