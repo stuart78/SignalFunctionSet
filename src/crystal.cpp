@@ -1333,7 +1333,7 @@ struct CrystalDisplay : Widget {
 				std::vector<std::vector<V3>> work = {on};
 				carve(g, bi, work);
 				for (auto& piece : work) {
-					std::vector<char> flag(piece.size(), 0);
+					std::vector<char> flag(piece.size(), 0);   // 0 none, 1 edge, 2 seam
 					for (size_t q = 0; q < piece.size(); q++) {
 						V3 m = (piece[q] + piece[(q + 1) % piece.size()]) * 0.5f;
 						for (size_t j = 0; j < on.size() && !flag[q]; j++) {
@@ -1342,6 +1342,14 @@ struct CrystalDisplay : Widget {
 							if (L2 < 1e-12f) continue;
 							float t = clamp(dot3(m - a, ab) / L2, 0.f, 1.f);
 							if (len3(m - (a + ab * t)) < 1e-3f) flag[q] = 1;
+						}
+						if (flag[q]) continue;
+						// a seam only where the cut lies on a neighbour's SURFACE
+						for (size_t oi = 0; oi < g.bodies.size() && !flag[q]; oi++) {
+							if (oi == bi) continue;
+							if (!g.bodies[oi].contains(m, 1e-3f)) continue;   // not on this body
+							for (auto& pl : g.bodies[oi].faces)
+								if (std::fabs(dot3(pl.n, m) - pl.d) < 1e-3f) { flag[q] = 2; break; }
 						}
 					}
 					polys.push_back({piece, flag, f.n});
@@ -1537,7 +1545,7 @@ struct CrystalDisplay : Widget {
 					nvgBeginPath(vg);
 					bool any = false;
 					for (size_t k = 0; k < pts[i].size(); k++) {
-						if ((bool)polys[i].edge[k] != (pass == 0)) continue;
+						if (polys[i].edge[k] != (pass == 0 ? 1 : 2)) continue;
 						const Vec& a = pts[i][k];
 						const Vec& b2 = pts[i][(k + 1) % pts[i].size()];
 						nvgMoveTo(vg, a.x, a.y); nvgLineTo(vg, b2.x, b2.y);
@@ -1605,19 +1613,23 @@ struct CrystalDisplay : Widget {
 						// face it hit, weighted by how squarely the face points at
 						// it. Drawn for a moment after the pulse passes a corner.
 						if (seg > 0) {
-							float since = (travelled - pv.cum[seg])
-							            / std::max(pv.cum[pv.n - 1], 1e-6f);
-							if (since < 0.05f) {
-								float a = (1.f - since / 0.05f) * lvl;
+							// Window relative to ONE segment. Against the whole path
+							// it was longer than the gap between bounces, so the wash
+							// never went out — always on at low alpha reads as
+							// nothing at all, rather than as a strike.
+							float win = 0.35f * span;
+							float since = travelled - pv.cum[seg];
+							if (since < win) {
+								float a = (1.f - since / win) * std::max(lvl, 0.35f);
 								V3 hitO = mul3(hi, pv.pt[seg]), hitN = mul3(hi, pv.nrm[seg]);
 								Vec hp = project(obj(hitO), scale);
 
 								// the wall itself lights up: find the face this
 								// strike landed on and wash it briefly
 								for (size_t fj = 0; fj < polys.size(); fj++) {
-									if (dot3(polys[fj].n, hitN) < 0.995f) continue;
+									if (dot3(polys[fj].n, hitN) < 0.98f) continue;
 									float pd = dot3(polys[fj].n, polys[fj].v[0]);
-									if (std::fabs(dot3(polys[fj].n, hitO) - pd) > 0.05f) continue;
+									if (std::fabs(dot3(polys[fj].n, hitO) - pd) > 0.12f) continue;
 									nvgBeginPath(vg);
 									for (size_t k = 0; k < polys[fj].v.size(); k++) {
 										Vec q2 = project(obj(polys[fj].v[k]), scale);
@@ -1625,8 +1637,10 @@ struct CrystalDisplay : Widget {
 										else        nvgLineTo(vg, q2.x, q2.y);
 									}
 									nvgClosePath(vg);
-									nvgFillColor(vg, nvgRGBAf(0.95f, 0.72f, 0.35f, 0.20f * a));
+									nvgFillColor(vg, nvgRGBAf(0.98f, 0.72f, 0.30f, 0.55f * a));
 									nvgFill(vg);
+									nvgStrokeColor(vg, nvgRGBAf(1.f, 0.82f, 0.45f, 0.9f * a));
+									nvgStrokeWidth(vg, 1.4f); nvgStroke(vg);
 								}
 
 								nvgBeginPath(vg); nvgCircle(vg, hp.x, hp.y, 1.5f + 5.f * a);
