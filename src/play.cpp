@@ -316,13 +316,35 @@ static bool parseDecentSampler(const std::string& path, Instrument& inst) {
 
 // A .dsbundle is a folder holding a .dspreset (+ a Samples/ folder). Return the
 // path of the first .dspreset inside `dir` (searched one level deep), or "".
-static std::string findDspresetIn(const std::string& dir) {
+static std::string findDspresetIn(const std::string& dir, int depth = 2);
+
+// A .dslibrary is a ZIP of a .dspreset plus its samples. Rack's unarchiver is
+// the only one reachable from a plugin (libarchive's own symbols are not
+// exported), and whether it accepts zip is not something the plugin can ask —
+// so try, and say something useful if it will not.
+static std::string unpackDslibrary(const std::string& path) {
+	std::string dir = asset::user("SignalFunctionSet/dslibrary/" + system::getStem(path));
+	if (!findDspresetIn(dir).empty()) return dir;               // already unpacked
+	try {
+		system::createDirectories(dir);
+		system::unarchiveToDirectory(path, dir);
+	} catch (Exception& e) {
+		WARN("Play: could not unpack \"%s\": %s", path.c_str(), e.what());
+		WARN("Play: a .dslibrary is a zip archive — unzip it yourself and load the folder instead.");
+		return "";
+	}
+	return findDspresetIn(dir).empty() ? "" : dir;
+}
+
+static std::string findDspresetIn(const std::string& dir, int depth) {
+	if (!system::isDirectory(dir)) return "";
 	for (const std::string& e : system::getEntries(dir)) {
 		if (string::lowercase(system::getExtension(e)) == ".dspreset") return e;
 	}
-	for (const std::string& e : system::getEntries(dir)) {   // fall back: one subdir deep
+	if (depth <= 0) return "";
+	for (const std::string& e : system::getEntries(dir)) {   // then look further in
 		if (system::isDirectory(e)) {
-			std::string p = findDspresetIn(e);
+			std::string p = findDspresetIn(e, depth - 1);
 			if (!p.empty()) return p;
 		}
 	}
@@ -452,21 +474,34 @@ struct Play : Module {
 		loaderCancel = false; loaderRun = false;
 	}
 
-	void startLoader(int idx) {
+	// Loads EVERY region that is not loaded yet, across all instruments. It used
+	// to take a single instrument index, and since every structural change joins
+	// (which cancels) the loader first, loading a second instrument abandoned the
+	// first one's remaining regions for good — they stayed silent forever. Worse
+	// on patch load, where instruments are added in a loop, so all but the last
+	// were cancelled part-way. Scanning for unloaded regions makes a cancel a
+	// pause rather than an abort.
+	void startLoader() {
+		int tot = 0;
+		for (auto& in : instruments)
+			for (auto& r : in.regions) if (!r.loaded) tot++;
+		if (tot == 0) return;
 		loadDone = 0;
-		loadTotal = (int)instruments[idx].regions.size();
+		loadTotal = tot;
 		loaderRun = true;
-		loader = std::thread([this, idx]() {
-			Instrument& in = instruments[idx];
+		loader = std::thread([this]() {
 			int failed = 0;
-			for (auto& r : in.regions) {
-				if (loaderCancel) break;
-				loadRegionAudio(r, in.dir);
-				if (!r.loaded && ++failed <= 8)
-					WARN("Play: could not load sample \"%s\"", system::join(in.dir, r.sample).c_str());
-				loadDone++;
+			for (auto& in : instruments) {
+				for (auto& r : in.regions) {
+					if (loaderCancel) { loaderRun = false; return; }
+					if (r.loaded) continue;
+					loadRegionAudio(r, in.dir);
+					if (!r.loaded && ++failed <= 8)
+						WARN("Play: could not load sample \"%s\"", system::join(in.dir, r.sample).c_str());
+					loadDone++;
+				}
 			}
-			if (failed) WARN("Play: %d/%d samples failed to load in \"%s\"", failed, (int)in.regions.size(), in.name.c_str());
+			if (failed) WARN("Play: %d samples failed to load", failed);
 			loaderRun = false;
 		});
 	}
@@ -642,7 +677,7 @@ struct Play : Module {
 		dispCount = cnt;
 	}
 
-	void loadInstrument(const std::string& path) {
+	void loadInstrument(const std::string& path, bool startNow = true) {
 		joinLoader();                         // no structural change while the loader holds a reference
 		suspended = true;
 		for (auto& v : voices) v.active = false;
@@ -651,8 +686,13 @@ struct Play : Module {
 		// A .dsbundle is a folder holding a .dspreset + samples — find the preset
 		// inside and load that; sample paths resolve relative to the bundle.
 		std::string presetPath = path;
-		bool bundle = (ext == ".dsbundle") || system::isDirectory(path);
-		if (bundle) presetPath = findDspresetIn(path);
+		std::string root = path;                  // where samples resolve from
+		if (ext == ".dslibrary") {
+			root = unpackDslibrary(path);
+			if (root.empty()) { suspended = false; startLoader(); refreshDisplay(); return; }
+		}
+		bool bundle = (ext == ".dsbundle") || (ext == ".dslibrary") || system::isDirectory(root);
+		if (bundle) presetPath = findDspresetIn(root);
 		std::string pext = string::lowercase(system::getExtension(presetPath));
 		bool ok = !presetPath.empty()
 			&& ((pext == ".dspreset") ? parseDecentSampler(presetPath, in) : parseSfz(presetPath, in));
@@ -661,10 +701,11 @@ struct Play : Module {
 			if (bundle) in.name = system::getStem(path);
 			instruments.push_back(std::move(in));
 			suspended = false;                    // regions are still unloaded, so still silent
-			startLoader((int)instruments.size() - 1);
+			if (startNow) startLoader();
 		} else {
 			WARN("Play: failed to parse \"%s\"", path.c_str());
 			suspended = false;
+			startLoader();                    // a failed load must not strand the others
 		}
 		refreshDisplay();
 	}
@@ -675,6 +716,7 @@ struct Play : Module {
 		for (auto& v : voices) v.active = false;
 		instruments.erase(instruments.begin() + idx);
 		suspended = false;
+		startLoader();                        // anything still unloaded carries on
 		refreshDisplay();
 	}
 
@@ -705,7 +747,10 @@ struct Play : Module {
 		joinLoader();
 		instruments.clear();
 		size_t n = json_array_size(arr);
-		for (size_t i = 0; i < n; i++) { json_t* p = json_array_get(arr, i); if (p) loadInstrument(json_string_value(p)); }
+		// hold the loader off until every instrument is in place, then load them
+		// all in one pass — starting per instrument cancels the previous one
+		for (size_t i = 0; i < n; i++) { json_t* p = json_array_get(arr, i); if (p) loadInstrument(json_string_value(p), false); }
+		startLoader();
 	}
 };
 
@@ -916,8 +961,8 @@ struct PlayWidget : ModuleWidget {
 		Play* m = dynamic_cast<Play*>(module);
 		if (!m) return;
 		menu->addChild(new MenuSeparator);
-		menu->addChild(createMenuItem("Load instrument (.sfz / .dspreset / .dsbundle)…", "", [m]() {
-			char* p = osdialog_file(OSDIALOG_OPEN, NULL, NULL, osdialog_filters_parse("Instrument:sfz,dspreset,dsbundle"));
+		menu->addChild(createMenuItem("Load instrument (.sfz / .dspreset / .dsbundle / .dslibrary)…", "", [m]() {
+			char* p = osdialog_file(OSDIALOG_OPEN, NULL, NULL, osdialog_filters_parse("Instrument:sfz,dspreset,dsbundle,dslibrary"));
 			if (p) { m->loadInstrument(p); std::free(p); }
 		}));
 		// Fallback for when .dsbundle is a plain folder (not a registered package):
