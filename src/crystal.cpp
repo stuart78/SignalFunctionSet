@@ -37,6 +37,21 @@ static const int   CR_NE = 2;        // emitters (stereo in → quad out)
 static const int   CR_LOOPS = 6;     // resonant pockets a sound can get trapped in
 static const int   CR_LOOPBUF = 64000;
 
+// Repeat pitch. The pocket loops feed themselves through a shifter, so each pass
+// climbs (or falls) by this interval — the crystal answering itself a third up.
+struct Shim { const char* name; float ratio; };
+static const Shim CR_SHIMMER[] = {
+	{"Off",                        1.f},
+	{"Major third up (5:4 just)",  1.25f},                      // the original sound
+	{"Major third up",             1.259921f},                  // 2^(4/12)
+	{"Minor third up",             1.189207f},
+	{"Fifth up",                   1.498307f},
+	{"Octave up",                  2.f},
+	{"Major third down",           0.793701f},
+	{"Octave down",                0.5f},
+};
+static const int CR_NSHIM = (int)(sizeof(CR_SHIMMER) / sizeof(CR_SHIMMER[0]));
+
 // ── vector math ─────────────────────────────────────────────────────────────
 struct V3 {
 	float x = 0, y = 0, z = 0;
@@ -620,6 +635,12 @@ struct Crystal : Module {
 	int   loopWr[CR_NE][CR_LOOPS] = {};
 	float loopDelSm[CR_NE][CR_LOOPS] = {};      // glided, so a moving emitter never steps
 	float panSm[CR_NE][CR_LOOPS][CR_NL] = {};   // ramped pocket panning
+	// Repeat pitch: a real shifter in the pocket loop, so every pass round is
+	// transposed by the same interval and the repeats climb (or fall) away. This
+	// used to happen by accident, when the pocket delays glided toward a moving
+	// target; now it is deliberate and in tune.
+	int   shimmer = 0;
+	float psPhase[CR_NE][CR_LOOPS] = {};
 	float loopLp[CR_NE][CR_LOOPS] = {};
 	float fbDcX[CR_NE] = {}, fbDcY[CR_NE] = {};
 	// A one-pole lowpass inside a feedback loop has its highest gain at DC, and
@@ -783,6 +804,7 @@ struct Crystal : Module {
 		json_t* h = json_array();
 		for (int i = 0; i < 9; i++) json_array_append_new(h, json_real(headM.m[i]));
 		json_object_set_new(r, "heading", h);
+		json_object_set_new(r, "shimmer", json_integer(shimmer));
 		return r;
 	}
 	void dataFromJson(json_t* r) override {
@@ -791,6 +813,7 @@ struct Crystal : Module {
 				headM.m[i] = json_number_value(json_array_get(h, i));
 			orthonormalize(headM);
 		}
+		if (json_t* j = json_object_get(r, "shimmer")) shimmer = (int)json_integer_value(j);
 		dirty = true;
 	}
 
@@ -921,6 +944,7 @@ struct Crystal : Module {
 		// the transposition: gliding at 0.25 samples per sample reads the line at
 		// 1.25x, which is a major third — keep it to a few cents.
 		float loopDamp = clamp(1.f - params[DAMP_PARAM].getValue() * 1.5f, 0.06f, 0.95f);
+		float psRatio = CR_SHIMMER[clamp(shimmer, 0, CR_NSHIM - 1)].ratio;
 		const TapSet& AF = sets[active.load()];
 		float pocket[CR_NL] = {};
 		for (int e = 0; e < CR_NE; e++) {
@@ -929,11 +953,43 @@ struct Crystal : Module {
 			for (int k = 0; k < CR_LOOPS; k++) {
 				float tgt = A0ready ? (float)AF.loopDelay[e][k] : loopDelSm[e][k];
 				loopDelSm[e][k] += clamp(tgt - loopDelSm[e][k], -0.004f, 0.004f);
-				float d = clamp(loopDelSm[e][k], 4.f, (float)CR_LOOPBUF - 4.f);
-				int di = (int)d; float fr = d - di;
-				int i0 = loopWr[e][k] - di;      while (i0 < 0) i0 += CR_LOOPBUF;
-				int i1 = i0 - 1;                 while (i1 < 0) i1 += CR_LOOPBUF;
-				float r = loopBuf[e][k][i0] * (1.f - fr) + loopBuf[e][k][i1] * fr;
+				auto rdAt = [&](float dd) {
+					int di = (int)dd; float fr = dd - di;
+					int i0 = loopWr[e][k] - di;  while (i0 < 0) i0 += CR_LOOPBUF;
+					int i1 = i0 - 1;             while (i1 < 0) i1 += CR_LOOPBUF;
+					return loopBuf[e][k][i0] * (1.f - fr) + loopBuf[e][k][i1] * fr;
+				};
+				float r;
+				if (psRatio == 1.f) {
+					r = rdAt(clamp(loopDelSm[e][k], 4.f, (float)CR_LOOPBUF - 4.f));
+				} else {
+					// One head sweeping the delay, alone for most of the cycle. The
+					// sweep RATE is the transposition: read position is t - D(t), so
+					// a delay shrinking at (ratio-1) reads the line at `ratio`. At the
+					// wrap it crossfades briefly to a head one full window away, which
+					// is exactly where it is about to jump to.
+					//
+					// Two heads running together the whole time (the obvious form)
+					// puts them a fixed phase apart, and where that phase is pi they
+					// cancel the partial outright — measured 32 cents of centroid
+					// error against 4 cents for this.
+					const float W = 2400.f, XF = 0.15f;        // 50ms window, 15% overlap
+					float d0 = clamp(loopDelSm[e][k], 4.f, (float)CR_LOOPBUF - 2.f * W - 8.f);
+					float rr = psRatio - 1.f;
+					bool up = rr > 0.f;
+					psPhase[e][k] += std::fabs(rr) / W;
+					if (psPhase[e][k] >= 1.f) psPhase[e][k] -= 1.f;
+					float p = psPhase[e][k];
+					float dA = d0 + (up ? (1.f - p) : (1.f + p)) * W;
+					float dB = dA + (up ? W : -W);
+					float gA = 1.f, gB = 0.f;
+					if (p > 1.f - XF) {
+						float u = (p - (1.f - XF)) / XF;
+						gA = 0.5f * (1.f + std::cos((float)M_PI * u));
+						gB = 1.f - gA;
+					}
+					r = rdAt(dA) * gA + rdAt(dB) * gB;
+								}
 				loopLp[e][k] += (r - loopLp[e][k]) * loopDamp;
 				float lp = loopLp[e][k];
 				pkDcY[e][k] = lp - pkDcX[e][k] + 0.999f * pkDcY[e][k];
@@ -1460,6 +1516,20 @@ struct CrystalWidget : ModuleWidget {
 		lbl->add(117.f, 124.f, "QUAD A-D", 5.f);
 		lbl->add(71.f, 7.f, "drag to rotate · shift-drag emitter A · shift+alt for B", 5.f);
 		addChild(lbl);
+	}
+
+	void appendContextMenu(Menu* menu) override {
+		Crystal* m = dynamic_cast<Crystal*>(module);
+		if (!m) return;
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createIndexSubmenuItem("Repeat pitch",
+			[]() {
+				std::vector<std::string> n;
+				for (int i = 0; i < CR_NSHIM; i++) n.push_back(CR_SHIMMER[i].name);
+				return n;
+			}(),
+			[=]() { return clamp(m->shimmer, 0, CR_NSHIM - 1); },
+			[=](int i) { m->shimmer = clamp(i, 0, CR_NSHIM - 1); }));
 	}
 };
 
