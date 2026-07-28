@@ -653,6 +653,7 @@ struct Crystal : Module {
 	// target; now it is deliberate and in tune.
 	int   shimmer = 0;
 	bool  panelDraw = false;     // draw straight onto the faceplate, no dark screen
+	bool  solidFaces = true;     // near faces veil the far ones, so depth reads
 	float psPhase[CR_NE][CR_LOOPS] = {};
 	// Random gives each pocket its own interval, held rather than re-rolled, so the
 	// repeats climb away as a chord instead of a scramble.
@@ -831,6 +832,7 @@ struct Crystal : Module {
 		json_object_set_new(r, "heading", h);
 		json_object_set_new(r, "shimmer", json_integer(shimmer));
 		json_object_set_new(r, "panelDraw", json_boolean(panelDraw));
+		json_object_set_new(r, "solidFaces", json_boolean(solidFaces));
 		json_object_set_new(r, "pingAlternate", json_boolean(pingAlternate));
 		json_t* pk = json_array();
 		for (int e = 0; e < CR_NE; e++)
@@ -846,6 +848,7 @@ struct Crystal : Module {
 		}
 		if (json_t* j = json_object_get(r, "shimmer")) shimmer = (int)json_integer_value(j);
 		if (json_t* j = json_object_get(r, "panelDraw")) panelDraw = json_boolean_value(j);
+		if (json_t* j = json_object_get(r, "solidFaces")) solidFaces = json_boolean_value(j);
 		if (json_t* j = json_object_get(r, "pingAlternate")) pingAlternate = json_boolean_value(j);
 		if (json_t* pk = json_object_get(r, "shimmerPicks"))
 			for (int e = 0, i = 0; e < CR_NE; e++)
@@ -1149,6 +1152,36 @@ struct CrystalDisplay : Widget {
 	NVGcolor cAxis(NVGcolor c) const {
 		return lite ? nvgRGBf(c.r * 0.62f, c.g * 0.62f, c.b * 0.62f) : c;
 	}
+	// The geometry is half-spaces and a vertex soup, so a face's outline has to be
+	// recovered: take the vertices lying on that plane and wind them about it.
+	// Cached — it only changes with the habit.
+	struct Poly { std::vector<V3> v; V3 n; };
+	std::vector<Poly> polys;
+	int polysMat = -1;
+	void buildPolys(const Geom& g) {
+		polys.clear();
+		for (auto& b : g.bodies)
+			for (auto& f : b.faces) {
+				float eps = 1e-3f * std::max(1.f, std::fabs(f.d));
+				std::vector<V3> on;
+				for (auto& v : b.verts) {
+					if (std::fabs(dot3(f.n, v) - f.d) > eps) continue;
+					bool dup = false;
+					for (auto& q : on) if (len3(q - v) < 1e-4f) { dup = true; break; }
+					if (!dup) on.push_back(v);
+				}
+				if (on.size() < 3) continue;
+				V3 c;
+				for (auto& v : on) c = c + v;
+				c = c * (1.f / (float)on.size());
+				V3 u = norm3(on[0] - c), w = cross3(f.n, u);
+				std::sort(on.begin(), on.end(), [&](const V3& a, const V3& bb) {
+					return std::atan2(dot3(a - c, w), dot3(a - c, u))
+					     < std::atan2(dot3(bb - c, w), dot3(bb - c, u));
+				});
+				polys.push_back({on, f.n});
+			}
+	}
 	NVGcolor cPath(bool b, float a) const {
 		float m = lite ? 2.4f : 1.f;
 		return b ? nvgRGBAf(0.42f, 0.22f, 0.70f, a * m) : nvgRGBAf(0.f, 0.42f, 0.68f, a * m);
@@ -1274,15 +1307,52 @@ struct CrystalDisplay : Widget {
 			}
 		}
 
+		bool solid = module && module->solidFaces && polys.size() >= 4;
+		// The projection shrinks with +z, so the viewer is on the -z side: nearer
+		// means smaller z, and a face points at us when its normal's z is negative.
 		for (auto& bd : g.bodies)
 		for (auto& e : bd.edges) {
 			V3 a = obj(bd.verts[e.first]), b = obj(bd.verts[e.second]);
 			Vec pa = project(a, scale), pb = project(b, scale);
-			float depth = 0.5f * (a.z + b.z) / R;                  // far edges recede
-			float t = clamp(0.5f + 0.5f * depth, 0.f, 1.f);
+			float t = clamp(0.5f - 0.5f * (0.5f * (a.z + b.z) / R), 0.f, 1.f);
 			nvgBeginPath(vg); nvgMoveTo(vg, pa.x, pa.y); nvgLineTo(vg, pb.x, pb.y);
-			nvgStrokeColor(vg, cWire(live ? (0.28f + 0.62f * t) : 0.35f));
-			nvgStrokeWidth(vg, 0.7f + 0.8f * t); nvgStroke(vg);
+			nvgStrokeColor(vg, cWire(solid ? 0.16f : (live ? (0.28f + 0.62f * t) : 0.35f)));
+			nvgStrokeWidth(vg, solid ? 0.6f : (0.7f + 0.8f * t)); nvgStroke(vg);
+		}
+
+		if (solid) {
+			// Painter's order over the front faces only: a near face veils the
+			// hidden edges behind it, which is all the occlusion this needs. Kept
+			// translucent so the crystal still reads as something you see into.
+			std::vector<std::vector<Vec>> pts(polys.size());
+			std::vector<float> zc(polys.size(), 1e9f);
+			std::vector<size_t> order;
+			for (size_t i = 0; i < polys.size(); i++) {
+				if (obj(polys[i].n).z >= 0.f) continue;            // faces away
+				float zs = 0.f;
+				pts[i].resize(polys[i].v.size());
+				for (size_t k = 0; k < polys[i].v.size(); k++) {
+					V3 r = obj(polys[i].v[k]);
+					pts[i][k] = project(r, scale);
+					zs += r.z;
+				}
+				zc[i] = zs / (float)polys[i].v.size();
+				order.push_back(i);
+			}
+			std::sort(order.begin(), order.end(),
+			          [&](size_t a, size_t b) { return zc[a] > zc[b]; });   // far first
+			NVGcolor bg = lite ? nvgRGB(0xF0, 0xF0, 0xF0) : XBG;
+			for (size_t i : order) {
+				nvgBeginPath(vg);
+				for (size_t k = 0; k < pts[i].size(); k++)
+					if (k == 0) nvgMoveTo(vg, pts[i][k].x, pts[i][k].y);
+					else        nvgLineTo(vg, pts[i][k].x, pts[i][k].y);
+				nvgClosePath(vg);
+				nvgFillColor(vg, nvgRGBAf(bg.r, bg.g, bg.b, 0.82f)); nvgFill(vg);
+				float t = clamp(0.5f - 0.5f * (zc[i] / R), 0.f, 1.f);
+				nvgStrokeColor(vg, cWire(live ? (0.34f + 0.6f * t) : 0.45f));
+				nvgStrokeWidth(vg, 0.7f + 0.8f * t); nvgStroke(vg);
+			}
 		}
 
 		// Traced ray paths, and the pulses travelling along them. This is the actual
@@ -1442,6 +1512,7 @@ struct CrystalDisplay : Widget {
 
 		int mat = module ? clamp((int)std::round(module->params[Crystal::MATERIAL_PARAM].getValue()), 0, CR_NMAT - 1) : 4;
 		if (mat != previewMat) { preview = makeMaterial(mat); previewMat = mat; }
+		if (mat != polysMat) { buildPolys(preview); polysMat = mat; }
 
 		float ry = (module ? module->dispRotY.load() : 0.5f) + idleY;
 		float rx = clamp((module ? module->dispRotX.load() : 0.3f) + idleX, -1.5f, 1.5f);
@@ -1640,6 +1711,7 @@ struct CrystalWidget : ModuleWidget {
 		if (m->shimmer == CR_NSHIM - 1)
 			menu->addChild(createMenuItem("Re-roll repeat pitches", "", [=]() { m->rollShimmer(); }));
 		menu->addChild(createBoolPtrMenuItem("Ping alternates A / B", "", &m->pingAlternate));
+		menu->addChild(createBoolPtrMenuItem("Solid faces (occlusion)", "", &m->solidFaces));
 		menu->addChild(createBoolPtrMenuItem("Draw on the panel (no screen)", "", &m->panelDraw));
 	}
 };
