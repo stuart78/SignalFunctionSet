@@ -1157,10 +1157,26 @@ struct CrystalDisplay : Widget {
 	// Cached — it only changes with the habit.
 	struct Poly { std::vector<V3> v; V3 n; };
 	std::vector<Poly> polys;
+	std::vector<std::pair<V3, V3>> wire;
 	int polysMat = -1;
+	// In a cluster the crystals intergrow, so a face or an edge can lie buried
+	// inside a neighbour where it is simply not visible. Painter's order cannot
+	// sort those out — they have to be dropped. Static per habit, so done once.
+	static bool buried(const Geom& g, size_t self, const V3& p) {
+		for (size_t i = 0; i < g.bodies.size(); i++)
+			if (i != self && g.bodies[i].contains(p, -1e-3f)) return true;
+		return false;
+	}
 	void buildPolys(const Geom& g) {
 		polys.clear();
-		for (auto& b : g.bodies)
+		wire.clear();
+		for (size_t bi = 0; bi < g.bodies.size(); bi++) {
+			const Body& b = g.bodies[bi];
+			for (auto& e : b.edges) {
+				V3 p0 = b.verts[e.first], p1 = b.verts[e.second];
+				if (buried(g, bi, (p0 + p1) * 0.5f)) continue;
+				wire.push_back({p0, p1});
+			}
 			for (auto& f : b.faces) {
 				float eps = 1e-3f * std::max(1.f, std::fabs(f.d));
 				std::vector<V3> on;
@@ -1179,8 +1195,10 @@ struct CrystalDisplay : Widget {
 					return std::atan2(dot3(a - c, w), dot3(a - c, u))
 					     < std::atan2(dot3(bb - c, w), dot3(bb - c, u));
 				});
+				if (buried(g, bi, c)) continue;
 				polys.push_back({on, f.n});
 			}
+		}
 	}
 	NVGcolor cPath(bool b, float a) const {
 		float m = lite ? 2.4f : 1.f;
@@ -1251,8 +1269,15 @@ struct CrystalDisplay : Widget {
 		Widget::step();
 	}
 
+	// The camera sits CAM_D crystal radii away. Measuring the depth in radii is
+	// what makes this safe: the old divide was 2.6/(2.6 + z*0.55) in absolute
+	// units, with a pole at z = -4.73 — fine for a single habit near unit size,
+	// but a cluster reaches out far enough to magnify a corner 100x and fling it
+	// off the screen.
+	static constexpr float CAM_D = 5.f;
+	float viewR = 1.f;
 	Vec project(const V3& p, float scale) {
-		float persp = 2.6f / (2.6f + p.z * 0.55f);
+		float persp = CAM_D / std::max(CAM_D + p.z / std::max(viewR, 1e-4f), 0.4f);
 		return Vec(box.size.x / 2 + p.x * scale * persp, box.size.y / 2 - p.y * scale * persp);
 	}
 
@@ -1267,6 +1292,7 @@ struct CrystalDisplay : Widget {
 		// Scale to the CRYSTAL, not to the room around it. The plane flattens under
 		// the camera's pitch and the display is far wider than it is tall, so the
 		// speakers and the rim have room either side even when the crystal is large.
+		viewR = R;
 		float scale = box.size.y * 0.36f / R;
 
 		// The floor the speakers stand on. Without it the four cones float in the
@@ -1310,9 +1336,8 @@ struct CrystalDisplay : Widget {
 		bool solid = module && module->solidFaces && polys.size() >= 4;
 		// The projection shrinks with +z, so the viewer is on the -z side: nearer
 		// means smaller z, and a face points at us when its normal's z is negative.
-		for (auto& bd : g.bodies)
-		for (auto& e : bd.edges) {
-			V3 a = obj(bd.verts[e.first]), b = obj(bd.verts[e.second]);
+		for (auto& e : wire) {
+			V3 a = obj(e.first), b = obj(e.second);
 			Vec pa = project(a, scale), pb = project(b, scale);
 			float t = clamp(0.5f - 0.5f * (0.5f * (a.z + b.z) / R), 0.f, 1.f);
 			nvgBeginPath(vg); nvgMoveTo(vg, pa.x, pa.y); nvgLineTo(vg, pb.x, pb.y);
