@@ -494,7 +494,7 @@ struct Crystal : Module {
 		PING_PARAM, PITCH_PARAM, DECAY_PARAM,
 		ECHOES_PARAM, FEEDBACK_PARAM,
 		EMIT_B_AZ_PARAM, EMIT_B_EL_PARAM, HEAD_A_PARAM, HEAD_B_PARAM, NAVSPEED_PARAM,
-		MODE_PARAM, ROTZ_PARAM,
+		MODE_PARAM, SPIN_Z_PARAM, SPIN_X_PARAM, SPIN_Y_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -539,7 +539,10 @@ struct Crystal : Module {
 	float pingFlash = 0.f;
 
 	// display mirrors
-	std::atomic<float> dispRotY{0.4f}, dispRotX{0.3f}, dispRotZ{0.f};
+	std::atomic<float> dispRotY{0.4f}, dispRotX{0.3f};
+	// the crystal's heading: integrated from the SPIN rates, shared with the display
+	float headX = 0.f, headY = 0.f, headZ = 0.f;
+	std::atomic<float> dispHeadX{0.f}, dispHeadY{0.f}, dispHeadZ{0.f};
 
 	// Envelope follower drives the visualisation: each onset launches a pulse
 	// that the display walks along the traced ray paths.
@@ -565,8 +568,8 @@ struct Crystal : Module {
 		}
 		getParamQuantity(MATERIAL_PARAM)->snapEnabled = true;
 		configParam(TAIL_PARAM, 0.f, 1.f, 0.35f, "Tail", "%", 0.f, 100.f);
-		configParam(ROTY_PARAM, -(float)M_PI, (float)M_PI, 0.4f, "Rotate the crystal (yaw)");
-		configParam(ROTX_PARAM, -1.4f, 1.4f, 0.3f, "Rotate the crystal (pitch)");
+		configParam(ROTY_PARAM, -(float)M_PI, (float)M_PI, 0.4f, "View — yaw (drag the display)");
+		configParam(ROTX_PARAM, -1.4f, 1.4f, 0.45f, "View — pitch (drag the display)");
 		configParam(MIX_PARAM, 0.f, 1.f, 0.6f, "Dry / wet", "%", 0.f, 100.f);
 		configParam(EMIT_AZ_PARAM, -(float)M_PI, (float)M_PI, 0.6f, "Emitter azimuth");
 		configParam(EMIT_EL_PARAM, -1.5f, 1.5f, 0.3f, "Emitter elevation");
@@ -582,9 +585,15 @@ struct Crystal : Module {
 		configParam(HEAD_A_PARAM, -(float)M_PI, (float)M_PI, 0.f, "Emitter A heading");
 		configParam(HEAD_B_PARAM, -(float)M_PI, (float)M_PI, 1.57f, "Emitter B heading");
 		configParam(NAVSPEED_PARAM, 0.f, 4.f, 1.f, "Navigation speed");
-		configParam(ROTZ_PARAM, -(float)M_PI, (float)M_PI, 0.f, "Rotate the crystal (roll)");
-		getParamQuantity(ROTZ_PARAM)->displayMultiplier = 180.f / (float)M_PI;
-		getParamQuantity(ROTZ_PARAM)->unit = "°";
+		// heading, not orientation: these are rates, so the crystal keeps turning
+		// and the faces it presents to each speaker change as it goes
+		configParam(SPIN_X_PARAM, -0.8f, 0.8f, 0.06f, "Heading — pitch rate");
+		configParam(SPIN_Y_PARAM, -0.8f, 0.8f, 0.15f, "Heading — yaw rate");
+		configParam(SPIN_Z_PARAM, -0.8f, 0.8f, 0.f,   "Heading — roll rate");
+		for (int p : {SPIN_X_PARAM, SPIN_Y_PARAM, SPIN_Z_PARAM}) {
+			getParamQuantity(p)->displayMultiplier = 180.f / (float)M_PI;
+			getParamQuantity(p)->unit = "°/s";
+		}
 		configSwitch(MODE_PARAM, 0.f, 1.f, 0.f, "Mode",
 			{"Chamber (real acoustic scale)", "Delay (geometry sets the rhythm)"});
 		configInput(AUDIO_B_INPUT, "Audio B (enters at emitter B — patch stereo here)");
@@ -598,7 +607,7 @@ struct Crystal : Module {
 		configInput(DAMP_INPUT, "Damping CV (±5V)");
 		configInput(MATERIAL_INPUT, "Shape CV (1V per material, simple → complex)");
 		configInput(TAIL_INPUT, "Tail CV (±5V)");
-		configInput(ROT_INPUT, "Rotation CV (±5V, yaw — turns the crystal against the speakers)");
+		configInput(ROT_INPUT, "View CV (±5V, yaw — camera only, does not change the sound)");
 		configInput(PING_INPUT, "Ping trigger");
 		configInput(VOCT_INPUT, "Ping V/oct");
 		for (int i = 0; i < CR_NL; i++)
@@ -648,9 +657,7 @@ struct Crystal : Module {
 		float absorb = clamp(pv(DAMP_PARAM, DAMP_INPUT, 0.06f), 0.01f, 0.6f);
 		float tail   = clamp(pv(TAIL_PARAM, TAIL_INPUT, 0.1f), 0.f, 1.f);
 		int   mat    = clamp((int)std::round(pv(MATERIAL_PARAM, MATERIAL_INPUT, 1.f)), 0, CR_NMAT - 1);
-		float ry = params[ROTY_PARAM].getValue() + inputs[ROT_INPUT].getVoltage() * 0.31f;
-		float rx = params[ROTX_PARAM].getValue();
-		float rz = params[ROTZ_PARAM].getValue();
+		float ry = headY, rx = headX, rz = headZ;
 		int   nEch   = clamp((int)std::round(params[ECHOES_PARAM].getValue()), 2, CR_TAPS);
 		bool  dly    = params[MODE_PARAM].getValue() > 0.5f;
 		float maxDel = (float)bufLen / sr - 0.05f;             // however long the line really is
@@ -695,7 +702,32 @@ struct Crystal : Module {
 		return s;
 	}
 
+	// heading is state, not a param: a reloaded patch should pick the crystal up
+	// where it was rather than snapping it back to square
+	json_t* dataToJson() override {
+		json_t* r = json_object();
+		json_object_set_new(r, "headX", json_real(headX));
+		json_object_set_new(r, "headY", json_real(headY));
+		json_object_set_new(r, "headZ", json_real(headZ));
+		return r;
+	}
+	void dataFromJson(json_t* r) override {
+		if (json_t* j = json_object_get(r, "headX")) headX = json_number_value(j);
+		if (json_t* j = json_object_get(r, "headY")) headY = json_number_value(j);
+		if (json_t* j = json_object_get(r, "headZ")) headZ = json_number_value(j);
+		dirty = true;
+	}
+
 	void process(const ProcessArgs& args) override {
+		// the crystal keeps turning; every retrace re-aims its faces at the speakers
+		headX += params[SPIN_X_PARAM].getValue() * args.sampleTime;
+		headY += params[SPIN_Y_PARAM].getValue() * args.sampleTime;
+		headZ += params[SPIN_Z_PARAM].getValue() * args.sampleTime;
+		const float TWO_PI = 2.f * (float)M_PI;
+		if (headX >  TWO_PI) headX -= TWO_PI; if (headX < -TWO_PI) headX += TWO_PI;
+		if (headY >  TWO_PI) headY -= TWO_PI; if (headY < -TWO_PI) headY += TWO_PI;
+		if (headZ >  TWO_PI) headZ -= TWO_PI; if (headZ < -TWO_PI) headZ += TWO_PI;
+
 		if (dirty.exchange(false)) relaunch(args.sampleRate);
 		if (swapPending.exchange(false)) {   // adopt the worker's new tap set
 			prevSet = active.load();
@@ -706,8 +738,7 @@ struct Crystal : Module {
 		// retrace when a shape-changing control moves (rate-limited by `busy`)
 		if ((args.frame & 2047) == 0) {
 			float now[13] = {
-				params[ROTY_PARAM].getValue() + inputs[ROT_INPUT].getVoltage() * 0.31f,
-				params[ROTX_PARAM].getValue(), params[ROTZ_PARAM].getValue(),
+				headY, headX, headZ,
 				pv(SIZE_PARAM, SIZE_INPUT, 0.4f),
 				pv(DAMP_PARAM, DAMP_INPUT, 0.06f),
 				std::round(pv(MATERIAL_PARAM, MATERIAL_INPUT, 1.f)),
@@ -881,7 +912,7 @@ struct Crystal : Module {
 		wr = (wr + 1) % bufLen;
 		dispRotY = params[ROTY_PARAM].getValue() + inputs[ROT_INPUT].getVoltage() * 0.31f;
 		dispRotX = params[ROTX_PARAM].getValue();
-		dispRotZ = params[ROTZ_PARAM].getValue();
+		dispHeadX = headX; dispHeadY = headY; dispHeadZ = headZ;
 	}
 };
 
@@ -904,10 +935,11 @@ struct CrystalDisplay : Widget {
 	float idleY = 0.f, idleX = 0.f, idleT = 0.f;   // slow wander while at rest
 
 	// x/y/z orientation gizmo, drawn into the display's bottom-left corner
-	void drawGizmo(NVGcontext* vg, float ry, float rx, float rz) {
+	void drawGizmo(NVGcontext* vg, float cy, float cx, float hy, float hx, float hz) {
 		float gx = 26.f, gy = box.size.y - 26.f, s = 15.f;
+		auto ori = [&](const V3& p) { return rotYX(rotAll(p, hy, hx, hz), cy, cx); };
 		auto pr = [&](const V3& p) {
-			V3 r = rotAll(p, ry, rx, rz);
+			V3 r = ori(p);
 			float persp = 2.6f / (2.6f + r.z * 0.55f);
 			return Vec(gx + r.x * s * persp, gy - r.y * s * persp);
 		};
@@ -919,7 +951,7 @@ struct CrystalDisplay : Widget {
 		            {V3(0, 1, 0), nvgRGB(0x62, 0xD0, 0x8A), "Y"},
 		            {V3(0, 0, 1), nvgRGB(0x62, 0x9B, 0xE8), "Z"}};
 		for (auto& a : ax) {
-			V3 r = rotAll(a.d, ry, rx, rz);
+			V3 r = ori(a.d);
 			Vec o(gx, gy), q = pr(a.d);
 			float al = r.z > 0 ? 0.95f : 0.4f;
 			nvgBeginPath(vg); nvgMoveTo(vg, o.x, o.y); nvgLineTo(vg, q.x, q.y);
@@ -963,13 +995,19 @@ struct CrystalDisplay : Widget {
 		return Vec(box.size.x / 2 + p.x * scale * persp, box.size.y / 2 - p.y * scale * persp);
 	}
 
-	void drawCrystal(NVGcontext* vg, const Geom& g, float ry, float rx, float rz,
+	// cam() puts a room point on screen; obj() is for points fixed to the crystal,
+	// which turn by its heading first and then ride the camera like everything else
+	void drawCrystal(NVGcontext* vg, const Geom& g, float cy, float cx,
+	                 float hy, float hx, float hz,
 	                 const float* az, const float* el, bool live, float flash) {
+		auto cam = [&](const V3& p) { return rotYX(p, cy, cx); };
+		auto obj = [&](const V3& p) { return rotYX(rotAll(p, hy, hx, hz), cy, cx); };
 		float R = 1e-4f;
 		for (auto& bd : g.bodies) for (auto& v : bd.verts) R = std::max(R, len3(v));
 		// the view has to hold the room, not just the crystal: the speakers stand
-		// on the floor around it and must stay on screen
-		float scale = std::min(box.size.x, box.size.y) * 0.42f / (R * 2.4f);
+		// on the plane around it and must stay on screen — the plane flattens under
+		// the camera's pitch, so it can be drawn larger than its own radius suggests
+		float scale = std::min(box.size.x, box.size.y) * 0.50f / (R * 2.2f);
 
 		// The floor the speakers stand on. Without it the four cones float in the
 		// void and there is no way to read which way the crystal has been turned.
@@ -984,7 +1022,7 @@ struct CrystalDisplay : Widget {
 				half = std::sqrt(half);
 				V3 a = axis ? V3(-half * R, fy, u * R) : V3(u * R, fy, -half * R);
 				V3 b = axis ? V3( half * R, fy, u * R) : V3(u * R, fy,  half * R);
-				Vec pa = project(a, scale), pb = project(b, scale);
+				Vec pa = project(cam(a), scale), pb = project(cam(b), scale);
 				nvgBeginPath(vg); nvgMoveTo(vg, pa.x, pa.y); nvgLineTo(vg, pb.x, pb.y);
 				nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, i == 0 ? 0.20f : 0.10f));
 				nvgStrokeWidth(vg, i == 0 ? 0.9f : 0.5f); nvgStroke(vg);
@@ -992,7 +1030,7 @@ struct CrystalDisplay : Widget {
 			nvgBeginPath(vg);                                    // rim of the plane
 			for (int k = 0; k <= 48; k++) {
 				float a = k * 2.f * (float)M_PI / 48.f;
-				Vec p = project(V3(std::cos(a) * RC * R, fy, std::sin(a) * RC * R), scale);
+				Vec p = project(cam(V3(std::cos(a) * RC * R, fy, std::sin(a) * RC * R)), scale);
 				if (k == 0) nvgMoveTo(vg, p.x, p.y); else nvgLineTo(vg, p.x, p.y);
 			}
 			nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, 0.22f));
@@ -1001,7 +1039,7 @@ struct CrystalDisplay : Widget {
 
 		for (auto& bd : g.bodies)
 		for (auto& e : bd.edges) {
-			V3 a = rotAll(bd.verts[e.first], ry, rx, rz), b = rotAll(bd.verts[e.second], ry, rx, rz);
+			V3 a = obj(bd.verts[e.first]), b = obj(bd.verts[e.second]);
 			Vec pa = project(a, scale), pb = project(b, scale);
 			float depth = 0.5f * (a.z + b.z) / R;                  // far edges recede
 			float t = clamp(0.5f + 0.5f * depth, 0.f, 1.f);
@@ -1027,7 +1065,7 @@ struct CrystalDisplay : Widget {
 					if (pv.n < 2) continue;
 					nvgBeginPath(vg);                                  // the path itself, faint
 					for (int k = 0; k < pv.n; k++) {
-						Vec q = project(pv.pt[k], scale);   // already in room coordinates
+						Vec q = project(cam(pv.pt[k]), scale);   // room coordinates, camera only
 						if (k == 0) nvgMoveTo(vg, q.x, q.y); else nvgLineTo(vg, q.x, q.y);
 					}
 					bool eB = pv.emitter != 0;
@@ -1049,7 +1087,7 @@ struct CrystalDisplay : Widget {
 						float span = std::max(pv.cum[seg + 1] - pv.cum[seg], 1e-6f);
 						float f = clamp((travelled - pv.cum[seg]) / span, 0.f, 1.f);
 						V3 p3 = pv.pt[seg] + (pv.pt[seg + 1] - pv.pt[seg]) * f;
-						Vec q = project(p3, scale);
+						Vec q = project(cam(p3), scale);
 						float lvl = module->pulseLvl[u].load() * (1.f - age / total);
 						float rr = 1.6f + 2.6f * lvl;
 						nvgBeginPath(vg); nvgCircle(vg, q.x, q.y, rr);
@@ -1068,7 +1106,7 @@ struct CrystalDisplay : Widget {
 			V3 dir = norm3(V3(std::cos(az[e]) * std::cos(el[e]),
 			                  std::sin(az[e]) * std::cos(el[e]), std::sin(el[e])));
 			V3 world = dir * g.surfaceDist(dir);
-			Vec pe = project(rotAll(world, ry, rx, rz), scale);
+			Vec pe = project(obj(world), scale);
 			NVGcolor col = e ? nvgRGB(0x9B, 0x6B, 0xE8) : XORANGE;
 			if (e == 0 && flash > 0.01f) {
 				nvgBeginPath(vg); nvgCircle(vg, pe.x, pe.y, 4.f + 16.f * flash);
@@ -1080,7 +1118,7 @@ struct CrystalDisplay : Widget {
 				float hd = module->params[e ? Crystal::HEAD_B_PARAM : Crystal::HEAD_A_PARAM].getValue();
 				float aa = az[e] + std::cos(hd) * 0.16f, ee = clamp(el[e] + std::sin(hd) * 0.16f, -1.5f, 1.5f);
 				V3 d2 = norm3(V3(std::cos(aa) * std::cos(ee), std::sin(aa) * std::cos(ee), std::sin(ee)));
-				Vec q = project(rotAll(d2 * g.surfaceDist(d2), ry, rx, rz), scale);
+				Vec q = project(obj(d2 * g.surfaceDist(d2)), scale);
 				nvgBeginPath(vg); nvgMoveTo(vg, pe.x, pe.y); nvgLineTo(vg, q.x, q.y);
 				nvgStrokeColor(vg, nvgRGBAf(col.r, col.g, col.b, 0.8f)); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
 				nvgBeginPath(vg); nvgCircle(vg, q.x, q.y, 1.3f); nvgFillColor(vg, col); nvgFill(vg);
@@ -1097,9 +1135,8 @@ struct CrystalDisplay : Widget {
 
 		// the four speakers, standing in the room — they do not turn with the crystal
 		for (int i = 0; i < CR_NL; i++) {
-			V3 lp = speakerPos(i) * R;
-			Vec q = project(lp, scale);
-			Vec c = project(V3(0.f, FLOOR_Y * R, 0.f), scale);
+			Vec q = project(cam(speakerPos(i) * R), scale);
+			Vec c = project(cam(V3(0.f, FLOOR_Y * R, 0.f)), scale);
 			float dx = c.x - q.x, dy = c.y - q.y, dl = std::sqrt(dx * dx + dy * dy) + 1e-6f;
 			dx /= dl; dy /= dl;                                // unit vector toward the crystal
 			float px = -dy, py = dx;                           // across the speaker's face
@@ -1137,16 +1174,18 @@ struct CrystalDisplay : Widget {
 
 		float ry = (module ? module->dispRotY.load() : 0.5f) + idleY;
 		float rx = clamp((module ? module->dispRotX.load() : 0.3f) + idleX, -1.5f, 1.5f);
-		float rz = module ? module->dispRotZ.load() : 0.f;
+		float hy = module ? module->dispHeadY.load() : 0.6f;
+		float hx = module ? module->dispHeadX.load() : 0.2f;
+		float hz = module ? module->dispHeadZ.load() : 0.f;
 		float az[CR_NE], el[CR_NE];
 		az[0] = module ? module->params[Crystal::EMIT_AZ_PARAM].getValue() : 0.6f;
 		el[0] = module ? module->params[Crystal::EMIT_EL_PARAM].getValue() : 0.3f;
 		az[1] = module ? module->params[Crystal::EMIT_B_AZ_PARAM].getValue() : -2.2f;
 		el[1] = module ? module->params[Crystal::EMIT_B_EL_PARAM].getValue() : -0.4f;
-		drawCrystal(vg, preview, ry, rx, rz, az, el, module != nullptr,
+		drawCrystal(vg, preview, ry, rx, hy, hx, hz, az, el, module != nullptr,
 		            module ? module->pingFlash : 0.f);
 
-		drawGizmo(vg, ry, rx, rz);
+		drawGizmo(vg, ry, rx, hy, hx, hz);
 
 		if (font) {
 			nvgFontFaceId(vg, font->handle); nvgFontSize(vg, 9.f);
@@ -1277,10 +1316,10 @@ struct CrystalWidget : ModuleWidget {
 			Crystal::PING_PARAM, Crystal::PING_LIGHT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(133.f, yN)), module, Crystal::PING_INPUT));
 
-		// axial rotation: yaw / pitch / roll, the same three the gizmo names
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(8.f, yB)), module, Crystal::ROTX_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(18.f, yB)), module, Crystal::ROTY_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(28.f, yB)), module, Crystal::ROTZ_PARAM));
+		// heading: how fast the crystal turns on each axis, centre = held still
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(8.f, yB)), module, Crystal::SPIN_X_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(18.f, yB)), module, Crystal::SPIN_Y_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(28.f, yB)), module, Crystal::SPIN_Z_PARAM));
 
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(42.f, yB)), module, Crystal::AUDIO_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(53.f, yB)), module, Crystal::AUDIO_B_INPUT));
@@ -1302,8 +1341,9 @@ struct CrystalWidget : ModuleWidget {
 		lbl->add(76.f, 110.f, "HDG", 5.f); lbl->add(87.f, 110.f, "X", 5.f); lbl->add(97.f, 110.f, "Y", 5.f);
 		lbl->add(109.f, 97.5f, "SPEED", 5.f); lbl->add(122.f, 97.5f, "PING", 5.f);
 		lbl->add(133.f, 97.5f, "TRIG", 5.f);
-		lbl->add(8.f, 124.f, "ROT X", 5.f); lbl->add(18.f, 124.f, "ROT Y", 5.f);
-		lbl->add(28.f, 124.f, "ROT Z", 5.f);
+		lbl->add(8.f, 124.f, "SPIN X", 5.f); lbl->add(18.f, 124.f, "SPIN Y", 5.f);
+		lbl->add(28.f, 124.f, "SPIN Z", 5.f);
+		lbl->add(18.f, 111.5f, "HEADING", 5.f);
 		lbl->add(42.f, 124.f, "IN A", 5.f); lbl->add(53.f, 124.f, "IN B", 5.f);
 		lbl->add(66.f, 124.f, "V/OCT", 5.f); lbl->add(77.f, 124.f, "PIT", 5.f); lbl->add(87.f, 124.f, "DEC", 5.f);
 		lbl->add(117.f, 124.f, "QUAD A-D", 5.f);
