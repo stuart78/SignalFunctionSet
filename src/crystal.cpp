@@ -67,7 +67,7 @@ static V3 rotAll(const V3& p, float ry, float rx, float rz) {
 
 // The speakers stand on a floor, arranged around the crystal. Horizontal here
 // means constant y, since the projection sends +y up the screen and z into it.
-static const float FLOOR_Y  = -1.05f;
+static const float FLOOR_Y  = 0.f;      // the plane cuts the crystal in half
 static const float SPK_RING = 1.75f;
 static inline V3 speakerPos(int i) {
 	float az = (45.f + i * 90.f) * (float)M_PI / 180.f;
@@ -974,21 +974,29 @@ struct CrystalDisplay : Widget {
 		// The floor the speakers stand on. Without it the four cones float in the
 		// void and there is no way to read which way the crystal has been turned.
 		{
-			const float EXT = 2.0f, STEP = 0.5f;
-			nvgSave(vg);
-			nvgScissor(vg, 0, 0, box.size.x, box.size.y);
+			const float RC = 2.1f, STEP = 0.35f;
+			float fy = FLOOR_Y * R;
 			for (int axis = 0; axis < 2; axis++)
-			for (int i = -4; i <= 4; i++) {
-				float u = i * STEP * R;
-				V3 a = axis ? V3(-EXT * R, FLOOR_Y * R, u) : V3(u, FLOOR_Y * R, -EXT * R);
-				V3 b = axis ? V3( EXT * R, FLOOR_Y * R, u) : V3(u, FLOOR_Y * R,  EXT * R);
+			for (int i = -6; i <= 6; i++) {
+				float u = i * STEP;
+				float half = RC * RC - u * u;
+				if (half <= 0.f) continue;
+				half = std::sqrt(half);
+				V3 a = axis ? V3(-half * R, fy, u * R) : V3(u * R, fy, -half * R);
+				V3 b = axis ? V3( half * R, fy, u * R) : V3(u * R, fy,  half * R);
 				Vec pa = project(a, scale), pb = project(b, scale);
 				nvgBeginPath(vg); nvgMoveTo(vg, pa.x, pa.y); nvgLineTo(vg, pb.x, pb.y);
-				bool axisLine = (i == 0);
-				nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, axisLine ? 0.20f : 0.11f));
-				nvgStrokeWidth(vg, axisLine ? 0.9f : 0.6f); nvgStroke(vg);
+				nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, i == 0 ? 0.20f : 0.10f));
+				nvgStrokeWidth(vg, i == 0 ? 0.9f : 0.5f); nvgStroke(vg);
 			}
-			nvgRestore(vg);
+			nvgBeginPath(vg);                                    // rim of the plane
+			for (int k = 0; k <= 48; k++) {
+				float a = k * 2.f * (float)M_PI / 48.f;
+				Vec p = project(V3(std::cos(a) * RC * R, fy, std::sin(a) * RC * R), scale);
+				if (k == 0) nvgMoveTo(vg, p.x, p.y); else nvgLineTo(vg, p.x, p.y);
+			}
+			nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, 0.22f));
+			nvgStrokeWidth(vg, 0.7f); nvgStroke(vg);
 		}
 
 		for (auto& bd : g.bodies)
@@ -1093,19 +1101,27 @@ struct CrystalDisplay : Widget {
 			Vec q = project(lp, scale);
 			Vec c = project(V3(0.f, FLOOR_Y * R, 0.f), scale);
 			float dx = c.x - q.x, dy = c.y - q.y, dl = std::sqrt(dx * dx + dy * dy) + 1e-6f;
-			dx /= dl; dy /= dl;
-			nvgBeginPath(vg);                                  // a cone aimed inward
-			nvgMoveTo(vg, q.x + dx * 5.f, q.y + dy * 5.f);
-			nvgLineTo(vg, q.x - dy * 3.f, q.y + dx * 3.f);
-			nvgLineTo(vg, q.x + dy * 3.f, q.y - dx * 3.f);
+			dx /= dl; dy /= dl;                                // unit vector toward the crystal
+			float px = -dy, py = dx;                           // across the speaker's face
+			// a horn: narrow at the back, flaring open toward the crystal, so which
+			// way it fires is readable at a glance
+			float bx = q.x - dx * 2.5f, by = q.y - dy * 2.5f;  // throat, outermost
+			float mx = q.x + dx * 3.5f, my = q.y + dy * 3.5f;  // mouth, facing in
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, bx + px * 1.8f, by + py * 1.8f);
+			nvgLineTo(vg, mx + px * 5.f,  my + py * 5.f);
+			nvgLineTo(vg, mx - px * 5.f,  my - py * 5.f);
+			nvgLineTo(vg, bx - px * 1.8f, by - py * 1.8f);
 			nvgClosePath(vg);
 			nvgStrokeColor(vg, XDIM); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
+			nvgBeginPath(vg); nvgCircle(vg, bx, by, 1.4f);     // driver at the throat
+			nvgFillColor(vg, XDIM); nvgFill(vg);
 			if (font) {
 				nvgFontFaceId(vg, font->handle); nvgFontSize(vg, 8.f);
 				nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 				nvgFillColor(vg, XDIM);
 				char c[2] = {(char)('A' + i), 0};
-				nvgText(vg, q.x, q.y - 7.f, c, NULL);
+				nvgText(vg, q.x - dx * 8.f, q.y - dy * 8.f, c, NULL);
 			}
 		}
 	}
