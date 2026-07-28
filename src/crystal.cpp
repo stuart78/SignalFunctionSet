@@ -611,6 +611,7 @@ struct Crystal : Module {
 	float pkDcX[CR_NE][CR_LOOPS] = {}, pkDcY[CR_NE][CR_LOOPS] = {};
 	float fdDcX[CR_FDN] = {}, fdDcY[CR_FDN] = {};
 	float outDcX[CR_NL] = {}, outDcY[CR_NL] = {};
+	float dryDcX = 0.f, dryDcY = 0.f;
 
 	Crystal() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -970,6 +971,12 @@ struct Crystal : Module {
 
 		float mix = clamp(params[MIX_PARAM].getValue() + inputs[MIX_INPUT].getVoltage() / 10.f, 0.f, 1.f);
 		float dry = (inA + inB) * 5.f;       // the source itself: audio in + the struck bar
+		// the dry path reproduces its source faithfully, offset included — and the
+		// jack takes CV as readily as audio, so block it here too (~2Hz, well under
+		// anything musical) rather than put a source's offset on an audio output
+		dryDcY = dry - dryDcX + 0.99975f * dryDcY;
+		dryDcX = dry;
+		dry = dryDcY;
 		for (int li = 0; li < CR_NL; li++) {
 			float wet = early[li] + tailOut[li] + pocket[li] * fbAmt;
 			hfLp[li] += (wet - hfLp[li]) * clamp(1.f - damp * 0.7f, 0.05f, 1.f);
