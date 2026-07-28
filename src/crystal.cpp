@@ -357,6 +357,7 @@ struct TapSet {
 	int   loopDelay[CR_NE][CR_LOOPS] = {};
 	float loopGain[CR_NE][CR_LOOPS] = {};
 	int   loopOut[CR_NE][CR_LOOPS] = {};
+	float loopScale[CR_NE][CR_LOOPS] = {};   // shares an output with how many others
 	int   fdnDelay[CR_FDN] = {};
 	float fdnFb = 0.5f;                 // per-line feedback for the requested T60
 	float earlyGain = 1.f;              // RMS tap gain — the loop's realistic open gain
@@ -507,6 +508,10 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 				ts.loopGain[em][k] = clamp(0.45f + 0.55f * cand[pick].g, 0.2f, 1.f);
 				ts.loopOut[em][k] = cand[pick].li;         // where that echo was heard
 			}
+			int cnt[CR_NL] = {};
+			for (int k = 0; k < CR_LOOPS; k++) cnt[ts.loopOut[em][k]]++;
+			for (int k = 0; k < CR_LOOPS; k++)
+				ts.loopScale[em][k] = 1.f / std::sqrt((float)std::max(cnt[ts.loopOut[em][k]], 1));
 		}
 	}
 
@@ -600,6 +605,12 @@ struct Crystal : Module {
 	float loopDelSm[CR_NE][CR_LOOPS] = {};      // glided, so a moving emitter never steps
 	float loopLp[CR_NE][CR_LOOPS] = {};
 	float fbDcX[CR_NE] = {}, fbDcY[CR_NE] = {};
+	// A one-pole lowpass inside a feedback loop has its highest gain at DC, and
+	// tanh on an asymmetric signal keeps making more. Block it in the loop, not
+	// just on the way in.
+	float pkDcX[CR_NE][CR_LOOPS] = {}, pkDcY[CR_NE][CR_LOOPS] = {};
+	float fdDcX[CR_FDN] = {}, fdDcY[CR_FDN] = {};
+	float outDcX[CR_NL] = {}, outDcY[CR_NL] = {};
 
 	Crystal() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -677,10 +688,11 @@ struct Crystal : Module {
 			std::fill(buf[e].begin(), buf[e].end(), 0.f);
 			for (int k = 0; k < CR_LOOPS; k++) {
 				std::fill(loopBuf[e][k].begin(), loopBuf[e][k].end(), 0.f);
-				loopLp[e][k] = 0.f;
+				loopLp[e][k] = 0.f; pkDcX[e][k] = pkDcY[e][k] = 0.f;
 			}
 		}
-		for (int i = 0; i < CR_FDN; i++) { std::fill(fdn[i].begin(), fdn[i].end(), 0.f); fdnLp[i] = 0.f; }
+		for (int i = 0; i < CR_FDN; i++) { std::fill(fdn[i].begin(), fdn[i].end(), 0.f); fdnLp[i] = 0.f;
+		                                   fdDcX[i] = fdDcY[i] = 0.f; }
 		for (int i = 0; i < 3; i++) { exEnv[i] = 0.f; exPhase[i] = 0.f; }
 		dirty = true;
 	}
@@ -903,12 +915,17 @@ struct Crystal : Module {
 				int i1 = i0 - 1;                 while (i1 < 0) i1 += CR_LOOPBUF;
 				float r = loopBuf[e][k][i0] * (1.f - fr) + loopBuf[e][k][i1] * fr;
 				loopLp[e][k] += (r - loopLp[e][k]) * loopDamp;
+				float lp = loopLp[e][k];
+				pkDcY[e][k] = lp - pkDcX[e][k] + 0.999f * pkDcY[e][k];
+				pkDcX[e][k] = lp;
+				lp = pkDcY[e][k];
 				float g = A0ready ? AF.loopGain[e][k] : 0.5f;
 				loopBuf[e][k][loopWr[e][k]] =
-					clamp(fbDcY[e] * 0.7f + std::tanh(loopLp[e][k] * fbAmt * g * 1.15f) * 0.87f, -8.f, 8.f);
+					clamp(fbDcY[e] * 0.7f + std::tanh(lp * fbAmt * g * 1.15f) * 0.87f, -8.f, 8.f);
 				loopWr[e][k] = (loopWr[e][k] + 1) % CR_LOOPBUF;
 				int li = A0ready ? AF.loopOut[e][k] : (k % CR_NL);
-				pocket[li] += loopLp[e][k] * 0.5f;
+				float sc = A0ready ? AF.loopScale[e][k] : 0.5f;
+				pocket[li] += lp * 0.5f * sc;
 			}
 		}
 
@@ -937,7 +954,9 @@ struct Crystal : Module {
 			while (idx < 0) idx += (int)fdn[i].size();
 			rd[i] = fdn[i][idx];
 			fdnLp[i] += (rd[i] - fdnLp[i]) * (1.f - damp);      // HF loss per pass
-			rd[i] = fdnLp[i];
+			fdDcY[i] = fdnLp[i] - fdDcX[i] + 0.999f * fdDcY[i];
+			fdDcX[i] = fdnLp[i];
+			rd[i] = fdDcY[i];
 		}
 		float tailOut[CR_NL] = {};
 		for (int i = 0; i < CR_FDN; i++) {
@@ -955,6 +974,9 @@ struct Crystal : Module {
 			float wet = early[li] + tailOut[li] + pocket[li] * fbAmt;
 			hfLp[li] += (wet - hfLp[li]) * clamp(1.f - damp * 0.7f, 0.05f, 1.f);
 			wet = hfLp[li] / std::max(A.earlyGain, 1.f);
+			outDcY[li] = wet - outDcX[li] + 0.999f * outDcY[li];   // backstop
+			outDcX[li] = wet;
+			wet = outDcY[li];
 			outputs[QUAD_OUTPUT + li].setVoltage(clamp(dry * (1.f - mix) + wet * mix * 5.f, -10.f, 10.f));
 		}
 
