@@ -611,12 +611,16 @@ struct Crystal : Module {
 	Geom geom;
 	int geomMat = -1;
 
-	// internal exciter — Chime's struck bar voice, at the emitter
-	float exPhase[3] = {}, exEnv[3] = {};
-	float exFreq = 261.63f;                     // latched at the ping (sample & hold)
-	float exAtk = 0.f;                          // short attack window, so a retrigger never steps
+	// Internal exciter — Chime's struck bar voice. One per emitter, so a ping can
+	// alternate sides: a bar still ringing at A is never dragged over to B.
+	float exPhase[CR_NE][3] = {}, exEnv[CR_NE][3] = {};
+	float exFreq[CR_NE] = {261.63f, 261.63f};   // latched at the ping (sample & hold)
+	float exAtk[CR_NE] = {};                    // short attack window, so a retrigger never steps
+	int   pingSide = 0;                         // which emitter the next ping strikes
+	bool  pingAlternate = true;
 	dsp::SchmittTrigger pingTrig, pingBtn;
 	float pingFlash = 0.f;
+	std::atomic<int> dispPingSide{0};
 
 	// display mirrors
 	std::atomic<float> dispRotY{0.4f}, dispRotX{0.3f};
@@ -641,7 +645,7 @@ struct Crystal : Module {
 	// used to happen by accident, when the pocket delays glided toward a moving
 	// target; now it is deliberate and in tune.
 	int   shimmer = 0;
-	bool  panelDraw = true;      // draw straight onto the faceplate, no dark screen
+	bool  panelDraw = false;     // draw straight onto the faceplate, no dark screen
 	float psPhase[CR_NE][CR_LOOPS] = {};
 	// Random gives each pocket its own interval, held rather than re-rolled, so the
 	// repeats climb away as a chord instead of a scramble.
@@ -677,7 +681,7 @@ struct Crystal : Module {
 		configParam(MIX_PARAM, 0.f, 1.f, 0.6f, "Dry / wet", "%", 0.f, 100.f);
 		configParam(EMIT_AZ_PARAM, -(float)M_PI, (float)M_PI, 0.6f, "Emitter azimuth");
 		configParam(EMIT_EL_PARAM, -1.5f, 1.5f, 0.3f, "Emitter elevation");
-		configButton(PING_PARAM, "Ping the crystal");
+		configButton(PING_PARAM, "Ping the crystal (alternates emitter A / B)");
 		configParam(PITCH_PARAM, -3.f, 3.f, 0.f, "Ping pitch", " oct");
 		configParam(DECAY_PARAM, 0.05f, 4.f, 0.7f, "Ping decay", " s");
 		configParam(ECHOES_PARAM, 2.f, (float)CR_TAPS, 8.f, "Echoes (reflections kept — few = discrete, many = dense)");
@@ -743,7 +747,9 @@ struct Crystal : Module {
 		}
 		for (int i = 0; i < CR_FDN; i++) { std::fill(fdn[i].begin(), fdn[i].end(), 0.f); fdnLp[i] = 0.f;
 		                                   fdDcX[i] = fdDcY[i] = 0.f; }
-		for (int i = 0; i < 3; i++) { exEnv[i] = 0.f; exPhase[i] = 0.f; }
+		for (int e = 0; e < CR_NE; e++)
+			for (int i = 0; i < 3; i++) { exEnv[e][i] = 0.f; exPhase[e][i] = 0.f; }
+		pingSide = 0;
 		rollShimmer();
 		dirty = true;
 	}
@@ -818,6 +824,7 @@ struct Crystal : Module {
 		json_object_set_new(r, "heading", h);
 		json_object_set_new(r, "shimmer", json_integer(shimmer));
 		json_object_set_new(r, "panelDraw", json_boolean(panelDraw));
+		json_object_set_new(r, "pingAlternate", json_boolean(pingAlternate));
 		json_t* pk = json_array();
 		for (int e = 0; e < CR_NE; e++)
 			for (int k = 0; k < CR_LOOPS; k++) json_array_append_new(pk, json_integer(psPick[e][k]));
@@ -832,6 +839,7 @@ struct Crystal : Module {
 		}
 		if (json_t* j = json_object_get(r, "shimmer")) shimmer = (int)json_integer_value(j);
 		if (json_t* j = json_object_get(r, "panelDraw")) panelDraw = json_boolean_value(j);
+		if (json_t* j = json_object_get(r, "pingAlternate")) pingAlternate = json_boolean_value(j);
 		if (json_t* pk = json_object_get(r, "shimmerPicks"))
 			for (int e = 0, i = 0; e < CR_NE; e++)
 				for (int k = 0; k < CR_LOOPS; k++, i++)
@@ -884,30 +892,35 @@ struct Crystal : Module {
 		bool ping = pt || pb;
 		float dk = params[DECAY_PARAM].getValue();
 		if (ping) {
-			exFreq = clamp(261.63f * std::exp2(params[PITCH_PARAM].getValue()
+			if (pingAlternate) pingSide ^= 1;                // ping-pong across the crystal
+			else pingSide = 0;
+			exFreq[pingSide] = clamp(261.63f * std::exp2(params[PITCH_PARAM].getValue()
 			                                   + inputs[VOCT_INPUT].getVoltage()), 8.f, 12000.f);
 			for (int i = 0; i < 3; i++)
-				if (exEnv[i] < 1e-4f) exPhase[i] = 0.f;      // only restart phase from silence
-			exAtk = 0.002f;                                  // 2ms rise — never a step
+				if (exEnv[pingSide][i] < 1e-4f) exPhase[pingSide][i] = 0.f;   // restart from silence only
+			exAtk[pingSide] = 0.002f;                        // 2ms rise — never a step
 			pingFlash = 1.f;
+			dispPingSide = pingSide;
 		}
-		float f0 = exFreq;                                   // held until the next ping
-		bool exAttacking = exAtk > 0.f;
-		if (exAttacking) exAtk -= args.sampleTime;
 		pingFlash -= pingFlash * args.sampleTime / 0.1f;
 		lights[PING_LIGHT].setBrightness(pingFlash);
 		static const float RAT[3] = {1.f, 3.932f, 9.538f}, AMP[3] = {1.f, 0.4f, 0.15f}, DEC[3] = {1.f, 0.45f, 0.22f};
-		float ex = 0.f;
+		float ex[CR_NE] = {};
 		float nyq = 0.45f * args.sampleRate;
-		for (int i = 0; i < 3; i++) {
-			if (exAttacking) exEnv[i] += (1.f - exEnv[i]) * std::min(1.f, args.sampleTime / 0.0006f);
-			else exEnv[i] *= std::exp(-args.sampleTime / (dk * DEC[i]));
-			if (exEnv[i] <= 1e-5f) continue;
-			float fp = f0 * RAT[i];
-			if (fp >= nyq) continue;                         // would alias — leave it out
-			exPhase[i] += fp * args.sampleTime;
-			if (exPhase[i] >= 1.f) exPhase[i] -= 1.f;
-			ex += AMP[i] * exEnv[i] * std::sin(2.f * M_PI * exPhase[i]);
+		for (int e = 0; e < CR_NE; e++) {
+			bool exAttacking = exAtk[e] > 0.f;
+			if (exAttacking) exAtk[e] -= args.sampleTime;
+			float f0 = exFreq[e];                            // held until this side is struck again
+			for (int i = 0; i < 3; i++) {
+				if (exAttacking) exEnv[e][i] += (1.f - exEnv[e][i]) * std::min(1.f, args.sampleTime / 0.0006f);
+				else exEnv[e][i] *= std::exp(-args.sampleTime / (dk * DEC[i]));
+				if (exEnv[e][i] <= 1e-5f) continue;
+				float fp = f0 * RAT[i];
+				if (fp >= nyq) continue;                     // would alias — leave it out
+				exPhase[e][i] += fp * args.sampleTime;
+				if (exPhase[e][i] >= 1.f) exPhase[e][i] -= 1.f;
+				ex[e] += AMP[i] * exEnv[e][i] * std::sin(2.f * M_PI * exPhase[e][i]);
+			}
 		}
 
 		// Emitter navigation. X/Y CV are velocities, not positions: they are rotated
@@ -932,8 +945,8 @@ struct Crystal : Module {
 			}
 		}
 
-		float inA = inputs[AUDIO_INPUT].getVoltage() * 0.2f + ex * 0.6f;
-		float inB = inputs[AUDIO_B_INPUT].getVoltage() * 0.2f;
+		float inA = inputs[AUDIO_INPUT].getVoltage() * 0.2f + ex[0] * 0.6f;
+		float inB = inputs[AUDIO_B_INPUT].getVoltage() * 0.2f + ex[1] * 0.6f;
 		float in = inA + inB;                                // onset detection watches both
 
 		// Onset detection: a transient at the emitter launches a visible pulse and
@@ -1206,7 +1219,7 @@ struct CrystalDisplay : Widget {
 	// cam() puts a room point on screen; obj() is for points fixed to the crystal,
 	// which turn by its heading first and then ride the camera like everything else
 	void drawCrystal(NVGcontext* vg, const Geom& g, float cy, float cx, const M3& head,
-	                 const float* az, const float* el, bool live, float flash) {
+	                 const float* az, const float* el, bool live, float flash, int flashSide) {
 		auto cam = [&](const V3& p) { return rotYX(p, cy, cx); };
 		auto obj = [&](const V3& p) { return rotYX(mul3(head, p), cy, cx); };
 		float R = 1e-4f;
@@ -1214,7 +1227,7 @@ struct CrystalDisplay : Widget {
 		// the view has to hold the room, not just the crystal: the speakers stand
 		// on the plane around it and must stay on screen — the plane flattens under
 		// the camera's pitch, so it can be drawn larger than its own radius suggests
-		float scale = std::min(box.size.x, box.size.y) * 0.50f / (R * 2.2f);
+		float scale = std::min(box.size.x, box.size.y) * 0.44f / (R * 2.2f);
 
 		// The floor the speakers stand on. Without it the four cones float in the
 		// void and there is no way to read which way the crystal has been turned.
@@ -1324,7 +1337,7 @@ struct CrystalDisplay : Widget {
 			V3 world = dir * g.surfaceDist(dir);
 			Vec pe = project(obj(world), scale);
 			NVGcolor col = e ? cAccent() : XORANGE;
-			if (e == 0 && flash > 0.01f) {
+			if (e == flashSide && flash > 0.01f) {
 				nvgBeginPath(vg); nvgCircle(vg, pe.x, pe.y, 4.f + 16.f * flash);
 				nvgStrokeColor(vg, nvgRGBAf(0.92f, 0.4f, 0.18f, 0.7f * flash));
 				nvgStrokeWidth(vg, 1.2f); nvgStroke(vg);
@@ -1382,11 +1395,16 @@ struct CrystalDisplay : Widget {
 	void draw(const DrawArgs& args) override {
 		if (!font) font = APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
 		NVGcontext* vg = args.vg;
-		lite = !module || module->panelDraw;
+		lite = module && module->panelDraw;
 		nvgBeginPath(vg); nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, lite ? 0.f : 3.f);
 		// the faceplate colour, so the generated screen rect in the SVG is covered
 		// and the drawing reads as sitting directly on the panel
 		nvgFillColor(vg, lite ? nvgRGB(0xF0, 0xF0, 0xF0) : XBG); nvgFill(vg);
+
+		// Everything below is bound to the screen. The room is wider than the
+		// crystal, so the plane's rim and the speaker labels reach past the edge.
+		nvgSave(vg);
+		nvgScissor(vg, 0, 0, box.size.x, box.size.y);
 
 		int mat = module ? clamp((int)std::round(module->params[Crystal::MATERIAL_PARAM].getValue()), 0, CR_NMAT - 1) : 4;
 		if (mat != previewMat) { preview = makeMaterial(mat); previewMat = mat; }
@@ -1402,7 +1420,8 @@ struct CrystalDisplay : Widget {
 		az[1] = module ? module->params[Crystal::EMIT_B_AZ_PARAM].getValue() : -2.2f;
 		el[1] = module ? module->params[Crystal::EMIT_B_EL_PARAM].getValue() : -0.4f;
 		drawCrystal(vg, preview, ry, rx, head, az, el, module != nullptr,
-		            module ? module->pingFlash : 0.f);
+		            module ? module->pingFlash : 0.f,
+		            module ? module->dispPingSide.load() : 0);
 
 		drawGizmo(vg, ry, rx, head);
 
@@ -1432,6 +1451,7 @@ struct CrystalDisplay : Widget {
 				nvgText(vg, box.size.x - 7.f, 6.f, rd.c_str(), NULL);
 			}
 		}
+		nvgRestore(vg);
 	}
 
 	void onButton(const event::Button& e) override {
@@ -1585,6 +1605,7 @@ struct CrystalWidget : ModuleWidget {
 			             if (m->shimmer == CR_NSHIM - 1) m->rollShimmer(); }));
 		if (m->shimmer == CR_NSHIM - 1)
 			menu->addChild(createMenuItem("Re-roll repeat pitches", "", [=]() { m->rollShimmer(); }));
+		menu->addChild(createBoolPtrMenuItem("Ping alternates A / B", "", &m->pingAlternate));
 		menu->addChild(createBoolPtrMenuItem("Draw on the panel (no screen)", "", &m->panelDraw));
 	}
 };
