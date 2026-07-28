@@ -1155,7 +1155,11 @@ struct CrystalDisplay : Widget {
 	// The geometry is half-spaces and a vertex soup, so a face's outline has to be
 	// recovered: take the vertices lying on that plane and wind them about it.
 	// Cached — it only changes with the habit.
-	struct Poly { std::vector<V3> v; V3 n; };
+	// `edge[i]` marks the segment v[i]->v[i+1] as part of the crystal's real
+	// outline. Carving a face introduces boundaries that lie along a neighbour's
+	// plane, and those are bookkeeping, not edges — stroking them draws the
+	// decomposition on the screen.
+	struct Poly { std::vector<V3> v; std::vector<char> edge; V3 n; };
 	std::vector<Poly> polys;
 	std::vector<std::pair<V3, V3>> wire;
 	int polysMat = -1;
@@ -1318,7 +1322,20 @@ struct CrystalDisplay : Widget {
 				on.swap(poly);
 				std::vector<std::vector<V3>> work = {on};
 				carve(g, bi, work);
-				for (auto& piece : work) polys.push_back({piece, f.n});
+				for (auto& piece : work) {
+					std::vector<char> flag(piece.size(), 0);
+					for (size_t q = 0; q < piece.size(); q++) {
+						V3 m = (piece[q] + piece[(q + 1) % piece.size()]) * 0.5f;
+						for (size_t j = 0; j < on.size() && !flag[q]; j++) {
+							V3 a = on[j], b2 = on[(j + 1) % on.size()], ab = b2 - a;
+							float L2 = dot3(ab, ab);
+							if (L2 < 1e-12f) continue;
+							float t = clamp(dot3(m - a, ab) / L2, 0.f, 1.f);
+							if (len3(m - (a + ab * t)) < 1e-3f) flag[q] = 1;
+						}
+					}
+					polys.push_back({piece, flag, f.n});
+				}
 			}
 		}
 	}
@@ -1503,7 +1520,15 @@ struct CrystalDisplay : Widget {
 				                          bg.b * 0.86f + wf.b * 0.14f, 0.60f));
 				nvgFill(vg);
 				nvgStrokeColor(vg, cWire(live ? 0.85f : 0.5f));
-				nvgStrokeWidth(vg, 0.9f); nvgStroke(vg);
+				nvgStrokeWidth(vg, 0.9f);
+				nvgBeginPath(vg);                                  // real edges only
+				for (size_t k = 0; k < pts[i].size(); k++) {
+					if (!polys[i].edge[k]) continue;
+					const Vec& a = pts[i][k];
+					const Vec& b2 = pts[i][(k + 1) % pts[i].size()];
+					nvgMoveTo(vg, a.x, a.y); nvgLineTo(vg, b2.x, b2.y);
+				}
+				nvgStroke(vg);
 			}
 		}
 
