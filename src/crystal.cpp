@@ -468,6 +468,11 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 
 		int got[CR_NL] = {}; float sum[CR_NL] = {};
 		float acc[CR_TAPS]; int nAcc = 0;                      // events accepted so far
+		// A trapped pocket is a resonance of the crystal's own geometry, so its
+		// period is the path INSIDE the crystal — not the path to a listener, which
+		// changes as the thing rotates.
+		struct Ev { float t; float g; int li; };
+		std::vector<Ev> ev;
 		float minGap = delayMode ? baseDelay * 0.15f : 0.004f;
 		int keep = std::min(CR_TAPS, nEchoes);
 		for (size_t c = 0; c < strikes.size() && nAcc < keep; c++) {
@@ -485,6 +490,11 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 				if (std::fabs(tMean - acc[q]) < minGap) { close = true; break; }
 			if (close) continue;
 			acc[nAcc++] = tMean;
+			if (st.wall) {
+				float best = 0.f; int bl = 0;
+				for (int li = 0; li < CR_NL; li++) if (g[li] > best) { best = g[li]; bl = li; }
+				ev.push_back({st.t0 / C_AIR * tsc, best / ref, bl});
+			}
 			float sign = (nAcc & 1) ? 1.f : -1.f;              // per EVENT, so the four stay correlated
 			for (int li = 0; li < CR_NL; li++) {
 				if (g[li] <= 0.f || got[li] >= CR_TAPS) continue;
@@ -503,21 +513,16 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 
 		// trapped pockets: spread across the arrival range so their periods differ
 		{
-			struct Cand { int d; float g; int li; };
-			std::vector<Cand> cand;
-			for (int li = 0; li < CR_NL; li++)
-				for (int k = 0; k < ts.n[em][li]; k++)
-					cand.push_back({ts.delay[em][li][k], std::fabs(ts.gain[em][li][k]), li});
-			std::sort(cand.begin(), cand.end(),
-			          [](const Cand& a, const Cand& b) { return a.d < b.d; });
+			std::sort(ev.begin(), ev.end(),
+			          [](const Ev& a, const Ev& b) { return a.t < b.t; });
 			for (int k = 0; k < CR_LOOPS; k++) {
-				if (cand.empty()) { ts.loopDelay[em][k] = 1000 + k * 137; ts.loopGain[em][k] = 0.5f;
-				                    ts.loopOut[em][k] = k % CR_NL; continue; }
-				size_t pick = (size_t)((k + 0.5f) / CR_LOOPS * cand.size());
-				pick = std::min(pick, cand.size() - 1);
-				ts.loopDelay[em][k] = clamp(cand[pick].d, 32, CR_LOOPBUF - 4);
-				ts.loopGain[em][k] = clamp(0.45f + 0.55f * cand[pick].g, 0.2f, 1.f);
-				ts.loopOut[em][k] = cand[pick].li;         // where that echo was heard
+				if (ev.empty()) { ts.loopDelay[em][k] = 1000 + k * 137; ts.loopGain[em][k] = 0.5f;
+				                  ts.loopOut[em][k] = k % CR_NL; continue; }
+				size_t pick = (size_t)((k + 0.5f) / CR_LOOPS * ev.size());
+				pick = std::min(pick, ev.size() - 1);
+				ts.loopDelay[em][k] = clamp((int)(ev[pick].t * sr), 32, CR_LOOPBUF - 4);
+				ts.loopGain[em][k] = clamp(0.45f + 0.55f * ev[pick].g, 0.2f, 1.f);
+				ts.loopOut[em][k] = ev[pick].li;           // where that echo was loudest
 			}
 			int cnt[CR_NL] = {};
 			for (int k = 0; k < CR_LOOPS; k++) cnt[ts.loopOut[em][k]]++;
@@ -614,6 +619,7 @@ struct Crystal : Module {
 	std::vector<float> loopBuf[CR_NE][CR_LOOPS];
 	int   loopWr[CR_NE][CR_LOOPS] = {};
 	float loopDelSm[CR_NE][CR_LOOPS] = {};      // glided, so a moving emitter never steps
+	float panSm[CR_NE][CR_LOOPS][CR_NL] = {};   // ramped pocket panning
 	float loopLp[CR_NE][CR_LOOPS] = {};
 	float fbDcX[CR_NE] = {}, fbDcY[CR_NE] = {};
 	// A one-pole lowpass inside a feedback loop has its highest gain at DC, and
@@ -911,7 +917,9 @@ struct Crystal : Module {
 
 		// The ongoing repeats come from the trapped pockets, each recirculating at
 		// its own period. Their delays GLIDE to new values rather than jumping, so
-		// a fast-moving emitter bends the pitch slightly instead of clicking.
+		// a moving emitter bends the pitch slightly instead of clicking. The rate is
+		// the transposition: gliding at 0.25 samples per sample reads the line at
+		// 1.25x, which is a major third — keep it to a few cents.
 		float loopDamp = clamp(1.f - params[DAMP_PARAM].getValue() * 1.5f, 0.06f, 0.95f);
 		const TapSet& AF = sets[active.load()];
 		float pocket[CR_NL] = {};
@@ -920,7 +928,7 @@ struct Crystal : Module {
 			fbDcY[e] = din - fbDcX[e] + 0.9995f * fbDcY[e]; fbDcX[e] = din;
 			for (int k = 0; k < CR_LOOPS; k++) {
 				float tgt = A0ready ? (float)AF.loopDelay[e][k] : loopDelSm[e][k];
-				loopDelSm[e][k] += clamp(tgt - loopDelSm[e][k], -0.25f, 0.25f);
+				loopDelSm[e][k] += clamp(tgt - loopDelSm[e][k], -0.004f, 0.004f);
 				float d = clamp(loopDelSm[e][k], 4.f, (float)CR_LOOPBUF - 4.f);
 				int di = (int)d; float fr = d - di;
 				int i0 = loopWr[e][k] - di;      while (i0 < 0) i0 += CR_LOOPBUF;
@@ -937,7 +945,11 @@ struct Crystal : Module {
 				loopWr[e][k] = (loopWr[e][k] + 1) % CR_LOOPBUF;
 				int li = A0ready ? AF.loopOut[e][k] : (k % CR_NL);
 				float sc = A0ready ? AF.loopScale[e][k] : 0.5f;
-				pocket[li] += lp * 0.5f * sc;
+				for (int q = 0; q < CR_NL; q++) {          // pan, ramped — a rerouted
+					float tgtq = (q == li) ? sc : 0.f;     // pocket must not step
+					panSm[e][k][q] += (tgtq - panSm[e][k][q]) * 0.0006f;
+					pocket[q] += lp * 0.5f * panSm[e][k][q];
+				}
 			}
 		}
 
@@ -1064,7 +1076,8 @@ struct CrystalDisplay : Widget {
 			idleT += 1.f / 60.f;
 			idleY += 0.00042f * (std::sin(idleT * 0.19f) + 0.7f * std::sin(idleT * 0.073f));
 			idleX += 0.00022f * (std::sin(idleT * 0.11f + 1.3f) + 0.6f * std::sin(idleT * 0.041f));
-			idleX = clamp(idleX, -0.30f, 0.30f);
+			idleY = clamp(idleY, -0.30f, 0.30f);   // both bounded: an unbounded
+			idleX = clamp(idleX, -0.30f, 0.30f);   // integral drifts away over minutes
 		}
 		if (module && !dragging && (std::fabs(spinY) > 1e-5f || std::fabs(spinX) > 1e-5f)) {
 			float ry = module->params[Crystal::ROTY_PARAM].getValue() + spinY;
@@ -1100,29 +1113,39 @@ struct CrystalDisplay : Widget {
 		// The floor the speakers stand on. Without it the four cones float in the
 		// void and there is no way to read which way the crystal has been turned.
 		{
-			const float RC = 2.1f, STEP = 0.35f;
+			// Polar, not square: a square grid shimmers as the camera yaws (thin
+			// lines sweeping past each other), while rings and spokes look the same
+			// at every yaw — and they say what the plane is, since the speakers sit
+			// on one of the rings.
+			const float RC = 2.1f;
 			float fy = FLOOR_Y * R;
-			for (int axis = 0; axis < 2; axis++)
-			for (int i = -6; i <= 6; i++) {
-				float u = i * STEP;
-				float half = RC * RC - u * u;
-				if (half <= 0.f) continue;
-				half = std::sqrt(half);
-				V3 a = axis ? V3(-half * R, fy, u * R) : V3(u * R, fy, -half * R);
-				V3 b = axis ? V3( half * R, fy, u * R) : V3(u * R, fy,  half * R);
-				Vec pa = project(cam(a), scale), pb = project(cam(b), scale);
-				nvgBeginPath(vg); nvgMoveTo(vg, pa.x, pa.y); nvgLineTo(vg, pb.x, pb.y);
-				nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, i == 0 ? 0.20f : 0.10f));
-				nvgStrokeWidth(vg, i == 0 ? 0.9f : 0.5f); nvgStroke(vg);
+			auto ring = [&](float rad, float alpha, float wdt) {
+				nvgBeginPath(vg);
+				for (int k = 0; k <= 64; k++) {
+					float a = k * 2.f * (float)M_PI / 64.f;
+					Vec p = project(cam(V3(std::cos(a) * rad * R, fy, std::sin(a) * rad * R)), scale);
+					if (k == 0) nvgMoveTo(vg, p.x, p.y); else nvgLineTo(vg, p.x, p.y);
+				}
+				nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, alpha));
+				nvgStrokeWidth(vg, wdt); nvgStroke(vg);
+			};
+			for (int i = 1; i <= 5; i++) ring(i * RC / 5.f, i == 5 ? 0.22f : 0.09f, i == 5 ? 0.7f : 0.5f);
+			for (int k = 0; k < 12; k++) {                     // spokes, brighter on the speakers
+				float a = k * 30.f * (float)M_PI / 180.f;
+				bool onSpeaker = (k % 3) == 1;                 // 30/120/210/300 vs the 45 deg ring
+				Vec p0 = project(cam(V3()), scale);
+				Vec p1 = project(cam(V3(std::cos(a) * RC * R, fy, std::sin(a) * RC * R)), scale);
+				nvgBeginPath(vg); nvgMoveTo(vg, p0.x, p0.y); nvgLineTo(vg, p1.x, p1.y);
+				nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, onSpeaker ? 0.10f : 0.07f));
+				nvgStrokeWidth(vg, 0.5f); nvgStroke(vg);
 			}
-			nvgBeginPath(vg);                                    // rim of the plane
-			for (int k = 0; k <= 48; k++) {
-				float a = k * 2.f * (float)M_PI / 48.f;
-				Vec p = project(cam(V3(std::cos(a) * RC * R, fy, std::sin(a) * RC * R)), scale);
-				if (k == 0) nvgMoveTo(vg, p.x, p.y); else nvgLineTo(vg, p.x, p.y);
+			for (int i = 0; i < CR_NL; i++) {                  // the ray out to each speaker
+				V3 sp = speakerPos(i) * R;
+				Vec p0 = project(cam(V3(0.f, fy, 0.f)), scale), p1 = project(cam(sp), scale);
+				nvgBeginPath(vg); nvgMoveTo(vg, p0.x, p0.y); nvgLineTo(vg, p1.x, p1.y);
+				nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, 0.16f));
+				nvgStrokeWidth(vg, 0.6f); nvgStroke(vg);
 			}
-			nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, 0.22f));
-			nvgStrokeWidth(vg, 0.7f); nvgStroke(vg);
 		}
 
 		for (auto& bd : g.bodies)
