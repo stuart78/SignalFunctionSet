@@ -1519,16 +1519,25 @@ struct CrystalDisplay : Widget {
 				                          bg.g * 0.86f + wf.g * 0.14f,
 				                          bg.b * 0.86f + wf.b * 0.14f, 0.60f));
 				nvgFill(vg);
-				nvgStrokeColor(vg, cWire(live ? 0.85f : 0.5f));
-				nvgStrokeWidth(vg, 0.9f);
-				nvgBeginPath(vg);                                  // real edges only
-				for (size_t k = 0; k < pts[i].size(); k++) {
-					if (!polys[i].edge[k]) continue;
-					const Vec& a = pts[i][k];
-					const Vec& b2 = pts[i][(k + 1) % pts[i].size()];
-					nvgMoveTo(vg, a.x, a.y); nvgLineTo(vg, b2.x, b2.y);
+				// Two weights: the crystal's own edges, and the seams where one
+				// individual grows through another. The seams are real features of
+				// an intergrowth and worth seeing — just not at the same weight as
+				// an edge, or the decomposition reads as structure.
+				for (int pass = 0; pass < 2; pass++) {
+					nvgBeginPath(vg);
+					bool any = false;
+					for (size_t k = 0; k < pts[i].size(); k++) {
+						if ((bool)polys[i].edge[k] != (pass == 0)) continue;
+						const Vec& a = pts[i][k];
+						const Vec& b2 = pts[i][(k + 1) % pts[i].size()];
+						nvgMoveTo(vg, a.x, a.y); nvgLineTo(vg, b2.x, b2.y);
+						any = true;
+					}
+					if (!any) continue;
+					nvgStrokeColor(vg, cWire(pass == 0 ? (live ? 0.85f : 0.5f) : 0.20f));
+					nvgStrokeWidth(vg, pass == 0 ? 0.9f : 0.5f);
+					nvgStroke(vg);
 				}
-				nvgStroke(vg);
 			}
 		}
 
@@ -1590,6 +1599,25 @@ struct CrystalDisplay : Widget {
 							if (since < 0.05f) {
 								float a = (1.f - since / 0.05f) * lvl;
 								Vec hp = project(cam(pv.pt[seg]), scale);
+
+								// the wall itself lights up: find the face this
+								// strike landed on and wash it briefly
+								for (size_t fj = 0; fj < polys.size(); fj++) {
+									V3 pn = mul3(head, polys[fj].n);
+									if (dot3(pn, pv.nrm[seg]) < 0.999f) continue;
+									float pd = dot3(polys[fj].n, polys[fj].v[0]);
+									if (std::fabs(dot3(pn, pv.pt[seg]) - pd) > 0.02f) continue;
+									nvgBeginPath(vg);
+									for (size_t k = 0; k < polys[fj].v.size(); k++) {
+										Vec q2 = project(obj(polys[fj].v[k]), scale);
+										if (k == 0) nvgMoveTo(vg, q2.x, q2.y);
+										else        nvgLineTo(vg, q2.x, q2.y);
+									}
+									nvgClosePath(vg);
+									nvgFillColor(vg, nvgRGBAf(0.95f, 0.72f, 0.35f, 0.20f * a));
+									nvgFill(vg);
+								}
+
 								nvgBeginPath(vg); nvgCircle(vg, hp.x, hp.y, 1.5f + 5.f * a);
 								nvgStrokeColor(vg, nvgRGBAf(0.95f, 0.72f, 0.3f, 0.55f * a));
 								nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
