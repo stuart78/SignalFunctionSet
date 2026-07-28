@@ -396,10 +396,14 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 		V3 ed = norm3(mul3(head, emitDir[em]));   // rides with the crystal
 		V3 emit = ed * (sc.surfaceDist(ed) * 0.97f);
 
-		std::vector<std::pair<float, float>> taps[CR_NL];       // (seconds, gain)
-		for (int li = 0; li < CR_NL; li++)
-			taps[li].push_back({std::max(len3(L[li] - emit), 0.05f) / C_AIR,
-			                    1.f / std::max(len3(L[li] - emit), 0.05f)});
+		// One event, heard four times. Collect the STRIKES rather than four separate
+		// tap lists: every listener then hears the same reflections, each at its own
+		// level and arrival time — which is what an array of mics in a room hears.
+		// Letting each listener keep its own strongest arrivals instead produced
+		// four uncorrelated reverbs of near-identical level, and no image at all.
+		struct Strike { float t0; float amp; V3 p; V3 n; bool wall; };
+		std::vector<Strike> strikes;
+		strikes.push_back({0.f, 1.f, emit, V3(), false});       // the direct sound
 
 		for (int r = 0; r < CR_RAYS; r++) {
 			// deterministic fan (golden angle) — the same crystal always sounds the
@@ -429,18 +433,7 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 
 				if (pv && pv->n < CR_PATHPTS) { pv->pt[pv->n] = p; pv->cum[pv->n] = pathLen; pv->n++; }
 
-				// The strike radiates outward through the face it hit, so a speaker
-				// only hears it if it stands on the outside of that face. That
-				// directivity is what turns rotation into movement rather than a
-				// level change.
-				for (int li = 0; li < CR_NL; li++) {
-					V3 toL = L[li] - p;
-					float d = std::max(len3(toL), 0.05f);
-					float facing = dot3(norm3(toL), hn);
-					if (facing <= 0.f) continue;               // behind the face: blocked
-					float w = facing * facing * facing;        // a face fires where it points
-					taps[li].push_back({(pathLen + d) / C_AIR, amp * w / d});
-				}
+				strikes.push_back({pathLen, amp, p, hn, true});
 				v = norm3(v - hn * (2.f * dot3(v, hn)));
 			}
 			if (pv) {
@@ -449,45 +442,63 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 			}
 		}
 
-		// Normalising each listener by its OWN loudest tap made every speaker peak
-		// at the same level whatever the crystal was facing, which is precisely the
-		// difference that carries movement. One shared reference instead.
-		float ref = 1e-9f;
-		for (int li = 0; li < CR_NL; li++) {
-			std::sort(taps[li].begin(), taps[li].end(),
-			          [](const std::pair<float, float>& a, const std::pair<float, float>& b) {
-				          return std::fabs(a.second) > std::fabs(b.second);
-			          });
-			if (!taps[li].empty()) ref = std::max(ref, std::fabs(taps[li][0].second));
-		}
+		// how strongly a strike radiates toward one listener, and how far it goes
+		auto weigh = [&](const Strike& st, int li, float& d) {
+			V3 toL = L[li] - st.p;
+			d = std::max(len3(toL), 0.05f);
+			if (!st.wall) return st.amp / d;                   // the emitter is omni
+			float f = dot3(norm3(toL), st.n);
+			if (f <= 0.f) return 0.f;                          // behind the face: blocked
+			return st.amp * f * f * f / d;                     // a face fires where it points
+		};
 
+		std::sort(strikes.begin(), strikes.end(),
+		          [](const Strike& a, const Strike& b) { return a.amp > b.amp; });
+
+		float ref = 1e-9f, tmin = 1e9f;
+		for (auto& st : strikes)
+			for (int li = 0; li < CR_NL; li++) {
+				float d, g = weigh(st, li, d);
+				if (g <= 0.f) continue;
+				ref = std::max(ref, g);
+				tmin = std::min(tmin, (st.t0 + d) / C_AIR);
+			}
+		float tsc = (delayMode && tmin < 1e8f && tmin > 1e-9f) ? baseDelay / tmin : 1.f;
+		ts.timeScale = tsc;
+
+		int got[CR_NL] = {}; float sum[CR_NL] = {};
+		float acc[CR_TAPS]; int nAcc = 0;                      // events accepted so far
+		float minGap = delayMode ? baseDelay * 0.15f : 0.004f;
+		int keep = std::min(CR_TAPS, nEchoes);
+		for (size_t c = 0; c < strikes.size() && nAcc < keep; c++) {
+			const Strike& st = strikes[c];
+			float d[CR_NL], g[CR_NL], tMean = 0.f; int nHear = 0;
+			for (int li = 0; li < CR_NL; li++) {
+				g[li] = weigh(st, li, d[li]);
+				if (g[li] > 0.f) { tMean += (st.t0 + d[li]) / C_AIR; nHear++; }
+			}
+			if (!nHear) continue;
+			tMean = tMean / nHear * tsc;
+			if (tMean > maxDel) continue;
+			bool close = false;                                // one event, not a cluster
+			for (int q = 0; q < nAcc; q++)
+				if (std::fabs(tMean - acc[q]) < minGap) { close = true; break; }
+			if (close) continue;
+			acc[nAcc++] = tMean;
+			float sign = (nAcc & 1) ? 1.f : -1.f;              // per EVENT, so the four stay correlated
+			for (int li = 0; li < CR_NL; li++) {
+				if (g[li] <= 0.f || got[li] >= CR_TAPS) continue;
+				float t = (st.t0 + d[li]) / C_AIR * tsc;
+				float gn = g[li] / ref;
+				ts.delay[em][li][got[li]] = clamp((int)(t * sr), 1, (int)(maxDel * sr));
+				ts.gain[em][li][got[li]] = sign * gn;
+				sum[li] += gn * gn;
+				got[li]++;
+			}
+		}
 		for (int li = 0; li < CR_NL; li++) {
-			if (taps[li].empty()) { ts.n[em][li] = 0; continue; }
-			float tsc = 1.f;
-			if (delayMode) {
-				float tmin = 1e9f;
-				for (auto& t : taps[li]) tmin = std::min(tmin, t.first);
-				tsc = (tmin > 1e-9f) ? baseDelay / tmin : 1.f;
-			}
-			ts.timeScale = tsc;
-			int n = std::min({(int)taps[li].size(), CR_TAPS, nEchoes});
-			float minGap = delayMode ? baseDelay * 0.15f : 0.004f;
-			int got = 0; float sum = 0.f;
-			for (size_t c = 0; c < taps[li].size() && got < n; c++) {
-				float t = taps[li][c].first * tsc;
-				if (t > maxDel) continue;
-				bool close = false;
-				for (int q = 0; q < got; q++)
-					if (std::fabs(t - ts.delay[em][li][q] / sr) < minGap) { close = true; break; }
-				if (close) continue;
-				ts.delay[em][li][got] = clamp((int)(t * sr), 1, (int)(maxDel * sr));
-				ts.gain[em][li][got] = taps[li][c].second / ref;
-				if (got & 1) ts.gain[em][li][got] = -ts.gain[em][li][got];
-				sum += ts.gain[em][li][got] * ts.gain[em][li][got];
-				got++;
-			}
-			ts.n[em][li] = got;
-			ts.earlyGain = std::max(ts.earlyGain, std::max(std::sqrt(sum), 1.f));
+			ts.n[em][li] = got[li];
+			ts.earlyGain = std::max(ts.earlyGain, std::max(std::sqrt(sum[li]), 1.f));
 		}
 
 		// trapped pockets: spread across the arrival range so their periods differ
