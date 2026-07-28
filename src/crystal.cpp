@@ -139,6 +139,7 @@ struct Body {
 	std::vector<Plane> faces;
 	std::vector<V3> verts;
 	std::vector<std::pair<int, int>> edges;
+	std::vector<std::vector<int>> faceVerts;   // which corners belong to each face
 	float volume = 1.f, area = 1.f, inradius = 1.f;
 
 	void add(V3 n, float d) { faces.push_back({norm3(n), d}); }
@@ -177,7 +178,7 @@ struct Body {
 	// Vertices are plane triples inside every other half-space; edges are plane
 	// pairs sharing exactly two of them. O(F^3) on <=20 faces.
 	void buildMesh() {
-		verts.clear(); edges.clear();
+		verts.clear(); edges.clear(); faceVerts.clear();
 		int F = (int)faces.size();
 		std::vector<std::vector<int>> onPlane(F);
 		for (int i = 0; i < F; i++)
@@ -230,6 +231,7 @@ struct Body {
 		inradius = 1e9f;
 		for (auto& f : faces) inradius = std::min(inradius, std::fabs(f.d - dot3(f.n, cen)));
 		if (inradius > 1e8f) inradius = 1.f;
+		faceVerts = onPlane;
 	}
 };
 
@@ -1276,15 +1278,14 @@ struct CrystalDisplay : Widget {
 					if (sp.second - sp.first > 1e-3f)
 						wire.push_back({p0 + (p1 - p0) * sp.first, p0 + (p1 - p0) * sp.second});
 			}
-			for (auto& f : b.faces) {
-				float eps = 2e-4f * std::max(1.f, std::fabs(f.d));
+			for (size_t fi = 0; fi < b.faces.size(); fi++) {
+				const Plane& f = b.faces[fi];
+				// buildMesh already worked out which corners belong to which face.
+				// Re-deriving it here with a second epsilon only creates a way for
+				// the drawn shape to disagree with the mesh.
+				if (fi >= b.faceVerts.size()) continue;
 				std::vector<V3> on;
-				for (auto& v : b.verts) {
-					if (std::fabs(dot3(f.n, v) - f.d) > eps) continue;
-					bool dup = false;
-					for (auto& q : on) if (len3(q - v) < 1e-4f) { dup = true; break; }
-					if (!dup) on.push_back(v);
-				}
+				for (int vi : b.faceVerts[fi]) on.push_back(b.verts[vi]);
 				if (on.size() < 3) continue;
 				V3 c;
 				for (auto& v : on) c = c + v;
@@ -1626,10 +1627,19 @@ struct CrystalDisplay : Widget {
 
 								// the wall itself lights up: find the face this
 								// strike landed on and wash it briefly
-								for (size_t fj = 0; fj < polys.size(); fj++) {
-									if (dot3(polys[fj].n, hitN) < 0.98f) continue;
-									float pd = dot3(polys[fj].n, polys[fj].v[0]);
-									if (std::fabs(dot3(polys[fj].n, hitO) - pd) > 0.12f) continue;
+								// The plane the strike landed on, taken from the
+								// geometry itself rather than back-computed from a
+								// carved piece's first vertex.
+								float bestErr = 1e9f; V3 bn; float bd = 0.f;
+								for (auto& bd2 : g.bodies)
+									for (auto& f2 : bd2.faces) {
+										if (dot3(f2.n, hitN) < 0.9f) continue;
+										float er = std::fabs(dot3(f2.n, hitO) - f2.d);
+										if (er < bestErr) { bestErr = er; bn = f2.n; bd = f2.d; }
+									}
+								for (size_t fj = 0; bestErr < 0.15f && fj < polys.size(); fj++) {
+									if (dot3(polys[fj].n, bn) < 0.999f) continue;
+									if (std::fabs(dot3(polys[fj].n, polys[fj].v[0]) - bd) > 1e-3f) continue;
 									nvgBeginPath(vg);
 									for (size_t k = 0; k < polys[fj].v.size(); k++) {
 										Vec q2 = project(obj(polys[fj].v[k]), scale);
@@ -1677,8 +1687,11 @@ struct CrystalDisplay : Widget {
 				nvgStrokeColor(vg, nvgRGBAf(0.92f, 0.4f, 0.18f, 0.7f * flash));
 				nvgStrokeWidth(vg, 1.2f); nvgStroke(vg);
 			}
-			// heading arrow: which way this emitter travels under X/Y CV
-			if (module) {
+			// Heading arrow: which way this emitter travels under X/Y CV. Nothing to
+			// say when nothing is patched to move it, so it is just clutter then.
+			bool nav = module && (module->inputs[e ? Crystal::BX_INPUT : Crystal::AX_INPUT].isConnected()
+			                   || module->inputs[e ? Crystal::BY_INPUT : Crystal::AY_INPUT].isConnected());
+			if (nav) {
 				float hd = module->params[e ? Crystal::HEAD_B_PARAM : Crystal::HEAD_A_PARAM].getValue();
 				float aa = az[e] + std::cos(hd) * 0.16f, ee = clamp(el[e] + std::sin(hd) * 0.16f, -1.5f, 1.5f);
 				V3 d2 = norm3(V3(std::cos(aa) * std::cos(ee), std::sin(aa) * std::cos(ee), std::sin(ee)));
@@ -1741,7 +1754,13 @@ struct CrystalDisplay : Widget {
 		nvgSave(vg);
 		nvgScissor(vg, 0, 0, box.size.x, box.size.y);
 
-		int mat = module ? clamp((int)std::round(module->params[Crystal::MATERIAL_PARAM].getValue()), 0, CR_NMAT - 1) : 4;
+		// Must match what the TRACER used, CV included. Reading the knob alone drew
+		// one habit while the paths came from another, so rays and pulses wandered
+		// straight out through walls that were not there in the traced crystal.
+		float matv = module ? module->params[Crystal::MATERIAL_PARAM].getValue() : 4.f;
+		if (module && module->inputs[Crystal::MATERIAL_INPUT].isConnected())
+			matv += module->inputs[Crystal::MATERIAL_INPUT].getVoltage();
+		int mat = clamp((int)std::round(matv), 0, CR_NMAT - 1);
 		if (mat != previewMat) { preview = makeMaterial(mat); previewMat = mat; }
 		if (mat != polysMat) { buildPolys(preview); polysMat = mat; }
 
