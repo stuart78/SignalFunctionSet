@@ -356,6 +356,7 @@ static Geom makeMaterial(int idx) {
 struct PathViz {
 	int n = 0, emitter = 0;
 	V3 pt[CR_PATHPTS];
+	V3 nrm[CR_PATHPTS];              // the face struck there, so the display can
 	float cum[CR_PATHPTS] = {};      // cumulative metres from the emitter
 };
 
@@ -405,8 +406,13 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 	for (auto& b : sc.bodies)
 		for (auto& f : b.faces) { f.n = mul3(head, f.n); f.d *= sizeM; }
 
+	// speakerPos is in crystal radii, so it has to be scaled by the habit's own
+	// radius — a cube's corners reach sqrt(3), and at plain 1.75 the speakers were
+	// nearly touching it. The display already drew them this way; the tracer did not.
+	float Rg = 1e-4f;
+	for (auto& b : g.bodies) for (auto& v : b.verts) Rg = std::max(Rg, len3(v));
 	V3 L[CR_NL];
-	for (int i = 0; i < CR_NL; i++) L[i] = speakerPos(i) * sizeM;
+	for (int i = 0; i < CR_NL; i++) L[i] = speakerPos(i) * (Rg * sizeM);
 
 	for (int em = 0; em < CR_NE; em++) {
 		V3 ed = norm3(mul3(head, emitDir[em]));   // rides with the crystal
@@ -447,7 +453,8 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 				amp *= (1.f - absorb);
 				if (amp < 2e-4f) break;
 
-				if (pv && pv->n < CR_PATHPTS) { pv->pt[pv->n] = p; pv->cum[pv->n] = pathLen; pv->n++; }
+				if (pv && pv->n < CR_PATHPTS) { pv->pt[pv->n] = p; pv->nrm[pv->n] = hn;
+				                               pv->cum[pv->n] = pathLen; pv->n++; }
 
 				strikes.push_back({pathLen, amp, p, hn, true});
 				v = norm3(v - hn * (2.f * dot3(v, hn)));
@@ -1224,10 +1231,10 @@ struct CrystalDisplay : Widget {
 		auto obj = [&](const V3& p) { return rotYX(mul3(head, p), cy, cx); };
 		float R = 1e-4f;
 		for (auto& bd : g.bodies) for (auto& v : bd.verts) R = std::max(R, len3(v));
-		// the view has to hold the room, not just the crystal: the speakers stand
-		// on the plane around it and must stay on screen — the plane flattens under
-		// the camera's pitch, so it can be drawn larger than its own radius suggests
-		float scale = std::min(box.size.x, box.size.y) * 0.44f / (R * 2.2f);
+		// Scale to the CRYSTAL, not to the room around it. The plane flattens under
+		// the camera's pitch and the display is far wider than it is tall, so the
+		// speakers and the rim have room either side even when the crystal is large.
+		float scale = box.size.y * 0.36f / R;
 
 		// The floor the speakers stand on. Without it the four cones float in the
 		// void and there is no way to read which way the crystal has been turned.
@@ -1299,7 +1306,7 @@ struct CrystalDisplay : Widget {
 						if (k == 0) nvgMoveTo(vg, q.x, q.y); else nvgLineTo(vg, q.x, q.y);
 					}
 					bool eB = pv.emitter != 0;
-					nvgStrokeColor(vg, cPath(eB, 0.12f));
+					nvgStrokeColor(vg, cPath(eB, 0.20f));
 					nvgStrokeWidth(vg, 0.6f); nvgStroke(vg);
 
 					// One dot per pulse, on ONE path — a pulse is a single particle
@@ -1325,6 +1332,33 @@ struct CrystalDisplay : Widget {
 						nvgBeginPath(vg); nvgCircle(vg, q.x, q.y, rr * 2.4f);
 						nvgStrokeColor(vg, nvgRGBAf(0.92f, 0.4f, 0.18f, 0.25f * lvl));
 						nvgStrokeWidth(vg, 0.8f); nvgStroke(vg);
+
+						// This is the whole mechanism: every wall strike sheds an
+						// echo toward each speaker standing on the outside of the
+						// face it hit, weighted by how squarely the face points at
+						// it. Drawn for a moment after the pulse passes a corner.
+						if (seg > 0) {
+							float since = (travelled - pv.cum[seg])
+							            / std::max(pv.cum[pv.n - 1], 1e-6f);
+							if (since < 0.05f) {
+								float a = (1.f - since / 0.05f) * lvl;
+								Vec hp = project(cam(pv.pt[seg]), scale);
+								nvgBeginPath(vg); nvgCircle(vg, hp.x, hp.y, 1.5f + 5.f * a);
+								nvgStrokeColor(vg, nvgRGBAf(0.95f, 0.72f, 0.3f, 0.55f * a));
+								nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
+								for (int li = 0; li < CR_NL; li++) {
+									V3 sp = speakerPos(li) * R;
+									float f = dot3(norm3(sp - pv.pt[seg]), pv.nrm[seg]);
+									if (f <= 0.f) continue;          // behind the face
+									Vec se = project(cam(sp), scale);
+									nvgBeginPath(vg);
+									nvgMoveTo(vg, hp.x, hp.y); nvgLineTo(vg, se.x, se.y);
+									nvgStrokeColor(vg, nvgRGBAf(0.95f, 0.6f, 0.22f,
+									                            0.5f * a * f * f * f));
+									nvgStrokeWidth(vg, 0.8f); nvgStroke(vg);
+								}
+							}
+						}
 					}
 				}
 			}
