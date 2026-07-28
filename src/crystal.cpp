@@ -49,6 +49,7 @@ static const Shim CR_SHIMMER[] = {
 	{"Octave up",                  2.f},
 	{"Major third down",           0.793701f},
 	{"Octave down",                0.5f},
+	{"Random (one per pocket)",    0.f},                        // 0 = rolled per loop
 };
 static const int CR_NSHIM = (int)(sizeof(CR_SHIMMER) / sizeof(CR_SHIMMER[0]));
 
@@ -640,7 +641,16 @@ struct Crystal : Module {
 	// used to happen by accident, when the pocket delays glided toward a moving
 	// target; now it is deliberate and in tune.
 	int   shimmer = 0;
+	bool  panelDraw = true;      // draw straight onto the faceplate, no dark screen
 	float psPhase[CR_NE][CR_LOOPS] = {};
+	// Random gives each pocket its own interval, held rather than re-rolled, so the
+	// repeats climb away as a chord instead of a scramble.
+	int   psPick[CR_NE][CR_LOOPS] = {};
+	void rollShimmer() {
+		for (int e = 0; e < CR_NE; e++)
+			for (int k = 0; k < CR_LOOPS; k++)
+				psPick[e][k] = 1 + (int)(random::uniform() * (CR_NSHIM - 2));
+	}
 	float loopLp[CR_NE][CR_LOOPS] = {};
 	float fbDcX[CR_NE] = {}, fbDcY[CR_NE] = {};
 	// A one-pole lowpass inside a feedback loop has its highest gain at DC, and
@@ -708,6 +718,7 @@ struct Crystal : Module {
 			configOutput(QUAD_OUTPUT + i, string::f("Quad %c", 'A' + i));
 
 		for (int i = 0; i < CR_NPULSE; i++) { pulseT[i] = -1.f; pulseLvl[i] = 0.f; }
+		rollShimmer();
 		bufLen = (int)(3.0f * 96000.f);
 		for (int e = 0; e < CR_NE; e++) {
 			buf[e].assign(bufLen, 0.f);
@@ -733,6 +744,7 @@ struct Crystal : Module {
 		for (int i = 0; i < CR_FDN; i++) { std::fill(fdn[i].begin(), fdn[i].end(), 0.f); fdnLp[i] = 0.f;
 		                                   fdDcX[i] = fdDcY[i] = 0.f; }
 		for (int i = 0; i < 3; i++) { exEnv[i] = 0.f; exPhase[i] = 0.f; }
+		rollShimmer();
 		dirty = true;
 	}
 
@@ -805,6 +817,11 @@ struct Crystal : Module {
 		for (int i = 0; i < 9; i++) json_array_append_new(h, json_real(headM.m[i]));
 		json_object_set_new(r, "heading", h);
 		json_object_set_new(r, "shimmer", json_integer(shimmer));
+		json_object_set_new(r, "panelDraw", json_boolean(panelDraw));
+		json_t* pk = json_array();
+		for (int e = 0; e < CR_NE; e++)
+			for (int k = 0; k < CR_LOOPS; k++) json_array_append_new(pk, json_integer(psPick[e][k]));
+		json_object_set_new(r, "shimmerPicks", pk);
 		return r;
 	}
 	void dataFromJson(json_t* r) override {
@@ -814,6 +831,12 @@ struct Crystal : Module {
 			orthonormalize(headM);
 		}
 		if (json_t* j = json_object_get(r, "shimmer")) shimmer = (int)json_integer_value(j);
+		if (json_t* j = json_object_get(r, "panelDraw")) panelDraw = json_boolean_value(j);
+		if (json_t* pk = json_object_get(r, "shimmerPicks"))
+			for (int e = 0, i = 0; e < CR_NE; e++)
+				for (int k = 0; k < CR_LOOPS; k++, i++)
+					if (i < (int)json_array_size(pk))
+						psPick[e][k] = (int)json_integer_value(json_array_get(pk, i));
 		dirty = true;
 	}
 
@@ -944,7 +967,8 @@ struct Crystal : Module {
 		// the transposition: gliding at 0.25 samples per sample reads the line at
 		// 1.25x, which is a major third — keep it to a few cents.
 		float loopDamp = clamp(1.f - params[DAMP_PARAM].getValue() * 1.5f, 0.06f, 0.95f);
-		float psRatio = CR_SHIMMER[clamp(shimmer, 0, CR_NSHIM - 1)].ratio;
+		int   psSel   = clamp(shimmer, 0, CR_NSHIM - 1);
+		float psRatio = CR_SHIMMER[psSel].ratio;
 		const TapSet& AF = sets[active.load()];
 		float pocket[CR_NL] = {};
 		for (int e = 0; e < CR_NE; e++) {
@@ -960,6 +984,8 @@ struct Crystal : Module {
 					return loopBuf[e][k][i0] * (1.f - fr) + loopBuf[e][k][i1] * fr;
 				};
 				float r;
+				if (psSel == CR_NSHIM - 1)                     // Random: this pocket's own
+					psRatio = CR_SHIMMER[clamp(psPick[e][k], 1, CR_NSHIM - 2)].ratio;
 				if (psRatio == 1.f) {
 					r = rdAt(clamp(loopDelSm[e][k], 4.f, (float)CR_LOOPBUF - 4.f));
 				} else {
@@ -1084,6 +1110,29 @@ static const NVGcolor XDIM    = nvgRGB(0x8A, 0x8A, 0xA5);
 struct CrystalDisplay : Widget {
 	Crystal* module = nullptr;
 	std::shared_ptr<Font> font;
+	// Two palettes. On the faceplate everything has to be dark ink on light, and
+	// the faint alphas that read on a dark screen vanish, so they are lifted too.
+	bool lite = true;
+	NVGcolor cText() const { return lite ? nvgRGB(0x2E, 0x2C, 0x2C) : XTEXT; }
+	NVGcolor cDim()  const { return lite ? nvgRGB(0x62, 0x62, 0x70) : XDIM; }
+	NVGcolor cWire(float a) const {
+		return lite ? nvgRGBAf(0.04f, 0.32f, 0.52f, std::min(1.f, a * 1.15f))
+		            : nvgRGBAf(0.f, 0.59f, 0.87f, a);
+	}
+	NVGcolor cGrid(float a) const {
+		return lite ? nvgRGBAf(0.30f, 0.31f, 0.36f, a * 1.5f)
+		            : nvgRGBAf(0.72f, 0.74f, 0.80f, a);
+	}
+	// the purples and the gizmo axes are pitched for a dark screen; darken them
+	// rather than let them wash out on the faceplate
+	NVGcolor cAccent() const { return lite ? nvgRGB(0x5C, 0x33, 0xA8) : nvgRGB(0x9B, 0x6B, 0xE8); }
+	NVGcolor cAxis(NVGcolor c) const {
+		return lite ? nvgRGBf(c.r * 0.62f, c.g * 0.62f, c.b * 0.62f) : c;
+	}
+	NVGcolor cPath(bool b, float a) const {
+		float m = lite ? 2.4f : 1.f;
+		return b ? nvgRGBAf(0.42f, 0.22f, 0.70f, a * m) : nvgRGBAf(0.f, 0.42f, 0.68f, a * m);
+	}
 	Geom preview;
 	int previewMat = -1;
 	bool dragEmitter = false, dragB = false;
@@ -1101,13 +1150,14 @@ struct CrystalDisplay : Widget {
 			return Vec(gx + r.x * s * persp, gy - r.y * s * persp);
 		};
 		nvgBeginPath(vg); nvgEllipse(vg, gx, gy, s * 1.05f, s * 0.34f);
-		nvgStrokeColor(vg, nvgRGBAf(0.35f, 0.35f, 0.45f, 0.45f));
+		nvgStrokeColor(vg, cGrid(0.45f));
 		nvgStrokeWidth(vg, 0.7f); nvgStroke(vg);
 		struct AX { V3 d; NVGcolor c; const char* nm; };
 		AX ax[3] = {{V3(1, 0, 0), nvgRGB(0xE8, 0x62, 0x62), "X"},
 		            {V3(0, 1, 0), nvgRGB(0x62, 0xD0, 0x8A), "Y"},
 		            {V3(0, 0, 1), nvgRGB(0x62, 0x9B, 0xE8), "Z"}};
-		for (auto& a : ax) {
+		for (auto& a0 : ax) {
+			AX a = {a0.d, cAxis(a0.c), a0.nm};
 			V3 r = ori(a.d);
 			Vec o(gx, gy), q = pr(a.d);
 			float al = r.z > 0 ? 0.95f : 0.4f;
@@ -1182,7 +1232,7 @@ struct CrystalDisplay : Widget {
 					Vec p = project(cam(V3(std::cos(a) * rad * R, fy, std::sin(a) * rad * R)), scale);
 					if (k == 0) nvgMoveTo(vg, p.x, p.y); else nvgLineTo(vg, p.x, p.y);
 				}
-				nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, alpha));
+				nvgStrokeColor(vg, cGrid(alpha));
 				nvgStrokeWidth(vg, wdt); nvgStroke(vg);
 			};
 			for (int i = 1; i <= 5; i++) ring(i * RC / 5.f, i == 5 ? 0.22f : 0.09f, i == 5 ? 0.7f : 0.5f);
@@ -1192,14 +1242,14 @@ struct CrystalDisplay : Widget {
 				Vec p0 = project(cam(V3()), scale);
 				Vec p1 = project(cam(V3(std::cos(a) * RC * R, fy, std::sin(a) * RC * R)), scale);
 				nvgBeginPath(vg); nvgMoveTo(vg, p0.x, p0.y); nvgLineTo(vg, p1.x, p1.y);
-				nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, onSpeaker ? 0.10f : 0.07f));
+				nvgStrokeColor(vg, cGrid(onSpeaker ? 0.10f : 0.07f));
 				nvgStrokeWidth(vg, 0.5f); nvgStroke(vg);
 			}
 			for (int i = 0; i < CR_NL; i++) {                  // the ray out to each speaker
 				V3 sp = speakerPos(i) * R;
 				Vec p0 = project(cam(V3(0.f, fy, 0.f)), scale), p1 = project(cam(sp), scale);
 				nvgBeginPath(vg); nvgMoveTo(vg, p0.x, p0.y); nvgLineTo(vg, p1.x, p1.y);
-				nvgStrokeColor(vg, nvgRGBAf(0.72f, 0.74f, 0.80f, 0.16f));
+				nvgStrokeColor(vg, cGrid(0.16f));
 				nvgStrokeWidth(vg, 0.6f); nvgStroke(vg);
 			}
 		}
@@ -1211,7 +1261,7 @@ struct CrystalDisplay : Widget {
 			float depth = 0.5f * (a.z + b.z) / R;                  // far edges recede
 			float t = clamp(0.5f + 0.5f * depth, 0.f, 1.f);
 			nvgBeginPath(vg); nvgMoveTo(vg, pa.x, pa.y); nvgLineTo(vg, pb.x, pb.y);
-			nvgStrokeColor(vg, nvgRGBAf(0.f, 0.59f, 0.87f, live ? (0.28f + 0.62f * t) : 0.35f));
+			nvgStrokeColor(vg, cWire(live ? (0.28f + 0.62f * t) : 0.35f));
 			nvgStrokeWidth(vg, 0.7f + 0.8f * t); nvgStroke(vg);
 		}
 
@@ -1236,8 +1286,7 @@ struct CrystalDisplay : Widget {
 						if (k == 0) nvgMoveTo(vg, q.x, q.y); else nvgLineTo(vg, q.x, q.y);
 					}
 					bool eB = pv.emitter != 0;
-					nvgStrokeColor(vg, eB ? nvgRGBAf(0.55f, 0.35f, 0.85f, 0.12f)
-					                      : nvgRGBAf(0.f, 0.59f, 0.87f, 0.12f));
+					nvgStrokeColor(vg, cPath(eB, 0.12f));
 					nvgStrokeWidth(vg, 0.6f); nvgStroke(vg);
 
 					// One dot per pulse, on ONE path — a pulse is a single particle
@@ -1274,7 +1323,7 @@ struct CrystalDisplay : Widget {
 			                  std::sin(az[e]) * std::cos(el[e]), std::sin(el[e])));
 			V3 world = dir * g.surfaceDist(dir);
 			Vec pe = project(obj(world), scale);
-			NVGcolor col = e ? nvgRGB(0x9B, 0x6B, 0xE8) : XORANGE;
+			NVGcolor col = e ? cAccent() : XORANGE;
 			if (e == 0 && flash > 0.01f) {
 				nvgBeginPath(vg); nvgCircle(vg, pe.x, pe.y, 4.f + 16.f * flash);
 				nvgStrokeColor(vg, nvgRGBAf(0.92f, 0.4f, 0.18f, 0.7f * flash));
@@ -1317,13 +1366,13 @@ struct CrystalDisplay : Widget {
 			nvgLineTo(vg, mx - px * 5.f,  my - py * 5.f);
 			nvgLineTo(vg, bx - px * 1.8f, by - py * 1.8f);
 			nvgClosePath(vg);
-			nvgStrokeColor(vg, XDIM); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
+			nvgStrokeColor(vg, cDim()); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
 			nvgBeginPath(vg); nvgCircle(vg, bx, by, 1.4f);     // driver at the throat
-			nvgFillColor(vg, XDIM); nvgFill(vg);
+			nvgFillColor(vg, cDim()); nvgFill(vg);
 			if (font) {
 				nvgFontFaceId(vg, font->handle); nvgFontSize(vg, 8.f);
 				nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-				nvgFillColor(vg, XDIM);
+				nvgFillColor(vg, cDim());
 				char c[2] = {(char)('A' + i), 0};
 				nvgText(vg, q.x - dx * 8.f, q.y - dy * 8.f, c, NULL);
 			}
@@ -1333,8 +1382,11 @@ struct CrystalDisplay : Widget {
 	void draw(const DrawArgs& args) override {
 		if (!font) font = APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
 		NVGcontext* vg = args.vg;
-		nvgBeginPath(vg); nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 3.f);
-		nvgFillColor(vg, XBG); nvgFill(vg);
+		lite = !module || module->panelDraw;
+		nvgBeginPath(vg); nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, lite ? 0.f : 3.f);
+		// the faceplate colour, so the generated screen rect in the SVG is covered
+		// and the drawing reads as sitting directly on the panel
+		nvgFillColor(vg, lite ? nvgRGB(0xF0, 0xF0, 0xF0) : XBG); nvgFill(vg);
 
 		int mat = module ? clamp((int)std::round(module->params[Crystal::MATERIAL_PARAM].getValue()), 0, CR_NMAT - 1) : 4;
 		if (mat != previewMat) { preview = makeMaterial(mat); previewMat = mat; }
@@ -1357,11 +1409,11 @@ struct CrystalDisplay : Widget {
 		if (font) {
 			nvgFontFaceId(vg, font->handle); nvgFontSize(vg, 9.f);
 			nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-			nvgFillColor(vg, XTEXT);
+			nvgFillColor(vg, cText());
 			nvgText(vg, 7.f, 6.f, CR_MATNAME[mat], NULL);
 			if (module && module->params[Crystal::MODE_PARAM].getValue() > 0.5f) {
 				nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-				nvgFillColor(vg, nvgRGB(0x9B, 0x6B, 0xE8));
+				nvgFillColor(vg, cAccent());
 				nvgText(vg, box.size.x / 2, 6.f, "DELAY", NULL);
 			}
 			if (module) {
@@ -1376,7 +1428,7 @@ struct CrystalDisplay : Widget {
 					rd = (sz < 1.f) ? string::f("%.0f cm", sz * 100.f) : string::f("%.1f m", sz);
 				}
 				nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
-				nvgFillColor(vg, XDIM);
+				nvgFillColor(vg, cDim());
 				nvgText(vg, box.size.x - 7.f, 6.f, rd.c_str(), NULL);
 			}
 		}
@@ -1529,7 +1581,11 @@ struct CrystalWidget : ModuleWidget {
 				return n;
 			}(),
 			[=]() { return clamp(m->shimmer, 0, CR_NSHIM - 1); },
-			[=](int i) { m->shimmer = clamp(i, 0, CR_NSHIM - 1); }));
+			[=](int i) { m->shimmer = clamp(i, 0, CR_NSHIM - 1);
+			             if (m->shimmer == CR_NSHIM - 1) m->rollShimmer(); }));
+		if (m->shimmer == CR_NSHIM - 1)
+			menu->addChild(createMenuItem("Re-roll repeat pitches", "", [=]() { m->rollShimmer(); }));
+		menu->addChild(createBoolPtrMenuItem("Draw on the panel (no screen)", "", &m->panelDraw));
 	}
 };
 
