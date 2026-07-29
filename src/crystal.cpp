@@ -440,7 +440,15 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 		ts.head = head;
 		int pathsFor = 0;
 		V3 ed = norm3(mul3(head, emitDir[em]));   // rides with the crystal
-		V3 emit = ed * (sc.surfaceDist(ed) * 0.97f);
+		// Walk out from the centre and stop at the first surface the ray meets —
+		// that is the emitter's seat, and the face it lands on gives the normal it
+		// radiates through.
+		V3 emit; V3 emitN = ed;
+		{
+			float st; V3 sn;
+			if (sc.hit(V3(), ed, st, sn)) { emit = ed * (st * 0.97f); emitN = sn; }
+			else emit = ed * (sc.surfaceDist(ed) * 0.97f);
+		}
 
 		// One event, heard four times. Collect the STRIKES rather than four separate
 		// tap lists: every listener then hears the same reflections, each at its own
@@ -450,18 +458,8 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 		struct Strike { float t0; float amp; V3 p; V3 n; bool wall; };
 		std::vector<Strike> strikes;
 		// The emitter sits ON a facet, so it radiates outward through that facet
-		// like any other strike. Treating it as omnidirectional made the loudest
-		// event in the whole set — the one that sets the normalisation reference —
-		// very nearly common to all four speakers, which is what flattens them.
-		V3 emitN = ed;
-		{
-			float near = 1e9f;
-			for (auto& b : sc.bodies)
-				for (auto& f : b.faces) {
-					float gap = f.d - dot3(f.n, emit);
-					if (gap >= -1e-3f && gap < near) { near = gap; emitN = f.n; }
-				}
-		}
+		// like any other strike, weighted by cosine rather than the sharper law
+		// used for specular reflections.
 		strikes.push_back({0.f, 1.f, emit, emitN, false});      // the direct sound
 
 		for (int r = 0; r < CR_RAYS; r++) {
@@ -635,6 +633,10 @@ struct Crystal : Module {
 		ECHOES_PARAM, FEEDBACK_PARAM,
 		EMIT_B_AZ_PARAM, EMIT_B_EL_PARAM, HEAD_A_PARAM, HEAD_B_PARAM, NAVSPEED_PARAM,
 		MODE_PARAM, SPIN_Z_PARAM, SPIN_X_PARAM, SPIN_Y_PARAM,
+		// The emitters are antipodal: one axis through the crystal's centre, A at
+		// one end and B at the other. EMIT_AZ/EL and the HEAD/NAVSPEED velocity
+		// controls above are retired, kept only so saved cables do not shift.
+		EMIT_X_PARAM, EMIT_Y_PARAM, EMIT_Z_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -642,6 +644,7 @@ struct Crystal : Module {
 		ROT_INPUT, PING_INPUT, VOCT_INPUT, FEEDBACK_INPUT,
 		AUDIO_B_INPUT, AX_INPUT, AY_INPUT, BX_INPUT, BY_INPUT, MIX_INPUT,
 		ECHOES_INPUT,                    // ROT_INPUT is retired: the view is camera-only
+		EMIT_X_INPUT, EMIT_Y_INPUT, EMIT_Z_INPUT,   // ...as are AX/AY/BX/BY
 		INPUTS_LEN
 	};
 	enum OutputId { ENUMS(QUAD_OUTPUT, CR_NL), OUTPUTS_LEN };
@@ -758,6 +761,12 @@ struct Crystal : Module {
 		configParam(HEAD_A_PARAM, -(float)M_PI, (float)M_PI, 0.f, "Emitter A heading");
 		configParam(HEAD_B_PARAM, -(float)M_PI, (float)M_PI, 1.57f, "Emitter B heading");
 		configParam(NAVSPEED_PARAM, 0.f, 4.f, 1.f, "Navigation speed");
+		configParam(EMIT_X_PARAM, -1.f, 1.f, 0.8f, "Emitter axis X");
+		configParam(EMIT_Y_PARAM, -1.f, 1.f, 0.3f, "Emitter axis Y");
+		configParam(EMIT_Z_PARAM, -1.f, 1.f, 0.2f, "Emitter axis Z");
+		configInput(EMIT_X_INPUT, "Emitter axis X CV (±5V)");
+		configInput(EMIT_Y_INPUT, "Emitter axis Y CV (±5V)");
+		configInput(EMIT_Z_INPUT, "Emitter axis Z CV (±5V)");
 		// heading, not orientation: these are rates, so the crystal keeps turning
 		// and the faces it presents to each speaker change as it goes
 		configParam(SPIN_X_PARAM, -0.8f, 0.8f, 0.f, "Turn about the X axis");
@@ -820,6 +829,17 @@ struct Crystal : Module {
 		dirty = true;
 	}
 
+	// The emitter axis: a direction from the centre. A sits where that ray first
+	// meets the surface, B where the opposite ray does — so they are always on
+	// opposite ends and three controls place both.
+	V3 emitAxis() {
+		V3 d(pv(EMIT_X_PARAM, EMIT_X_INPUT, 0.2f),
+		     pv(EMIT_Y_PARAM, EMIT_Y_INPUT, 0.2f),
+		     pv(EMIT_Z_PARAM, EMIT_Z_INPUT, 0.2f));
+		if (len3(d) < 1e-4f) d = V3(1.f, 0.f, 0.f);
+		return norm3(d);
+	}
+
 	float pv(int p, int in, float scale) {
 		float v = params[p].getValue();
 		if (in >= 0 && inputs[in].isConnected()) v += inputs[in].getVoltage() * scale;
@@ -848,12 +868,8 @@ struct Crystal : Module {
 		float u      = clamp((std::log2(sizeM) - std::log2(0.06f))
 		                     / (std::log2(24.f) - std::log2(0.06f)), 0.f, 1.f);
 		float baseD  = 0.03f * std::exp2(u * 5.3f);            // SIZE = delay time, 30ms .. 1.2s
-		V3 emitDir[CR_NE];
-		for (int e = 0; e < CR_NE; e++) {
-			float az = params[e ? EMIT_B_AZ_PARAM : EMIT_AZ_PARAM].getValue();
-			float el = params[e ? EMIT_B_EL_PARAM : EMIT_EL_PARAM].getValue();
-			emitDir[e] = V3(std::cos(az) * std::cos(el), std::sin(az) * std::cos(el), std::sin(el));
-		}
+		V3 axis = emitAxis();
+		V3 emitDir[CR_NE] = {axis, axis * -1.f};
 		int target = 1 - active.load();
 
 		V3 ed0 = emitDir[0], ed1 = emitDir[1];
@@ -952,9 +968,9 @@ struct Crystal : Module {
 				pv(DAMP_PARAM, DAMP_INPUT, 0.06f),
 				std::round(pv(MATERIAL_PARAM, MATERIAL_INPUT, 1.f)),
 				pv(TAIL_PARAM, TAIL_INPUT, 0.1f),
-				params[EMIT_AZ_PARAM].getValue(), params[EMIT_EL_PARAM].getValue(),
+				pv(EMIT_X_PARAM, EMIT_X_INPUT, 0.2f), pv(EMIT_Y_PARAM, EMIT_Y_INPUT, 0.2f),
 				pv(ECHOES_PARAM, ECHOES_INPUT, CR_TAPS / 10.f),
-				params[EMIT_B_AZ_PARAM].getValue(), params[EMIT_B_EL_PARAM].getValue(),
+				pv(EMIT_Z_PARAM, EMIT_Z_INPUT, 0.2f), 0.f,
 				params[MODE_PARAM].getValue()};
 			bool changed = false;
 			for (int i = 0; i < 11; i++)
@@ -997,28 +1013,6 @@ struct Crystal : Module {
 				exPhase[e][i] += fp * args.sampleTime;
 				if (exPhase[e][i] >= 1.f) exPhase[e][i] -= 1.f;
 				ex[e] += AMP[i] * exEnv[e][i] * std::sin(2.f * M_PI * exPhase[e][i]);
-			}
-		}
-
-		// Emitter navigation. X/Y CV are velocities, not positions: they are rotated
-		// by the emitter's HEADING and integrated, so the emitter drives across the
-		// crystal's surface treated as a flat map (azimuth wraps, elevation stops at
-		// the poles). Only integrates while something is patched.
-		{
-			float spd = params[NAVSPEED_PARAM].getValue() * args.sampleTime;
-			for (int e = 0; e < CR_NE; e++) {
-				int xi = e ? BX_INPUT : AX_INPUT, yi = e ? BY_INPUT : AY_INPUT;
-				if (!inputs[xi].isConnected() && !inputs[yi].isConnected()) continue;
-				float vx = inputs[xi].getVoltage() / 5.f, vy = inputs[yi].getVoltage() / 5.f;
-				float hd = params[e ? HEAD_B_PARAM : HEAD_A_PARAM].getValue();
-				float ch = std::cos(hd), sh = std::sin(hd);
-				float dAz = (ch * vx - sh * vy) * spd, dEl = (sh * vx + ch * vy) * spd;
-				int ap = e ? EMIT_B_AZ_PARAM : EMIT_AZ_PARAM, ep = e ? EMIT_B_EL_PARAM : EMIT_EL_PARAM;
-				float az = params[ap].getValue() + dAz, el = params[ep].getValue() + dEl;
-				while (az > M_PI) az -= 2.f * M_PI;
-				while (az < -M_PI) az += 2.f * M_PI;
-				params[ap].setValue(az);
-				params[ep].setValue(clamp(el, -1.5f, 1.5f));
 			}
 		}
 
@@ -1540,7 +1534,7 @@ struct CrystalDisplay : Widget {
 	// cam() puts a room point on screen; obj() is for points fixed to the crystal,
 	// which turn by its heading first and then ride the camera like everything else
 	void drawCrystal(NVGcontext* vg, const Geom& g, float cy, float cx, const M3& head,
-	                 const float* az, const float* el, bool live) {
+	                 const V3& axis, bool live) {
 		auto cam = [&](const V3& p) { return rotYX(p, cy, cx); };
 		auto obj = [&](const V3& p) { return rotYX(mul3(head, p), cy, cx); };
 		float R = 1e-4f;
@@ -1765,9 +1759,13 @@ struct CrystalDisplay : Widget {
 
 		// the two emitters, each a point on the surface in its (az, el) direction
 		for (int e = 0; e < CR_NE; e++) {
-			V3 dir = norm3(V3(std::cos(az[e]) * std::cos(el[e]),
-			                  std::sin(az[e]) * std::cos(el[e]), std::sin(el[e])));
-			V3 world = dir * g.surfaceDist(dir);
+			V3 dir = e ? axis * -1.f : axis;               // antipodal by construction
+			V3 world;
+			{
+				float st; V3 sn;
+				if (g.hit(V3(), dir, st, sn)) world = dir * st;
+				else world = dir * g.surfaceDist(dir);
+			}
 			Vec pe = project(obj(world), scale);
 			NVGcolor col = e ? cAccent() : XORANGE;
 			// A ring that follows what this emitter is being fed, so it is obvious
@@ -1873,12 +1871,8 @@ struct CrystalDisplay : Widget {
 		M3 head;
 		if (module) for (int i = 0; i < 9; i++) head.m[i] = module->dispHead[i].load();
 		else head = mulM(axisRot(1, 0.6f), axisRot(0, 0.2f));   // browser preview
-		float az[CR_NE], el[CR_NE];
-		az[0] = module ? module->params[Crystal::EMIT_AZ_PARAM].getValue() : 0.6f;
-		el[0] = module ? module->params[Crystal::EMIT_EL_PARAM].getValue() : 0.3f;
-		az[1] = module ? module->params[Crystal::EMIT_B_AZ_PARAM].getValue() : -2.2f;
-		el[1] = module ? module->params[Crystal::EMIT_B_EL_PARAM].getValue() : -0.4f;
-		drawCrystal(vg, preview, ry, rx, head, az, el, module != nullptr);
+		V3 axis = module ? module->emitAxis() : norm3(V3(0.8f, 0.3f, 0.2f));
+		drawCrystal(vg, preview, ry, rx, head, axis, module != nullptr);
 
 		drawGizmo(vg, ry, rx, head);
 
@@ -1939,8 +1933,7 @@ struct CrystalDisplay : Widget {
 					return;
 				}
 			dragEmitter = (e.mods & GLFW_MOD_SHIFT) != 0;      // shift-drag moves an emitter
-			dragB = (e.mods & GLFW_MOD_ALT) != 0;             // ...alt picks emitter B
-			dragging = true; spinY = spinX = 0.f;
+				dragging = true; spinY = spinX = 0.f;
 			e.consume(this);
 			return;
 		}
@@ -1950,14 +1943,16 @@ struct CrystalDisplay : Widget {
 		if (!module) return;
 		float z = getAbsoluteZoom();
 		if (dragEmitter) {
-			int ap = dragB ? Crystal::EMIT_B_AZ_PARAM : Crystal::EMIT_AZ_PARAM;
-			int ep = dragB ? Crystal::EMIT_B_EL_PARAM : Crystal::EMIT_EL_PARAM;
-			float az = module->params[ap].getValue() + e.mouseDelta.x / z * 0.02f;
-			float el = module->params[ep].getValue() - e.mouseDelta.y / z * 0.02f;
-			while (az > M_PI) az -= 2.f * M_PI;
-			while (az < -M_PI) az += 2.f * M_PI;
-			module->params[ap].setValue(az);
-			module->params[ep].setValue(clamp(el, -1.5f, 1.5f));
+			// Turn the whole axis. Both emitters move together because they are two
+			// ends of the same line.
+			V3 d(module->params[Crystal::EMIT_X_PARAM].getValue(),
+			     module->params[Crystal::EMIT_Y_PARAM].getValue(),
+			     module->params[Crystal::EMIT_Z_PARAM].getValue());
+			if (len3(d) < 1e-4f) d = V3(1.f, 0.f, 0.f);
+			d = rotYX(norm3(d), e.mouseDelta.x / z * 0.02f, -e.mouseDelta.y / z * 0.02f);
+			module->params[Crystal::EMIT_X_PARAM].setValue(clamp(d.x, -1.f, 1.f));
+			module->params[Crystal::EMIT_Y_PARAM].setValue(clamp(d.y, -1.f, 1.f));
+			module->params[Crystal::EMIT_Z_PARAM].setValue(clamp(d.z, -1.f, 1.f));
 		} else {
 			float dy = e.mouseDelta.x / z * 0.02f, dx = e.mouseDelta.y / z * 0.02f;
 			float ry = module->params[Crystal::ROTY_PARAM].getValue() + dy;
@@ -2025,13 +2020,12 @@ struct CrystalWidget : ModuleWidget {
 
 		// emitter navigation: per-emitter heading + X/Y velocity, shared speed
 		const float yN = 104.f, yB = 118.f;
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(42.f, yN)), module, Crystal::HEAD_A_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(53.f, yN)), module, Crystal::AX_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(63.f, yN)), module, Crystal::AY_INPUT));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(76.f, yN)), module, Crystal::HEAD_B_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(87.f, yN)), module, Crystal::BX_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(97.f, yN)), module, Crystal::BY_INPUT));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(109.f, yN)), module, Crystal::NAVSPEED_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(42.f, yN)), module, Crystal::EMIT_X_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(53.f, yN)), module, Crystal::EMIT_X_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(68.f, yN)), module, Crystal::EMIT_Y_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(79.f, yN)), module, Crystal::EMIT_Y_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(94.f, yN)), module, Crystal::EMIT_Z_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(105.f, yN)), module, Crystal::EMIT_Z_INPUT));
 		addParam(createParamCentered<CKSS>(mm2px(Vec(14.f, 104.f)), module, Crystal::MODE_PARAM));
 		addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(mm2px(Vec(122.f, yN)), module,
 			Crystal::PING_PARAM, Crystal::PING_LIGHT));
@@ -2056,10 +2050,10 @@ struct CrystalWidget : ModuleWidget {
 		lbl->add(kx[3], 69.f, "TAIL"); lbl->add(kx[4], 69.f, "ECHOES"); lbl->add(kx[5], 69.f, "FDBK");
 		lbl->add(kx[6], 69.f, "MIX");
 		lbl->add(14.f, 97.f, "DELAY", 5.f); lbl->add(14.f, 111.5f, "CHAMBER", 5.f);
-		lbl->add(47.f, 97.5f, "EMITTER A", 5.f); lbl->add(81.f, 97.5f, "EMITTER B", 5.f);
-		lbl->add(42.f, 110.f, "HDG", 5.f); lbl->add(53.f, 110.f, "X", 5.f); lbl->add(63.f, 110.f, "Y", 5.f);
-		lbl->add(76.f, 110.f, "HDG", 5.f); lbl->add(87.f, 110.f, "X", 5.f); lbl->add(97.f, 110.f, "Y", 5.f);
-		lbl->add(109.f, 97.5f, "SPEED", 5.f); lbl->add(122.f, 97.5f, "PING", 5.f);
+		lbl->add(73.5f, 97.5f, "EMITTER AXIS  (A one end, B the other)", 5.f);
+		lbl->add(47.5f, 110.f, "X", 5.f); lbl->add(73.5f, 110.f, "Y", 5.f);
+		lbl->add(99.5f, 110.f, "Z", 5.f);
+		lbl->add(122.f, 97.5f, "PING", 5.f);
 		lbl->add(133.f, 97.5f, "TRIG", 5.f);
 		lbl->add(8.f, 124.f, "SPIN X", 5.f); lbl->add(18.f, 124.f, "SPIN Y", 5.f);
 		lbl->add(28.f, 124.f, "SPIN Z", 5.f);
@@ -2067,7 +2061,7 @@ struct CrystalWidget : ModuleWidget {
 		lbl->add(42.f, 124.f, "IN A", 5.f); lbl->add(53.f, 124.f, "IN B", 5.f);
 		lbl->add(66.f, 124.f, "V/OCT", 5.f); lbl->add(77.f, 124.f, "PIT", 5.f); lbl->add(87.f, 124.f, "DEC", 5.f);
 		lbl->add(117.f, 124.f, "QUAD A-D", 5.f);
-		lbl->add(71.f, 7.f, "drag to rotate · shift-drag emitter A · shift+alt for B", 5.f);
+		lbl->add(71.f, 7.f, "drag to rotate · shift-drag to swing the emitter axis", 5.f);
 		addChild(lbl);
 	}
 
