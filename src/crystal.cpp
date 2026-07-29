@@ -439,7 +439,20 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 		// four uncorrelated reverbs of near-identical level, and no image at all.
 		struct Strike { float t0; float amp; V3 p; V3 n; bool wall; };
 		std::vector<Strike> strikes;
-		strikes.push_back({0.f, 1.f, emit, V3(), false});       // the direct sound
+		// The emitter sits ON a facet, so it radiates outward through that facet
+		// like any other strike. Treating it as omnidirectional made the loudest
+		// event in the whole set — the one that sets the normalisation reference —
+		// very nearly common to all four speakers, which is what flattens them.
+		V3 emitN = ed;
+		{
+			float near = 1e9f;
+			for (auto& b : sc.bodies)
+				for (auto& f : b.faces) {
+					float gap = f.d - dot3(f.n, emit);
+					if (gap >= -1e-3f && gap < near) { near = gap; emitN = f.n; }
+				}
+		}
+		strikes.push_back({0.f, 1.f, emit, emitN, false});      // the direct sound
 
 		for (int r = 0; r < CR_RAYS; r++) {
 			// deterministic fan (golden angle) — the same crystal always sounds the
@@ -495,10 +508,12 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 		auto weigh = [&](const Strike& st, int li, float& d) {
 			V3 toL = L[li] - st.p;
 			d = std::max(len3(toL), 0.05f);
-			if (!st.wall) return st.amp / d;                   // the emitter is omni
 			float f = dot3(norm3(toL), st.n);
 			if (f <= 0.f) return 0.f;                          // behind the face: blocked
-			return st.amp * f * f * f / d;                     // a face fires where it points
+			// A specular reflection fires where the face points, sharply. A source
+			// sitting on a facet radiates into the hemisphere in front of it, which
+			// is much broader — Lambertian.
+			return st.amp * (st.wall ? f * f * f : f) / d;
 		};
 
 		std::sort(strikes.begin(), strikes.end(),
