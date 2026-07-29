@@ -616,6 +616,7 @@ struct Crystal : Module {
 		AUDIO_INPUT, SIZE_INPUT, DAMP_INPUT, MATERIAL_INPUT, TAIL_INPUT,
 		ROT_INPUT, PING_INPUT, VOCT_INPUT, FEEDBACK_INPUT,
 		AUDIO_B_INPUT, AX_INPUT, AY_INPUT, BX_INPUT, BY_INPUT, MIX_INPUT,
+		ECHOES_INPUT,                    // ROT_INPUT is retired: the view is camera-only
 		INPUTS_LEN
 	};
 	enum OutputId { ENUMS(QUAD_OUTPUT, CR_NL), OUTPUTS_LEN };
@@ -734,8 +735,8 @@ struct Crystal : Module {
 		configParam(NAVSPEED_PARAM, 0.f, 4.f, 1.f, "Navigation speed");
 		// heading, not orientation: these are rates, so the crystal keeps turning
 		// and the faces it presents to each speaker change as it goes
-		configParam(SPIN_X_PARAM, -0.8f, 0.8f, 0.06f, "Turn about the X axis");
-		configParam(SPIN_Y_PARAM, -0.8f, 0.8f, 0.15f, "Turn about the Y axis");
+		configParam(SPIN_X_PARAM, -0.8f, 0.8f, 0.f, "Turn about the X axis");
+		configParam(SPIN_Y_PARAM, -0.8f, 0.8f, 0.f, "Turn about the Y axis");
 		configParam(SPIN_Z_PARAM, -0.8f, 0.8f, 0.f,   "Turn about the Z axis");
 		for (int p : {SPIN_X_PARAM, SPIN_Y_PARAM, SPIN_Z_PARAM}) {
 			getParamQuantity(p)->displayMultiplier = 180.f / (float)M_PI;
@@ -749,12 +750,13 @@ struct Crystal : Module {
 		configInput(BX_INPUT, "Emitter B · X velocity (±5V)");
 		configInput(BY_INPUT, "Emitter B · Y velocity (±5V)");
 		configInput(MIX_INPUT, "Dry / wet CV (±5V)");
+		configInput(ECHOES_INPUT, "Echoes CV (±5V)");
 		configInput(AUDIO_INPUT, "Audio / CV (enters at the emitter)");
 		configInput(SIZE_INPUT, "Size CV (±5V)");
 		configInput(DAMP_INPUT, "Damping CV (±5V)");
 		configInput(MATERIAL_INPUT, "Shape CV (1V per material, simple → complex)");
 		configInput(TAIL_INPUT, "Tail CV (±5V)");
-		configInput(ROT_INPUT, "View CV (±5V, yaw — camera only, does not change the sound)");
+		
 		configInput(PING_INPUT, "Ping trigger");
 		configInput(VOCT_INPUT, "Ping V/oct");
 		for (int i = 0; i < CR_NL; i++)
@@ -799,8 +801,13 @@ struct Crystal : Module {
 		return v;
 	}
 
-	void relaunch(float sr) {
-		if (busy.load() || fade > 0.001f || sinceTrace < 0.14f) return;
+	// Returns false when it declined. That matters: the watch list used to mark a
+	// change as seen whether or not a trace actually ran, so anything the throttle
+	// refused was forgotten for good. With the crystal spinning, traces run
+	// back-to-back and `fade` is nearly always non-zero, so a slow continuous
+	// change — an emitter being driven by CV — was swallowed almost every time.
+	bool relaunch(float sr) {
+		if (busy.load() || fade > 0.001f || sinceTrace < 0.14f) return false;
 		sinceTrace = 0.f;
 		busy = true;
 		if (worker.joinable()) worker.join();
@@ -810,7 +817,7 @@ struct Crystal : Module {
 		float tail   = clamp(pv(TAIL_PARAM, TAIL_INPUT, 0.1f), 0.f, 1.f);
 		int   mat    = clamp((int)std::round(pv(MATERIAL_PARAM, MATERIAL_INPUT, 1.f)), 0, CR_NMAT - 1);
 		M3 head = headM;
-		int   nEch   = clamp((int)std::round(params[ECHOES_PARAM].getValue()), 2, CR_TAPS);
+		int   nEch   = clamp((int)std::round(pv(ECHOES_PARAM, ECHOES_INPUT, CR_TAPS / 10.f)), 2, CR_TAPS);
 		bool  dly    = params[MODE_PARAM].getValue() > 0.5f;
 		float maxDel = (float)bufLen / sr - 0.05f;             // however long the line really is
 		float u      = clamp((std::log2(sizeM) - std::log2(0.06f))
@@ -841,6 +848,7 @@ struct Crystal : Module {
 			swapPending = true;              // the audio thread performs the swap
 			busy = false;
 		});
+		return true;
 	}
 
 	float readTaps(const TapSet& ts, int li) {
@@ -920,13 +928,14 @@ struct Crystal : Module {
 				std::round(pv(MATERIAL_PARAM, MATERIAL_INPUT, 1.f)),
 				pv(TAIL_PARAM, TAIL_INPUT, 0.1f),
 				params[EMIT_AZ_PARAM].getValue(), params[EMIT_EL_PARAM].getValue(),
-				params[ECHOES_PARAM].getValue(),
+				pv(ECHOES_PARAM, ECHOES_INPUT, CR_TAPS / 10.f),
 				params[EMIT_B_AZ_PARAM].getValue(), params[EMIT_B_EL_PARAM].getValue(),
 				params[MODE_PARAM].getValue()};
 			bool changed = false;
 			for (int i = 0; i < 11; i++)
-				if (std::fabs(now[i] - watchLast[i]) > 2e-3f) { watchLast[i] = now[i]; changed = true; }
-			if (changed) relaunch(args.sampleRate);
+				if (std::fabs(now[i] - watchLast[i]) > 2e-3f) { changed = true; break; }
+			if (changed && relaunch(args.sampleRate))     // commit only once it ran
+				for (int i = 0; i < 11; i++) watchLast[i] = now[i];
 		}
 
 		// internal exciter: a struck bar at the emitter (Chime's voice)
@@ -1154,7 +1163,7 @@ struct Crystal : Module {
 		}
 
 		wr = (wr + 1) % bufLen;
-		dispRotY = params[ROTY_PARAM].getValue() + inputs[ROT_INPUT].getVoltage() * 0.31f;
+		dispRotY = params[ROTY_PARAM].getValue();
 		dispRotX = params[ROTX_PARAM].getValue();
 		for (int i = 0; i < 9; i++) dispHead[i] = headM.m[i];
 	}
@@ -1952,18 +1961,18 @@ struct CrystalWidget : ModuleWidget {
 		// main controls: knob row + CV row
 		const float yK = 76.f, yC = 89.f;
 		const float kx[7] = {13.f, 31.f, 49.f, 67.f, 85.f, 103.f, 121.f};
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[0], yK)), module, Crystal::SIZE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[1], yK)), module, Crystal::DAMP_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[2], yK)), module, Crystal::MATERIAL_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[3], yK)), module, Crystal::TAIL_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[4], yK)), module, Crystal::ECHOES_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[5], yK)), module, Crystal::FEEDBACK_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[6], yK)), module, Crystal::MIX_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[0], yK)), module, Crystal::SIZE_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[1], yK)), module, Crystal::DAMP_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[2], yK)), module, Crystal::MATERIAL_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[3], yK)), module, Crystal::TAIL_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[4], yK)), module, Crystal::ECHOES_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[5], yK)), module, Crystal::FEEDBACK_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[6], yK)), module, Crystal::MIX_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[0], yC)), module, Crystal::SIZE_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[1], yC)), module, Crystal::DAMP_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[2], yC)), module, Crystal::MATERIAL_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[3], yC)), module, Crystal::TAIL_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[4], yC)), module, Crystal::ROT_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[4], yC)), module, Crystal::ECHOES_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[5], yC)), module, Crystal::FEEDBACK_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[6], yC)), module, Crystal::MIX_INPUT));
 
@@ -1999,7 +2008,6 @@ struct CrystalWidget : ModuleWidget {
 		lbl->add(kx[0], 69.f, "SIZE"); lbl->add(kx[1], 69.f, "DAMP"); lbl->add(kx[2], 69.f, "MATERIAL");
 		lbl->add(kx[3], 69.f, "TAIL"); lbl->add(kx[4], 69.f, "ECHOES"); lbl->add(kx[5], 69.f, "FDBK");
 		lbl->add(kx[6], 69.f, "MIX");
-		lbl->add(kx[4], 95.f, "VIEW CV", 5.f);
 		lbl->add(14.f, 97.f, "DELAY", 5.f); lbl->add(14.f, 111.5f, "CHAMBER", 5.f);
 		lbl->add(47.f, 97.5f, "EMITTER A", 5.f); lbl->add(81.f, 97.5f, "EMITTER B", 5.f);
 		lbl->add(42.f, 110.f, "HDG", 5.f); lbl->add(53.f, 110.f, "X", 5.f); lbl->add(63.f, 110.f, "Y", 5.f);
