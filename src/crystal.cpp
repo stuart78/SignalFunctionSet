@@ -1403,6 +1403,23 @@ struct CrystalDisplay : Widget {
 				std::vector<std::vector<V3>> work = {on};
 				carve(g, bi, work);
 				for (auto& piece : work) {
+					// Clipping against several bodies leaves near-degenerate offcuts.
+					// Unlit they are invisible; filled and lit they are the spikes.
+					// Judge them by THINNESS, not size: the Druse has real faces of
+					// area 0.00015, so an area threshold big enough to catch slivers
+					// would delete genuine geometry. area/perimeter^2 is scale-free —
+					// a square scores 0.0625, the thinnest real face here 0.0060, a
+					// 120:1 sliver 0.0020.
+					V3 acc;
+					float per = 0.f;
+					for (size_t q = 0; q < piece.size(); q++) {
+						const V3& p0 = piece[q];
+						const V3& p1 = piece[(q + 1) % piece.size()];
+						acc = acc + cross3(p0, p1);
+						per += len3(p1 - p0);
+					}
+					float ar = 0.5f * len3(acc);
+					if (ar < 1e-7f || ar < 0.0020f * per * per) continue;
 					std::vector<char> flag(piece.size(), 0);   // 0 none, 1 edge, 2 seam
 					for (size_t q = 0; q < piece.size(); q++) {
 						V3 m = (piece[q] + piece[(q + 1) % piece.size()]) * 0.5f;
@@ -1635,11 +1652,12 @@ struct CrystalDisplay : Widget {
 				                          bg.g * 0.86f + wf.g * 0.14f,
 				                          bg.b * 0.86f + wf.b * 0.14f, 0.60f));
 				nvgFill(vg);
-				if (i < glow.size() && glow[i] > 0.01f) {      // struck a moment ago
-					nvgFillColor(vg, nvgRGBAf(0.98f, 0.70f, 0.28f, 0.55f * glow[i]));
+				// Fill only. Stroking the piece outlined every carve boundary in
+				// bright amber, which is the decomposition drawn on the wall.
+				float gl = (i < glow.size()) ? glow[i] : 0.f;
+				if (gl > 0.01f) {
+					nvgFillColor(vg, nvgRGBAf(0.98f, 0.70f, 0.28f, 0.45f * gl));
 					nvgFill(vg);
-					nvgStrokeColor(vg, nvgRGBAf(1.f, 0.84f, 0.45f, 0.9f * glow[i]));
-					nvgStrokeWidth(vg, 1.6f); nvgStroke(vg);
 				}
 				// Two weights: the crystal's own edges, and the seams where one
 				// individual grows through another. The seams are real features of
@@ -1656,7 +1674,11 @@ struct CrystalDisplay : Widget {
 						any = true;
 					}
 					if (!any) continue;
-					nvgStrokeColor(vg, cWire(pass == 0 ? (live ? 0.85f : 0.5f) : 0.20f));
+					NVGcolor ec = cWire(pass == 0 ? (live ? 0.85f : 0.5f) : 0.20f);
+					if (pass == 0 && gl > 0.01f)            // a struck wall lights its own edges
+						ec = nvgRGBAf(ec.r + (1.f - ec.r) * gl, ec.g + (0.85f - ec.g) * gl,
+						              ec.b + (0.45f - ec.b) * gl, std::min(1.f, ec.a + 0.4f * gl));
+					nvgStrokeColor(vg, ec);
 					nvgStrokeWidth(vg, pass == 0 ? 0.9f : 0.5f);
 					nvgStroke(vg);
 				}
