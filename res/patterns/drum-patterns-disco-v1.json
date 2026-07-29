@@ -1,0 +1,1240 @@
+{
+ "formatVersion": 1,
+ "lanes": [
+  "kick",
+  "snare",
+  "chh",
+  "ohh",
+  "lo",
+  "hi",
+  "cp",
+  "bell"
+ ],
+ "patterns": [
+  {
+   "id": "disco.fourfloor.sparse",
+   "name": "Four on the floor \u2014 sparse",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "chh": {
+     "v": "6...6...6...6..."
+    }
+   },
+   "notes": "floor and a quarter-note hat; no backbeat yet"
+  },
+  {
+   "id": "disco.fourfloor.main",
+   "name": "Four on the floor \u2014 main",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "snare": {
+     "v": "....9.......9...",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "7.6.7.6.7.6.7..."
+    },
+    "ohh": {
+     "v": "..............8."
+    }
+   },
+   "notes": "the canonical single opening: the & of 4, spilling into bar 1"
+  },
+  {
+   "id": "disco.fourfloor.lift",
+   "name": "Four on the floor \u2014 lift",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "snare": {
+     "v": "....9.......9...",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "7.6.7...7.6.7..."
+    },
+    "ohh": {
+     "v": "......8.......8."
+    },
+    "cp": {
+     "v": "....7.......7..."
+    }
+   },
+   "notes": "second opening on the & of 2; clap doubles the backbeat"
+  },
+  {
+   "id": "disco.fourfloor.fill",
+   "name": "Four on the floor \u2014 fill",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "snare": {
+     "v": "....9.5.7.659789",
+     "a": "....A.......A..A"
+    },
+    "chh": {
+     "v": "5.5.5.5.5.5.5.5."
+    },
+    "ohh": {
+     "v": "...............9"
+    },
+    "kick": {
+     "v": "9...9...9...9..."
+    }
+   },
+   "notes": "roll into the downbeat; floor held"
+  },
+  {
+   "id": "disco.upbeats.sparse",
+   "name": "Open upbeats \u2014 sparse",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "chh": {
+     "v": "7.......7......."
+    },
+    "ohh": {
+     "v": "......7.......7."
+    }
+   },
+   "notes": "half the openings, no backbeat"
+  },
+  {
+   "id": "disco.upbeats.main",
+   "name": "Open upbeats \u2014 main",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "snare": {
+     "v": "....9.......9...",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "7...7...7...7..."
+    },
+    "ohh": {
+     "v": "..8...8...8...8."
+    }
+   },
+   "notes": "hat opens on all four upbeats \u2014 the continuous disco sizzle"
+  },
+  {
+   "id": "disco.upbeats.lift",
+   "name": "Open upbeats \u2014 lift",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "snare": {
+     "v": "....9.......9...",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "7...7...7...7..."
+    },
+    "ohh": {
+     "v": "..9...9...9...9."
+    },
+    "cp": {
+     "v": "....8.......8..."
+    },
+    "hi": {
+     "v": "4.4.4.4.4.4.4.4."
+    }
+   },
+   "notes": "openings pushed to full; shaker fills the eighths"
+  },
+  {
+   "id": "disco.upbeats.fill",
+   "name": "Open upbeats \u2014 fill",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "snare": {
+     "v": "....9.5.7.659789",
+     "a": "....A.......A..A"
+    },
+    "chh": {
+     "v": "5.5.5.5.5.5.5.5."
+    },
+    "ohh": {
+     "v": "...............9"
+    },
+    "kick": {
+     "v": "9...9...9...9..."
+    }
+   },
+   "notes": "roll into the downbeat; floor held"
+  },
+  {
+   "id": "disco.sixteenth.sparse",
+   "name": "Sixteenth hat \u2014 sparse",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    98,
+    112
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "chh": {
+     "v": "7444744474447444"
+    }
+   },
+   "notes": "hat alone carries the subdivision"
+  },
+  {
+   "id": "disco.sixteenth.main",
+   "name": "Sixteenth hat \u2014 main",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    98,
+    112
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "snare": {
+     "v": "....9.......9...",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "846484648464846."
+    },
+    "ohh": {
+     "v": "...............8"
+    }
+   },
+   "notes": "one hand on sixteenths, so slower; opens on the last sixteenth"
+  },
+  {
+   "id": "disco.sixteenth.lift",
+   "name": "Sixteenth hat \u2014 lift",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    98,
+    112
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "snare": {
+     "v": "....9.......9...",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "8464846.8464846."
+    },
+    "ohh": {
+     "v": ".......7.......9"
+    },
+    "cp": {
+     "v": "....7.......7..."
+    }
+   },
+   "notes": "a second opening at the end of beat 2"
+  },
+  {
+   "id": "disco.sixteenth.fill",
+   "name": "Sixteenth hat \u2014 fill",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "snare": {
+     "v": "....9.5.7.659789",
+     "a": "....A.......A..A"
+    },
+    "chh": {
+     "v": "5.5.5.5.5.5.5.5."
+    },
+    "ohh": {
+     "v": "...............9"
+    },
+    "kick": {
+     "v": "9...9...9...9..."
+    }
+   },
+   "notes": "roll into the downbeat; floor held"
+  },
+  {
+   "id": "disco.shuffle.sparse",
+   "name": "Triplet hat \u2014 sparse",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 3,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    104,
+    118
+   ],
+   "grid": {
+    "kick": {
+     "v": "9..9..9..9.."
+    },
+    "chh": {
+     "v": "6..6..6..6.."
+    }
+   },
+   "notes": "floor with the pulse only"
+  },
+  {
+   "id": "disco.shuffle.main",
+   "name": "Triplet hat \u2014 main",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 3,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    104,
+    118
+   ],
+   "grid": {
+    "kick": {
+     "v": "9..9..9..9.."
+    },
+    "snare": {
+     "v": "...9.....9..",
+     "a": "...A.....A.."
+    },
+    "chh": {
+     "v": "75575575575."
+    },
+    "ohh": {
+     "v": "...........8"
+    }
+   },
+   "notes": "hat in triplets against a straight four-on-the-floor"
+  },
+  {
+   "id": "disco.shuffle.lift",
+   "name": "Triplet hat \u2014 lift",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 3,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    104,
+    118
+   ],
+   "grid": {
+    "kick": {
+     "v": "9..9..9..9.."
+    },
+    "snare": {
+     "v": "...9.....9..",
+     "a": "...A.....A.."
+    },
+    "chh": {
+     "v": "75575.75575."
+    },
+    "ohh": {
+     "v": ".....7.....9"
+    },
+    "cp": {
+     "v": "...7.....7.."
+    }
+   },
+   "notes": "opens twice per bar"
+  },
+  {
+   "id": "disco.shuffle.fill",
+   "name": "Triplet hat \u2014 fill",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 3,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    104,
+    118
+   ],
+   "grid": {
+    "kick": {
+     "v": "9..9..9..9.."
+    },
+    "snare": {
+     "v": "...9.57.6979",
+     "a": "...A.....A.A"
+    },
+    "chh": {
+     "v": "5..5..5..5.."
+    },
+    "ohh": {
+     "v": "...........9"
+    }
+   },
+   "notes": "triplet roll, floor held"
+  },
+  {
+   "id": "disco.sixeight.sparse",
+   "name": "Six-eight feel \u2014 sparse",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "6/8",
+   "beats": 2,
+   "stepsPerBeat": 3,
+   "bars": 2,
+   "swing": 0.0,
+   "bpm": [
+    96,
+    112
+   ],
+   "grid": {
+    "kick": {
+     "v": "9..9..9..9.."
+    },
+    "chh": {
+     "v": "6..6..6..6.."
+    }
+   },
+   "notes": "the two pulses, no backbeat"
+  },
+  {
+   "id": "disco.sixeight.main",
+   "name": "Six-eight feel \u2014 main",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "6/8",
+   "beats": 2,
+   "stepsPerBeat": 3,
+   "bars": 2,
+   "swing": 0.0,
+   "bpm": [
+    96,
+    112
+   ],
+   "grid": {
+    "kick": {
+     "v": "9..9..9..9.."
+    },
+    "snare": {
+     "v": "...9.....9..",
+     "a": "...A.....A.."
+    },
+    "chh": {
+     "v": "75575575575."
+    },
+    "ohh": {
+     "v": "...........8"
+    }
+   },
+   "notes": "kick on 1 and 4 of the six, snare only on 4 \u2014 the book's own instruction for this feel"
+  },
+  {
+   "id": "disco.sixeight.lift",
+   "name": "Six-eight feel \u2014 lift",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "6/8",
+   "beats": 2,
+   "stepsPerBeat": 3,
+   "bars": 2,
+   "swing": 0.0,
+   "bpm": [
+    96,
+    112
+   ],
+   "grid": {
+    "kick": {
+     "v": "9..9..9..9.."
+    },
+    "snare": {
+     "v": "...9.....9..",
+     "a": "...A.....A.."
+    },
+    "chh": {
+     "v": "75575.75575."
+    },
+    "ohh": {
+     "v": ".....7.....9"
+    },
+    "hi": {
+     "v": ".44.44.44.44"
+    }
+   },
+   "notes": "second opening, shaker on the inner eighths"
+  },
+  {
+   "id": "disco.sixeight.fill",
+   "name": "Six-eight feel \u2014 fill",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "6/8",
+   "beats": 2,
+   "stepsPerBeat": 3,
+   "bars": 2,
+   "swing": 0.0,
+   "bpm": [
+    96,
+    112
+   ],
+   "grid": {
+    "kick": {
+     "v": "9..9..9....."
+    },
+    "snare": {
+     "v": "......756979",
+     "a": ".........A.A"
+    },
+    "chh": {
+     "v": "5..5..5..5.."
+    },
+    "ohh": {
+     "v": "...........9"
+    }
+   },
+   "notes": "compound-time turnaround"
+  },
+  {
+   "id": "disco.pickup.sparse",
+   "name": "Kick pickups \u2014 sparse",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..6"
+    },
+    "chh": {
+     "v": "5.5.5.5.5.5.5.5."
+    }
+   },
+   "notes": "one pickup, into the downbeat"
+  },
+  {
+   "id": "disco.pickup.main",
+   "name": "Kick pickups \u2014 main",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9..69...9..6"
+    },
+    "snare": {
+     "v": "....9.......9...",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "7.6.7.6.7.6.7..."
+    },
+    "ohh": {
+     "v": "..............8."
+    }
+   },
+   "notes": "sixteenth pickups before beats 3 and 1 \u2014 the second axis, worked against an unchanging hat"
+  },
+  {
+   "id": "disco.pickup.lift",
+   "name": "Kick pickups \u2014 lift",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9..59..69..59..6"
+    },
+    "snare": {
+     "v": "....9.......9...",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "7.6.7...7.6.7..."
+    },
+    "ohh": {
+     "v": "......8.......8."
+    },
+    "cp": {
+     "v": "....7.......7..."
+    }
+   },
+   "notes": "a pickup before every backbeat as well"
+  },
+  {
+   "id": "disco.pickup.fill",
+   "name": "Kick pickups \u2014 fill",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "snare": {
+     "v": "....9.5.7.659789",
+     "a": "....A.......A..A"
+    },
+    "chh": {
+     "v": "5.5.5.5.5.5.5.5."
+    },
+    "ohh": {
+     "v": "...............9"
+    },
+    "kick": {
+     "v": "9...9...9...9..."
+    }
+   },
+   "notes": "roll into the downbeat; floor held"
+  },
+  {
+   "id": "disco.ghost.sparse",
+   "name": "Snare ghosts \u2014 sparse",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "snare": {
+     "v": "....9.......9...",
+     "a": "....A.......A..."
+    },
+    "chh": {
+     "v": "5.5.5.5.5.5.5.5."
+    }
+   },
+   "notes": "the backbeat clean"
+  },
+  {
+   "id": "disco.ghost.main",
+   "name": "Snare ghosts \u2014 main",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "snare": {
+     "v": "....9..3...39.4.",
+     "a": "....A.......A...",
+     "p": ".......6...6..7."
+    },
+    "chh": {
+     "v": "7.6.7.6.7.6.7..."
+    },
+    "ohh": {
+     "v": "..............8."
+    }
+   },
+   "notes": "ghosts around the backbeat, probabilistic so they breathe"
+  },
+  {
+   "id": "disco.ghost.lift",
+   "name": "Snare ghosts \u2014 lift",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "kick": {
+     "v": "9...9...9...9..."
+    },
+    "snare": {
+     "v": "..3.9.43..339.44",
+     "a": "....A.......A...",
+     "p": "..5...66..56..76"
+    },
+    "chh": {
+     "v": "7.6.7...7.6.7..."
+    },
+    "ohh": {
+     "v": "......8.......8."
+    },
+    "cp": {
+     "v": "....8.......8..."
+    }
+   },
+   "notes": "ghost density up; clap reinforces the backbeat"
+  },
+  {
+   "id": "disco.ghost.fill",
+   "name": "Snare ghosts \u2014 fill",
+   "family": "disco",
+   "tags": [
+    "disco",
+    "fourfloor"
+   ],
+   "meter": "4/4",
+   "beats": 4,
+   "stepsPerBeat": 4,
+   "bars": 1,
+   "swing": 0.0,
+   "bpm": [
+    112,
+    126
+   ],
+   "grid": {
+    "snare": {
+     "v": "....9.5.7.659789",
+     "a": "....A.......A..A"
+    },
+    "chh": {
+     "v": "5.5.5.5.5.5.5.5."
+    },
+    "ohh": {
+     "v": "...............9"
+    },
+    "kick": {
+     "v": "9...9...9...9..."
+    }
+   },
+   "notes": "roll into the downbeat; floor held"
+  }
+ ],
+ "sets": [
+  {
+   "id": "disco.fourfloor",
+   "name": "Four on the floor",
+   "family": "disco",
+   "bpm": 118,
+   "vary": 0.2,
+   "axis": "genre",
+   "roles": {
+    "sparse": "disco.fourfloor.sparse",
+    "main": "disco.fourfloor.main",
+    "lift": "disco.fourfloor.lift",
+    "fill": [
+     "disco.fourfloor.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "sparse",
+     "bars": 4
+    },
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "lift",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "main",
+     "bars": 8
+    },
+    {
+     "role": "sparse",
+     "bars": 4
+    }
+   ],
+   "notes": "The foundation: kick every quarter, snare on 2 and 4, eighth hats opening on the & of 4."
+  },
+  {
+   "id": "disco.upbeats",
+   "name": "Open upbeats",
+   "family": "disco",
+   "bpm": 122,
+   "vary": 0.2,
+   "axis": "genre",
+   "roles": {
+    "sparse": "disco.upbeats.sparse",
+    "main": "disco.upbeats.main",
+    "lift": "disco.upbeats.lift",
+    "fill": [
+     "disco.upbeats.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "sparse",
+     "bars": 4
+    },
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "lift",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "main",
+     "bars": 8
+    },
+    {
+     "role": "sparse",
+     "bars": 4
+    }
+   ],
+   "notes": "Hat opens on every upbeat. The book's most common placement, applied to all four beats at once."
+  },
+  {
+   "id": "disco.sixteenth",
+   "name": "Sixteenth hat",
+   "family": "disco",
+   "bpm": 104,
+   "vary": 0.2,
+   "axis": "genre",
+   "roles": {
+    "sparse": "disco.sixteenth.sparse",
+    "main": "disco.sixteenth.main",
+    "lift": "disco.sixteenth.lift",
+    "fill": [
+     "disco.sixteenth.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "sparse",
+     "bars": 4
+    },
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "lift",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "main",
+     "bars": 8
+    },
+    {
+     "role": "sparse",
+     "bars": 4
+    }
+   ],
+   "notes": "Sixteenth-note hat played with one hand, which is why the tempo drops. Openings land on sixteenth positions rather than eighths."
+  },
+  {
+   "id": "disco.shuffle",
+   "name": "Triplet hat",
+   "family": "disco",
+   "bpm": 110,
+   "vary": 0.2,
+   "axis": "genre",
+   "roles": {
+    "sparse": "disco.shuffle.sparse",
+    "main": "disco.shuffle.main",
+    "lift": "disco.shuffle.lift",
+    "fill": [
+     "disco.shuffle.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "sparse",
+     "bars": 4
+    },
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "lift",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "main",
+     "bars": 8
+    },
+    {
+     "role": "sparse",
+     "bars": 4
+    }
+   ],
+   "notes": "Triplet-feel hat over an unswung four-on-the-floor \u2014 the swung hand against the straight foot."
+  },
+  {
+   "id": "disco.sixeight",
+   "name": "Six-eight feel",
+   "family": "disco",
+   "bpm": 104,
+   "vary": 0.2,
+   "axis": "genre",
+   "roles": {
+    "sparse": "disco.sixeight.sparse",
+    "main": "disco.sixeight.main",
+    "lift": "disco.sixeight.lift",
+    "fill": [
+     "disco.sixeight.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "sparse",
+     "bars": 4
+    },
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "lift",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "main",
+     "bars": 8
+    },
+    {
+     "role": "sparse",
+     "bars": 4
+    }
+   ],
+   "notes": "Disco in compound time: kick on 1 and 4, snare only on 4."
+  },
+  {
+   "id": "disco.pickup",
+   "name": "Kick pickups",
+   "family": "disco",
+   "bpm": 116,
+   "vary": 0.2,
+   "axis": "genre",
+   "roles": {
+    "sparse": "disco.pickup.sparse",
+    "main": "disco.pickup.main",
+    "lift": "disco.pickup.lift",
+    "fill": [
+     "disco.pickup.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "sparse",
+     "bars": 4
+    },
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "lift",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "main",
+     "bars": 8
+    },
+    {
+     "role": "sparse",
+     "bars": 4
+    }
+   ],
+   "notes": "Four-on-the-floor with sixteenth-note bass-drum pickups, the hat held fixed so the foot is what varies."
+  },
+  {
+   "id": "disco.ghost",
+   "name": "Snare ghosts",
+   "family": "disco",
+   "bpm": 114,
+   "vary": 0.2,
+   "axis": "genre",
+   "roles": {
+    "sparse": "disco.ghost.sparse",
+    "main": "disco.ghost.main",
+    "lift": "disco.ghost.lift",
+    "fill": [
+     "disco.ghost.fill"
+    ]
+   },
+   "arrangement": [
+    {
+     "role": "sparse",
+     "bars": 4
+    },
+    {
+     "role": "main",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "lift",
+     "bars": 8,
+     "fillEvery": 4
+    },
+    {
+     "role": "main",
+     "bars": 8
+    },
+    {
+     "role": "sparse",
+     "bars": 4
+    }
+   ],
+   "notes": "The third axis: extra snare around the backbeat while kick and hat hold still."
+  }
+ ]
+}
