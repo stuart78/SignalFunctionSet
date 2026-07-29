@@ -444,6 +444,11 @@ struct Fill : Module {
 	int   barsSinceReset = 0;
 	int   barsSinceFill = 0;                 // display: bars elapsed since the last fill
 	bool  fillActive = false;
+	// Fills off: the pressure arc still runs and still drives the tier, so the
+	// groove keeps rising and settling across the phrase — it just never breaks.
+	// Venting silently at the moment a fill would have fired is what preserves
+	// that; without it pressure saturates and the tier sticks at the top.
+	bool  playFills = true;
 	float fillFlash = 0.f;
 
 	// clock-driven playback: steps fire ON incoming CLOCK edges, so playback freezes the
@@ -795,6 +800,13 @@ struct Fill : Module {
 
 		bool fillNow = syncOn ? (barsSinceReset > 0 && (barsSinceReset % phraseLen()) == 0)
 		                      : (random::uniform() < pressure);
+		if (fillNow && !playFills) {
+			float discharge = clamp(params[DISCHARGE_PARAM].getValue()
+			                        + inputs[DISCHARGE_CV_INPUT].getVoltage() / 10.f, 0.f, 1.f);
+			pressure = clamp(pressure - discharge * pressure, 0.f, 1.f);
+			barsSinceFill = 0;                 // the arc still turned over
+			fillNow = false;
+		}
 
 		if (fillNow) {
 			// 70% a library fill (seeded pick + seeded mutation so one authored fill
@@ -976,6 +988,7 @@ struct Fill : Module {
 		json_object_set_new(root, "setIdx", json_integer(curSet));
 		json_object_set_new(root, "clockRes", json_integer(clockRes));
 		json_object_set_new(root, "tierMode", json_integer(tierMode));
+		json_object_set_new(root, "playFills", json_boolean(playFills));
 		json_object_set_new(root, "tierBalance", json_integer(tierBalance));
 		json_object_set_new(root, "pulseWidthIdx", json_integer(pulseWidthIdx));
 		json_object_set_new(root, "screenTab", json_integer(screenTab));
@@ -988,6 +1001,7 @@ struct Fill : Module {
 	void dataFromJson(json_t* root) override {
 		if (json_t* j = json_object_get(root, "clockRes")) clockRes = clamp((int)json_integer_value(j), 0, 48);
 		if (json_t* j = json_object_get(root, "tierMode")) tierMode = clamp((int)json_integer_value(j), 0, 1);
+		if (json_t* j = json_object_get(root, "playFills")) playFills = json_boolean_value(j);
 		if (json_t* j = json_object_get(root, "tierBalance")) tierBalance = clamp((int)json_integer_value(j), 0, 2);
 		if (json_t* j = json_object_get(root, "setIdx")) { curSet = pendingSet = clamp((int)json_integer_value(j), 0, std::max(0, (int)lib.sets.size() - 1)); }
 		if (json_t* j = json_object_get(root, "pulseWidthIdx")) pulseWidthIdx = clamp((int)json_integer_value(j), 0, sfs::NUM_PULSE_WIDTHS - 1);
@@ -1397,6 +1411,7 @@ struct FillWidget : ModuleWidget {
 				[module](int i) { module->clockRes = RES[i]; }));
 		}
 		menu->addChild(new MenuSeparator);
+		menu->addChild(createBoolPtrMenuItem("Play fills", "", &module->playFills));
 		menu->addChild(createMenuLabel("Intensity"));
 		menu->addChild(createIndexPtrSubmenuItem("Tier follows",
 			{"Rise through the phrase", "One tier per phrase"}, &module->tierMode));
