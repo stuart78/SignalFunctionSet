@@ -237,6 +237,7 @@ struct Body {
 
 struct Geom {
 	std::vector<Body> bodies;
+	float sizeHint = 1.f;            // how big this copy is, so hit() can size its epsilons
 	float volume = 1.f, area = 1.f, inradius = 1.f;
 
 	void finish() {
@@ -253,20 +254,28 @@ struct Geom {
 	// Nearest wall of the UNION. A ray leaves a body only if the exit point is
 	// not inside a neighbour; if it is, it carries on through the join.
 	bool hit(const V3& p, const V3& v, float& tOut, V3& nOut) const {
+		// The step past the surface MUST exceed the slack contains() allows, or the
+		// walk never notices it has left: it steps 1e-5 out, contains() forgives
+		// 1e-4, so the point still counts as inside and the search moves on to the
+		// NEXT plane crossing — outside the crystal. Every ray died after one
+		// bogus bounce. Both epsilons are sized to the geometry now, since the
+		// same absolute value cannot serve a 6cm crystal and a 24m one.
+		float step = 1e-3f * sizeHint;
+		float tol  = -1e-4f * sizeHint;          // must be properly inside, not just near
 		float t = 0.f; V3 hn(0, 0, 1); bool any = false;
 		for (int iter = 0; iter < 8; iter++) {
-			V3 q = p + v * (t + 1e-5f);
+			V3 q = p + v * (t + step);
 			float best = -1.f; V3 bn;
 			for (auto& b : bodies) {
-				if (!b.contains(q)) continue;
+				if (!b.contains(q, tol)) continue;
 				float te = 1e9f; V3 en;
 				for (auto& f : b.faces) {
 					float dn = dot3(f.n, v);
 					if (dn <= 1e-6f) continue;
 					float tt = (f.d - dot3(f.n, q)) / dn;
-					if (tt > 1e-6f && tt < te) { te = tt; en = f.n; }
+					if (tt > 1e-5f * sizeHint && tt < te) { te = tt; en = f.n; }
 				}
-				if (te < 1e8f && t + 1e-5f + te > best) { best = t + 1e-5f + te; bn = en; }
+				if (te < 1e8f && t + step + te > best) { best = t + step + te; bn = en; }
 			}
 			if (best < 0.f) break;
 			t = best; hn = bn; any = true;
@@ -414,6 +423,7 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 	// used to radiate at speaker A now radiates at B, and the trajectory appears
 	// to swing round the quad image.
 	Geom sc = g;                                 // this crystal at the requested size, in the ROOM
+	sc.sizeHint = sizeM;
 	for (auto& b : sc.bodies)
 		for (auto& f : b.faces) { f.n = mul3(head, f.n); f.d *= sizeM; }
 
