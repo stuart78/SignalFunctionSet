@@ -1474,6 +1474,13 @@ struct CrystalDisplay : Widget {
 	// off the screen.
 	static constexpr float CAM_D = 5.f;
 	float viewR = 1.f;
+	// A traced point should lie ON the boundary. Until the escapes are tracked
+	// down, the drawing at least will not run a ray out through a wall — and the
+	// tracer's own count still reports the underlying fault.
+	static bool insideHabit(const Geom& g, const V3& p, float R) {
+		for (auto& b : g.bodies) if (b.contains(p, 0.03f * R)) return true;
+		return false;
+	}
 	Vec project(const V3& p, float scale) {
 		float persp = CAM_D / std::max(CAM_D + p.z / std::max(viewR, 1e-4f), 0.4f);
 		return Vec(box.size.x / 2 + p.x * scale * persp, box.size.y / 2 - p.y * scale * persp);
@@ -1532,6 +1539,22 @@ struct CrystalDisplay : Widget {
 		}
 
 		bool solid = module && module->solidFaces && polys.size() >= 4;
+		// Where one individual grows through another, drawn whether or not the
+		// faces are filled — it was only ever in the solid pass, so turning
+		// occlusion off silently lost it.
+		if (!solid && polys.size() >= 4) {
+			nvgBeginPath(vg);
+			bool any = false;
+			for (auto& p : polys)
+				for (size_t k = 0; k < p.v.size(); k++) {
+					if (p.edge[k] != 2) continue;
+					Vec a = project(obj(p.v[k]), scale);
+					Vec b = project(obj(p.v[(k + 1) % p.v.size()]), scale);
+					nvgMoveTo(vg, a.x, a.y); nvgLineTo(vg, b.x, b.y);
+					any = true;
+				}
+			if (any) { nvgStrokeColor(vg, cWire(0.28f)); nvgStrokeWidth(vg, 0.5f); nvgStroke(vg); }
+		}
 		// The projection shrinks with +z, so the viewer is on the -z side: nearer
 		// means smaller z, and a face points at us when its normal's z is negative.
 		for (auto& e : wire) {
@@ -1623,9 +1646,12 @@ struct CrystalDisplay : Widget {
 					const PathViz& pv = ts.path[pi];
 					if (pv.n < 2) continue;
 					nvgBeginPath(vg);                                  // the path itself, faint
+					bool pen = false;
 					for (int k = 0; k < pv.n; k++) {
-						Vec q = project(obj(mul3(hi, pv.pt[k])), scale);   // glued to the crystal
-						if (k == 0) nvgMoveTo(vg, q.x, q.y); else nvgLineTo(vg, q.x, q.y);
+						V3 o3 = mul3(hi, pv.pt[k]);
+						if (!insideHabit(g, o3, R)) { pen = false; continue; }   // never leave the crystal
+						Vec q = project(obj(o3), scale);
+						if (!pen) { nvgMoveTo(vg, q.x, q.y); pen = true; } else nvgLineTo(vg, q.x, q.y);
 					}
 					bool eB = pv.emitter != 0;
 					nvgStrokeColor(vg, cPath(eB, 0.20f));
@@ -1645,7 +1671,9 @@ struct CrystalDisplay : Widget {
 						float span = std::max(pv.cum[seg + 1] - pv.cum[seg], 1e-6f);
 						float f = clamp((travelled - pv.cum[seg]) / span, 0.f, 1.f);
 						V3 p3 = pv.pt[seg] + (pv.pt[seg + 1] - pv.pt[seg]) * f;
-						Vec q = project(obj(mul3(hi, p3)), scale);
+						V3 po = mul3(hi, p3);
+						if (!insideHabit(g, po, R)) continue;
+						Vec q = project(obj(po), scale);
 						float lvl = module->pulseLvl[u].load() * (1.f - age / total);
 						float rr = 1.6f + 2.6f * lvl;
 						NVGcolor pc = pv.emitter ? cAccent() : XORANGE;
@@ -1711,6 +1739,7 @@ struct CrystalDisplay : Widget {
 		if (live) {
 			for (auto& st : strikes) {
 				if (st.a <= 0.01f) continue;
+				if (!insideHabit(g, st.p, R)) continue;
 				NVGcolor sc2 = st.em ? cAccent() : XORANGE;
 				Vec hp = project(obj(st.p), scale);
 				nvgBeginPath(vg); nvgCircle(vg, hp.x, hp.y, 1.5f + 6.f * st.a);
