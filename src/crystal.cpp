@@ -428,6 +428,7 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 
 	for (int em = 0; em < CR_NE; em++) {
 		ts.head = head;
+		int pathsFor = 0;
 		V3 ed = norm3(mul3(head, emitDir[em]));   // rides with the crystal
 		V3 emit = ed * (sc.surfaceDist(ed) * 0.97f);
 
@@ -452,7 +453,11 @@ static void traceInto(TapSet& ts, const Geom& g, float sizeM, float absorb,
 			float pathLen = 0.f, amp = 1.f;
 
 			PathViz* pv = nullptr;
-			if (ts.nPaths < CR_NPATH && (r % 2) == 0) {
+			// Budget per emitter, not first-come: emitter A used to claim every
+			// slot, so B had no path at all — and since pulses, sparks and wall
+			// flashes all ride on paths, B looked like it was not emitting.
+			if (pathsFor < CR_NPATH / CR_NE && (r % 2) == 0) {
+				pathsFor++;
 				pv = &ts.path[ts.nPaths++];
 				pv->emitter = em; pv->n = 0;
 				pv->pt[pv->n] = emit; pv->cum[pv->n] = 0.f; pv->n++;
@@ -651,6 +656,8 @@ struct Crystal : Module {
 	dsp::SchmittTrigger pingTrig, pingBtn;
 	float pingFlash = 0.f;
 	std::atomic<int> dispPingSide{0};
+	float emEnv[CR_NE] = {};                    // what each emitter is actually being fed
+	std::atomic<float> dispEmLevel[CR_NE];
 
 	// display mirrors
 	std::atomic<float> dispRotY{0.4f}, dispRotX{0.3f};
@@ -984,6 +991,11 @@ struct Crystal : Module {
 		float inA = inputs[AUDIO_INPUT].getVoltage() * 0.2f + ex[0] * 0.6f;
 		float inB = inputs[AUDIO_B_INPUT].getVoltage() * 0.2f + ex[1] * 0.6f;
 		float in = inA + inB;                                // onset detection watches both
+		for (int e = 0; e < CR_NE; e++) {
+			float rect2 = std::fabs(e ? inB : inA);
+			emEnv[e] += (rect2 - emEnv[e]) * (rect2 > emEnv[e] ? 0.4f : 0.0009f);
+			dispEmLevel[e] = clamp(emEnv[e] * 2.5f, 0.f, 1.f);
+		}
 
 		// Onset detection: a transient at the emitter launches a visible pulse and
 		// is what makes the trajectory readable on screen.
@@ -1193,7 +1205,7 @@ struct CrystalDisplay : Widget {
 	// so it was usually never drawn at all. Trigger once when the pulse crosses a
 	// corner and decay in real time instead.
 	std::vector<float> glow;
-	struct Strike { V3 p, n; float a; };
+	struct Strike { V3 p, n; float a; int em; };
 	Strike strikes[CR_NPULSE] = {};
 	int lastSeg[CR_NPULSE] = {};
 	int polysMat = -1;
@@ -1470,7 +1482,7 @@ struct CrystalDisplay : Widget {
 	// cam() puts a room point on screen; obj() is for points fixed to the crystal,
 	// which turn by its heading first and then ride the camera like everything else
 	void drawCrystal(NVGcontext* vg, const Geom& g, float cy, float cx, const M3& head,
-	                 const float* az, const float* el, bool live, float flash, int flashSide) {
+	                 const float* az, const float* el, bool live) {
 		auto cam = [&](const V3& p) { return rotYX(p, cy, cx); };
 		auto obj = [&](const V3& p) { return rotYX(mul3(head, p), cy, cx); };
 		float R = 1e-4f;
@@ -1636,17 +1648,18 @@ struct CrystalDisplay : Widget {
 						Vec q = project(obj(mul3(hi, p3)), scale);
 						float lvl = module->pulseLvl[u].load() * (1.f - age / total);
 						float rr = 1.6f + 2.6f * lvl;
+						NVGcolor pc = pv.emitter ? cAccent() : XORANGE;
 						nvgBeginPath(vg); nvgCircle(vg, q.x, q.y, rr);
-						nvgFillColor(vg, nvgRGBAf(0.92f, 0.62f, 0.25f, clamp(lvl, 0.f, 1.f)));
+						nvgFillColor(vg, nvgRGBAf(pc.r, pc.g, pc.b, clamp(lvl, 0.f, 1.f)));
 						nvgFill(vg);
 						nvgBeginPath(vg); nvgCircle(vg, q.x, q.y, rr * 2.4f);
-						nvgStrokeColor(vg, nvgRGBAf(0.92f, 0.4f, 0.18f, 0.25f * lvl));
+						nvgStrokeColor(vg, nvgRGBAf(pc.r, pc.g, pc.b, 0.25f * lvl));
 						nvgStrokeWidth(vg, 0.8f); nvgStroke(vg);
 
 						// Fires once, when the pulse crosses a corner.
 						if (seg > 0 && seg != lastSeg[u]) {
 							V3 hitO = mul3(hi, pv.pt[seg]), hitN = mul3(hi, pv.nrm[seg]);
-							strikes[u] = {hitO, hitN, 1.f};
+							strikes[u] = {hitO, hitN, 1.f, pv.emitter};
 							float bestErr = 1e9f; V3 bn; float bd = 0.f;
 							for (auto& bd2 : g.bodies)
 								for (auto& f2 : bd2.faces) {
@@ -1673,9 +1686,12 @@ struct CrystalDisplay : Widget {
 			V3 world = dir * g.surfaceDist(dir);
 			Vec pe = project(obj(world), scale);
 			NVGcolor col = e ? cAccent() : XORANGE;
-			if (e == flashSide && flash > 0.01f) {
-				nvgBeginPath(vg); nvgCircle(vg, pe.x, pe.y, 4.f + 16.f * flash);
-				nvgStrokeColor(vg, nvgRGBAf(0.92f, 0.4f, 0.18f, 0.7f * flash));
+			// A ring that follows what this emitter is being fed, so it is obvious
+			// which one is live — the old ring only ever showed the internal ping.
+			float lv = module ? module->dispEmLevel[e].load() : 0.f;
+			if (lv > 0.02f) {
+				nvgBeginPath(vg); nvgCircle(vg, pe.x, pe.y, 4.5f + 11.f * lv);
+				nvgStrokeColor(vg, nvgRGBAf(col.r, col.g, col.b, 0.55f * lv));
 				nvgStrokeWidth(vg, 1.2f); nvgStroke(vg);
 			}
 			nvgBeginPath(vg); nvgCircle(vg, pe.x, pe.y, 3.f);
@@ -1695,9 +1711,10 @@ struct CrystalDisplay : Widget {
 		if (live) {
 			for (auto& st : strikes) {
 				if (st.a <= 0.01f) continue;
+				NVGcolor sc2 = st.em ? cAccent() : XORANGE;
 				Vec hp = project(obj(st.p), scale);
 				nvgBeginPath(vg); nvgCircle(vg, hp.x, hp.y, 1.5f + 6.f * st.a);
-				nvgStrokeColor(vg, nvgRGBAf(0.98f, 0.76f, 0.34f, 0.7f * st.a));
+				nvgStrokeColor(vg, nvgRGBAf(sc2.r, sc2.g, sc2.b, 0.8f * st.a));
 				nvgStrokeWidth(vg, 1.2f); nvgStroke(vg);
 				V3 hw = obj(st.p), hn2 = obj(st.n);
 				for (int li = 0; li < CR_NL; li++) {
@@ -1706,7 +1723,7 @@ struct CrystalDisplay : Widget {
 					if (f2 <= 0.f) continue;
 					Vec se = project(cam(speakerPos(li) * R), scale);
 					nvgBeginPath(vg); nvgMoveTo(vg, hp.x, hp.y); nvgLineTo(vg, se.x, se.y);
-					nvgStrokeColor(vg, nvgRGBAf(0.97f, 0.62f, 0.24f, 0.55f * st.a * f2 * f2 * f2));
+					nvgStrokeColor(vg, nvgRGBAf(sc2.r, sc2.g, sc2.b, 0.6f * st.a * f2 * f2 * f2));
 					nvgStrokeWidth(vg, 0.9f); nvgStroke(vg);
 				}
 			}
@@ -1776,9 +1793,7 @@ struct CrystalDisplay : Widget {
 		el[0] = module ? module->params[Crystal::EMIT_EL_PARAM].getValue() : 0.3f;
 		az[1] = module ? module->params[Crystal::EMIT_B_AZ_PARAM].getValue() : -2.2f;
 		el[1] = module ? module->params[Crystal::EMIT_B_EL_PARAM].getValue() : -0.4f;
-		drawCrystal(vg, preview, ry, rx, head, az, el, module != nullptr,
-		            module ? module->pingFlash : 0.f,
-		            module ? module->dispPingSide.load() : 0);
+		drawCrystal(vg, preview, ry, rx, head, az, el, module != nullptr);
 
 		drawGizmo(vg, ry, rx, head);
 
