@@ -1,0 +1,663 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2800" viewBox="0 0 3840 2800">
+  <!-- panel parts at 4x -->
+  <rect x="0" y="0" width="3840" height="2800" fill="#f0f0f0"/>
+  <line x1="15" y1="0" x2="15" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="30" y1="0" x2="30" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="45" y1="0" x2="45" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="60" y1="0" x2="60" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="75" y1="0" x2="75" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="90" y1="0" x2="90" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="105" y1="0" x2="105" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="120" y1="0" x2="120" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="135" y1="0" x2="135" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="150" y1="0" x2="150" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="165" y1="0" x2="165" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="180" y1="0" x2="180" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="195" y1="0" x2="195" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="210" y1="0" x2="210" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="225" y1="0" x2="225" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="240" y1="0" x2="240" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="255" y1="0" x2="255" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="270" y1="0" x2="270" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="285" y1="0" x2="285" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="300" y1="0" x2="300" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="315" y1="0" x2="315" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="330" y1="0" x2="330" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="345" y1="0" x2="345" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="360" y1="0" x2="360" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="375" y1="0" x2="375" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="390" y1="0" x2="390" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="405" y1="0" x2="405" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="420" y1="0" x2="420" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="435" y1="0" x2="435" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="450" y1="0" x2="450" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="465" y1="0" x2="465" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="480" y1="0" x2="480" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="495" y1="0" x2="495" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="510" y1="0" x2="510" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="525" y1="0" x2="525" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="540" y1="0" x2="540" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="555" y1="0" x2="555" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="570" y1="0" x2="570" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="585" y1="0" x2="585" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="600" y1="0" x2="600" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="615" y1="0" x2="615" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="630" y1="0" x2="630" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="645" y1="0" x2="645" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="660" y1="0" x2="660" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="675" y1="0" x2="675" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="690" y1="0" x2="690" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="705" y1="0" x2="705" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="720" y1="0" x2="720" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="735" y1="0" x2="735" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="750" y1="0" x2="750" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="765" y1="0" x2="765" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="780" y1="0" x2="780" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="795" y1="0" x2="795" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="810" y1="0" x2="810" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="825" y1="0" x2="825" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="840" y1="0" x2="840" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="855" y1="0" x2="855" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="870" y1="0" x2="870" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="885" y1="0" x2="885" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="900" y1="0" x2="900" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="915" y1="0" x2="915" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="930" y1="0" x2="930" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="945" y1="0" x2="945" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="960" y1="0" x2="960" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="975" y1="0" x2="975" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="990" y1="0" x2="990" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1005" y1="0" x2="1005" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1020" y1="0" x2="1020" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1035" y1="0" x2="1035" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1050" y1="0" x2="1050" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1065" y1="0" x2="1065" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1080" y1="0" x2="1080" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1095" y1="0" x2="1095" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1110" y1="0" x2="1110" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1125" y1="0" x2="1125" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1140" y1="0" x2="1140" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1155" y1="0" x2="1155" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1170" y1="0" x2="1170" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1185" y1="0" x2="1185" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1200" y1="0" x2="1200" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1215" y1="0" x2="1215" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1230" y1="0" x2="1230" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1245" y1="0" x2="1245" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1260" y1="0" x2="1260" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1275" y1="0" x2="1275" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1290" y1="0" x2="1290" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1305" y1="0" x2="1305" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1320" y1="0" x2="1320" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1335" y1="0" x2="1335" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1350" y1="0" x2="1350" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1365" y1="0" x2="1365" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1380" y1="0" x2="1380" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1395" y1="0" x2="1395" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1410" y1="0" x2="1410" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1425" y1="0" x2="1425" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1440" y1="0" x2="1440" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1455" y1="0" x2="1455" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1470" y1="0" x2="1470" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1485" y1="0" x2="1485" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1500" y1="0" x2="1500" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1515" y1="0" x2="1515" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1530" y1="0" x2="1530" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1545" y1="0" x2="1545" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1560" y1="0" x2="1560" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1575" y1="0" x2="1575" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1590" y1="0" x2="1590" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1605" y1="0" x2="1605" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1620" y1="0" x2="1620" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1635" y1="0" x2="1635" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1650" y1="0" x2="1650" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1665" y1="0" x2="1665" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1680" y1="0" x2="1680" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1695" y1="0" x2="1695" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1710" y1="0" x2="1710" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1725" y1="0" x2="1725" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1740" y1="0" x2="1740" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1755" y1="0" x2="1755" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1770" y1="0" x2="1770" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1785" y1="0" x2="1785" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1800" y1="0" x2="1800" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1815" y1="0" x2="1815" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1830" y1="0" x2="1830" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1845" y1="0" x2="1845" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1860" y1="0" x2="1860" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1875" y1="0" x2="1875" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1890" y1="0" x2="1890" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1905" y1="0" x2="1905" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1920" y1="0" x2="1920" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1935" y1="0" x2="1935" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1950" y1="0" x2="1950" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1965" y1="0" x2="1965" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="1980" y1="0" x2="1980" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="1995" y1="0" x2="1995" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2010" y1="0" x2="2010" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2025" y1="0" x2="2025" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2040" y1="0" x2="2040" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2055" y1="0" x2="2055" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2070" y1="0" x2="2070" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2085" y1="0" x2="2085" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2100" y1="0" x2="2100" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2115" y1="0" x2="2115" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2130" y1="0" x2="2130" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2145" y1="0" x2="2145" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2160" y1="0" x2="2160" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2175" y1="0" x2="2175" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2190" y1="0" x2="2190" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2205" y1="0" x2="2205" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2220" y1="0" x2="2220" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2235" y1="0" x2="2235" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2250" y1="0" x2="2250" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2265" y1="0" x2="2265" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2280" y1="0" x2="2280" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2295" y1="0" x2="2295" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2310" y1="0" x2="2310" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2325" y1="0" x2="2325" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2340" y1="0" x2="2340" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2355" y1="0" x2="2355" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2370" y1="0" x2="2370" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2385" y1="0" x2="2385" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2400" y1="0" x2="2400" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2415" y1="0" x2="2415" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2430" y1="0" x2="2430" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2445" y1="0" x2="2445" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2460" y1="0" x2="2460" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2475" y1="0" x2="2475" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2490" y1="0" x2="2490" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2505" y1="0" x2="2505" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2520" y1="0" x2="2520" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2535" y1="0" x2="2535" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2550" y1="0" x2="2550" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2565" y1="0" x2="2565" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2580" y1="0" x2="2580" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2595" y1="0" x2="2595" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2610" y1="0" x2="2610" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2625" y1="0" x2="2625" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2640" y1="0" x2="2640" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2655" y1="0" x2="2655" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2670" y1="0" x2="2670" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2685" y1="0" x2="2685" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2700" y1="0" x2="2700" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2715" y1="0" x2="2715" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2730" y1="0" x2="2730" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2745" y1="0" x2="2745" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2760" y1="0" x2="2760" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2775" y1="0" x2="2775" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2790" y1="0" x2="2790" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2805" y1="0" x2="2805" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2820" y1="0" x2="2820" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2835" y1="0" x2="2835" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2850" y1="0" x2="2850" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2865" y1="0" x2="2865" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2880" y1="0" x2="2880" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2895" y1="0" x2="2895" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2910" y1="0" x2="2910" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2925" y1="0" x2="2925" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2940" y1="0" x2="2940" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="2955" y1="0" x2="2955" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2970" y1="0" x2="2970" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="2985" y1="0" x2="2985" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3000" y1="0" x2="3000" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3015" y1="0" x2="3015" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3030" y1="0" x2="3030" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3045" y1="0" x2="3045" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3060" y1="0" x2="3060" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3075" y1="0" x2="3075" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3090" y1="0" x2="3090" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3105" y1="0" x2="3105" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3120" y1="0" x2="3120" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3135" y1="0" x2="3135" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3150" y1="0" x2="3150" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3165" y1="0" x2="3165" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3180" y1="0" x2="3180" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3195" y1="0" x2="3195" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3210" y1="0" x2="3210" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3225" y1="0" x2="3225" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3240" y1="0" x2="3240" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3255" y1="0" x2="3255" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3270" y1="0" x2="3270" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3285" y1="0" x2="3285" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3300" y1="0" x2="3300" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3315" y1="0" x2="3315" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3330" y1="0" x2="3330" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3345" y1="0" x2="3345" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3360" y1="0" x2="3360" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3375" y1="0" x2="3375" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3390" y1="0" x2="3390" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3405" y1="0" x2="3405" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3420" y1="0" x2="3420" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3435" y1="0" x2="3435" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3450" y1="0" x2="3450" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3465" y1="0" x2="3465" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3480" y1="0" x2="3480" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3495" y1="0" x2="3495" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3510" y1="0" x2="3510" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3525" y1="0" x2="3525" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3540" y1="0" x2="3540" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3555" y1="0" x2="3555" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3570" y1="0" x2="3570" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3585" y1="0" x2="3585" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3600" y1="0" x2="3600" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3615" y1="0" x2="3615" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3630" y1="0" x2="3630" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3645" y1="0" x2="3645" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3660" y1="0" x2="3660" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3675" y1="0" x2="3675" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3690" y1="0" x2="3690" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3705" y1="0" x2="3705" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3720" y1="0" x2="3720" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3735" y1="0" x2="3735" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3750" y1="0" x2="3750" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3765" y1="0" x2="3765" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3780" y1="0" x2="3780" y2="2800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="3795" y1="0" x2="3795" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3810" y1="0" x2="3810" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="3825" y1="0" x2="3825" y2="2800" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="15" x2="3840" y2="15" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="30" x2="3840" y2="30" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="45" x2="3840" y2="45" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="60" x2="3840" y2="60" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="75" x2="3840" y2="75" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="90" x2="3840" y2="90" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="105" x2="3840" y2="105" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="120" x2="3840" y2="120" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="135" x2="3840" y2="135" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="150" x2="3840" y2="150" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="165" x2="3840" y2="165" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="180" x2="3840" y2="180" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="195" x2="3840" y2="195" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="210" x2="3840" y2="210" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="225" x2="3840" y2="225" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="240" x2="3840" y2="240" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="255" x2="3840" y2="255" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="270" x2="3840" y2="270" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="285" x2="3840" y2="285" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="300" x2="3840" y2="300" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="315" x2="3840" y2="315" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="330" x2="3840" y2="330" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="345" x2="3840" y2="345" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="360" x2="3840" y2="360" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="375" x2="3840" y2="375" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="390" x2="3840" y2="390" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="405" x2="3840" y2="405" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="420" x2="3840" y2="420" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="435" x2="3840" y2="435" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="450" x2="3840" y2="450" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="465" x2="3840" y2="465" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="480" x2="3840" y2="480" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="495" x2="3840" y2="495" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="510" x2="3840" y2="510" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="525" x2="3840" y2="525" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="540" x2="3840" y2="540" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="555" x2="3840" y2="555" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="570" x2="3840" y2="570" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="585" x2="3840" y2="585" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="600" x2="3840" y2="600" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="615" x2="3840" y2="615" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="630" x2="3840" y2="630" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="645" x2="3840" y2="645" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="660" x2="3840" y2="660" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="675" x2="3840" y2="675" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="690" x2="3840" y2="690" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="705" x2="3840" y2="705" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="720" x2="3840" y2="720" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="735" x2="3840" y2="735" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="750" x2="3840" y2="750" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="765" x2="3840" y2="765" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="780" x2="3840" y2="780" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="795" x2="3840" y2="795" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="810" x2="3840" y2="810" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="825" x2="3840" y2="825" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="840" x2="3840" y2="840" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="855" x2="3840" y2="855" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="870" x2="3840" y2="870" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="885" x2="3840" y2="885" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="900" x2="3840" y2="900" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="915" x2="3840" y2="915" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="930" x2="3840" y2="930" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="945" x2="3840" y2="945" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="960" x2="3840" y2="960" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="975" x2="3840" y2="975" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="990" x2="3840" y2="990" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1005" x2="3840" y2="1005" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1020" x2="3840" y2="1020" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1035" x2="3840" y2="1035" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1050" x2="3840" y2="1050" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1065" x2="3840" y2="1065" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1080" x2="3840" y2="1080" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1095" x2="3840" y2="1095" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1110" x2="3840" y2="1110" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1125" x2="3840" y2="1125" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1140" x2="3840" y2="1140" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1155" x2="3840" y2="1155" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1170" x2="3840" y2="1170" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1185" x2="3840" y2="1185" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1200" x2="3840" y2="1200" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1215" x2="3840" y2="1215" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1230" x2="3840" y2="1230" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1245" x2="3840" y2="1245" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1260" x2="3840" y2="1260" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1275" x2="3840" y2="1275" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1290" x2="3840" y2="1290" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1305" x2="3840" y2="1305" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1320" x2="3840" y2="1320" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1335" x2="3840" y2="1335" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1350" x2="3840" y2="1350" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1365" x2="3840" y2="1365" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1380" x2="3840" y2="1380" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1395" x2="3840" y2="1395" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1410" x2="3840" y2="1410" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1425" x2="3840" y2="1425" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1440" x2="3840" y2="1440" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1455" x2="3840" y2="1455" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1470" x2="3840" y2="1470" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1485" x2="3840" y2="1485" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1500" x2="3840" y2="1500" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1515" x2="3840" y2="1515" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1530" x2="3840" y2="1530" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1545" x2="3840" y2="1545" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1560" x2="3840" y2="1560" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1575" x2="3840" y2="1575" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1590" x2="3840" y2="1590" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1605" x2="3840" y2="1605" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1620" x2="3840" y2="1620" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1635" x2="3840" y2="1635" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1650" x2="3840" y2="1650" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1665" x2="3840" y2="1665" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1680" x2="3840" y2="1680" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1695" x2="3840" y2="1695" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1710" x2="3840" y2="1710" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1725" x2="3840" y2="1725" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1740" x2="3840" y2="1740" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1755" x2="3840" y2="1755" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1770" x2="3840" y2="1770" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1785" x2="3840" y2="1785" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1800" x2="3840" y2="1800" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1815" x2="3840" y2="1815" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1830" x2="3840" y2="1830" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1845" x2="3840" y2="1845" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1860" x2="3840" y2="1860" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1875" x2="3840" y2="1875" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1890" x2="3840" y2="1890" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1905" x2="3840" y2="1905" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1920" x2="3840" y2="1920" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1935" x2="3840" y2="1935" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1950" x2="3840" y2="1950" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1965" x2="3840" y2="1965" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="1980" x2="3840" y2="1980" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="1995" x2="3840" y2="1995" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2010" x2="3840" y2="2010" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2025" x2="3840" y2="2025" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2040" x2="3840" y2="2040" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2055" x2="3840" y2="2055" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2070" x2="3840" y2="2070" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2085" x2="3840" y2="2085" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2100" x2="3840" y2="2100" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2115" x2="3840" y2="2115" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2130" x2="3840" y2="2130" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2145" x2="3840" y2="2145" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2160" x2="3840" y2="2160" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2175" x2="3840" y2="2175" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2190" x2="3840" y2="2190" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2205" x2="3840" y2="2205" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2220" x2="3840" y2="2220" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2235" x2="3840" y2="2235" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2250" x2="3840" y2="2250" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2265" x2="3840" y2="2265" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2280" x2="3840" y2="2280" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2295" x2="3840" y2="2295" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2310" x2="3840" y2="2310" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2325" x2="3840" y2="2325" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2340" x2="3840" y2="2340" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2355" x2="3840" y2="2355" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2370" x2="3840" y2="2370" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2385" x2="3840" y2="2385" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2400" x2="3840" y2="2400" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2415" x2="3840" y2="2415" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2430" x2="3840" y2="2430" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2445" x2="3840" y2="2445" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2460" x2="3840" y2="2460" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2475" x2="3840" y2="2475" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2490" x2="3840" y2="2490" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2505" x2="3840" y2="2505" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2520" x2="3840" y2="2520" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2535" x2="3840" y2="2535" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2550" x2="3840" y2="2550" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2565" x2="3840" y2="2565" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2580" x2="3840" y2="2580" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2595" x2="3840" y2="2595" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2610" x2="3840" y2="2610" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2625" x2="3840" y2="2625" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2640" x2="3840" y2="2640" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2655" x2="3840" y2="2655" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2670" x2="3840" y2="2670" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2685" x2="3840" y2="2685" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2700" x2="3840" y2="2700" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2715" x2="3840" y2="2715" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2730" x2="3840" y2="2730" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2745" x2="3840" y2="2745" stroke="#e4e4e9" stroke-width="1"/>
+  <line x1="0" y1="2760" x2="3840" y2="2760" stroke="#d0d0d8" stroke-width="1.4"/>
+  <line x1="0" y1="2775" x2="3840" y2="2775" stroke="#e4e4e9" stroke-width="1"/>
+  <text x="60" y="120" font-family="Figtree" font-size="66.1417" font-weight="600" letter-spacing="1.1811" fill="#231f20" text-anchor="start" dominant-baseline="middle">SIGNAL FUNCTION SET — PANEL PARTS</text>
+  <text x="60" y="192" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">4x · 1HP = 60u · cell = 15u · sizes are whole cells, so edges land on 7.5u</text>
+  <g id="COMPONENTS" data-name="COMPONENTS">
+      <g id="RoundHugeBlackKnob" data-name="RoundHugeBlackKnob">
+    <circle cx="300" cy="520" r="112.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="284" y1="520" x2="316" y2="520" stroke="#ec652e" stroke-width="2"/>
+    <line x1="300" y1="504" x2="300" y2="536" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="300" y="728" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">RoundHugeBlackKnob</text>
+    <text x="300" y="768" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">225 × 225u = 15 × 15 cells</text>
+    <text x="300" y="808" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 18.24 × 18.24mm  +4.4%</text>
+      <g id="RoundLargeBlackKnob" data-name="RoundLargeBlackKnob">
+    <circle cx="780" cy="520" r="75" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="764" y1="520" x2="796" y2="520" stroke="#ec652e" stroke-width="2"/>
+    <line x1="780" y1="504" x2="780" y2="536" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="780" y="728" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">RoundLargeBlackKnob</text>
+    <text x="780" y="768" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">150 × 150u = 10 × 10 cells</text>
+    <text x="780" y="808" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 12.19 × 12.19mm  +4.2%</text>
+      <g id="RoundBlackKnob" data-name="RoundBlackKnob">
+    <circle cx="1260" cy="520" r="60" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="1244" y1="520" x2="1276" y2="520" stroke="#ec652e" stroke-width="2"/>
+    <line x1="1260" y1="504" x2="1260" y2="536" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="1260" y="728" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">RoundBlackKnob</text>
+    <text x="1260" y="768" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">120 × 120u = 8 × 8 cells</text>
+    <text x="1260" y="808" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 9.6 × 9.6mm  +5.8%</text>
+      <g id="RoundSmallBlackKnob" data-name="RoundSmallBlackKnob">
+    <circle cx="1740" cy="520" r="52.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="1724" y1="520" x2="1756" y2="520" stroke="#ec652e" stroke-width="2"/>
+    <line x1="1740" y1="504" x2="1740" y2="536" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="1740" y="728" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">RoundSmallBlackKnob</text>
+    <text x="1740" y="768" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">105 × 105u = 7 × 7 cells</text>
+    <text x="1740" y="808" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 7.68 × 7.68mm  +15.8%</text>
+      <g id="Trimpot" data-name="Trimpot">
+    <circle cx="2220" cy="520" r="37.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="2204" y1="520" x2="2236" y2="520" stroke="#ec652e" stroke-width="2"/>
+    <line x1="2220" y1="504" x2="2220" y2="536" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="2220" y="728" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">Trimpot</text>
+    <text x="2220" y="768" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">75 × 75u = 5 × 5 cells</text>
+    <text x="2220" y="808" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 6.05 × 6.05mm  +5.0%</text>
+      <g id="PJ301MPort" data-name="PJ301MPort">
+    <circle cx="2700" cy="520" r="52.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="2684" y1="520" x2="2716" y2="520" stroke="#ec652e" stroke-width="2"/>
+    <line x1="2700" y1="504" x2="2700" y2="536" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="2700" y="728" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">PJ301MPort</text>
+    <text x="2700" y="768" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">105 × 105u = 7 × 7 cells</text>
+    <text x="2700" y="808" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 8.03 × 8.03mm  +10.8%</text>
+      <g id="VCVButton" data-name="VCVButton">
+    <circle cx="3180" cy="520" r="37.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="3164" y1="520" x2="3196" y2="520" stroke="#ec652e" stroke-width="2"/>
+    <line x1="3180" y1="504" x2="3180" y2="536" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="3180" y="728" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">VCVButton</text>
+    <text x="3180" y="768" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">75 × 75u = 5 × 5 cells</text>
+    <text x="3180" y="808" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 6.1 × 6.1mm  +4.2%</text>
+      <g id="VCVLightBezel" data-name="VCVLightBezel">
+    <circle cx="3660" cy="520" r="45" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="3644" y1="520" x2="3676" y2="520" stroke="#ec652e" stroke-width="2"/>
+    <line x1="3660" y1="504" x2="3660" y2="536" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="3660" y="728" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">VCVLightBezel</text>
+    <text x="3660" y="768" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">90 × 90u = 6 × 6 cells</text>
+    <text x="3660" y="808" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 7.2 × 7.2mm  +5.8%</text>
+      <g id="VCVLightLatch" data-name="VCVLightLatch">
+    <circle cx="300" cy="1180" r="37.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="284" y1="1180" x2="316" y2="1180" stroke="#ec652e" stroke-width="2"/>
+    <line x1="300" y1="1164" x2="300" y2="1196" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="300" y="1388" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">VCVLightLatch</text>
+    <text x="300" y="1428" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">75 × 75u = 5 × 5 cells</text>
+    <text x="300" y="1468" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 6.1 × 6.1mm  +4.2%</text>
+      <g id="CKSS" data-name="CKSS">
+    <rect x="750" y="1135" width="60" height="90" rx="7.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="764" y1="1180" x2="796" y2="1180" stroke="#ec652e" stroke-width="2"/>
+    <line x1="780" y1="1164" x2="780" y2="1196" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="780" y="1388" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">CKSS</text>
+    <text x="780" y="1428" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">60 × 90u = 4 × 6 cells</text>
+    <text x="780" y="1468" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 4.74 × 6.99mm  +7.1%</text>
+      <g id="CKSSThree" data-name="CKSSThree">
+    <rect x="1230" y="1120" width="60" height="120" rx="7.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="1244" y1="1180" x2="1276" y2="1180" stroke="#ec652e" stroke-width="2"/>
+    <line x1="1260" y1="1164" x2="1260" y2="1196" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="1260" y="1388" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">CKSSThree</text>
+    <text x="1260" y="1428" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">60 × 120u = 4 × 8 cells</text>
+    <text x="1260" y="1468" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 4.56 × 9.6mm  +11.5%</text>
+      <g id="VCVSlider" data-name="VCVSlider">
+    <rect x="1695" y="1022.5" width="90" height="315" rx="7.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="1724" y1="1180" x2="1756" y2="1180" stroke="#ec652e" stroke-width="2"/>
+    <line x1="1740" y1="1164" x2="1740" y2="1196" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="1740" y="1388" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">VCVSlider</text>
+    <text x="1740" y="1428" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">90 × 315u = 6 × 21 cells</text>
+    <text x="1740" y="1468" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 6.72 × 25.92mm  +13.4%</text>
+      <g id="LargeLight" data-name="LargeLight">
+    <circle cx="2220" cy="1180" r="30" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="2204" y1="1180" x2="2236" y2="1180" stroke="#ec652e" stroke-width="2"/>
+    <line x1="2220" y1="1164" x2="2220" y2="1196" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="2220" y="1388" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">LargeLight</text>
+    <text x="2220" y="1428" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">60 × 60u = 4 × 4 cells</text>
+    <text x="2220" y="1468" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 5 × 5mm  +1.6%</text>
+      <g id="MediumLight" data-name="MediumLight">
+    <circle cx="2700" cy="1180" r="22.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="2684" y1="1180" x2="2716" y2="1180" stroke="#ec652e" stroke-width="2"/>
+    <line x1="2700" y1="1164" x2="2700" y2="1196" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="2700" y="1388" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">MediumLight</text>
+    <text x="2700" y="1428" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">45 × 45u = 3 × 3 cells</text>
+    <text x="2700" y="1468" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 3 × 3mm  +27.0%</text>
+      <g id="SmallLight" data-name="SmallLight">
+    <circle cx="3180" cy="1180" r="15" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="3164" y1="1180" x2="3196" y2="1180" stroke="#ec652e" stroke-width="2"/>
+    <line x1="3180" y1="1164" x2="3180" y2="1196" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="3180" y="1388" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">SmallLight</text>
+    <text x="3180" y="1428" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">30 × 30u = 2 × 2 cells</text>
+    <text x="3180" y="1468" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 2 × 2mm  +27.0%</text>
+      <g id="TinyLight" data-name="TinyLight">
+    <circle cx="3660" cy="1180" r="7.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="3644" y1="1180" x2="3676" y2="1180" stroke="#ec652e" stroke-width="2"/>
+    <line x1="3660" y1="1164" x2="3660" y2="1196" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="3660" y="1388" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#231f20" text-anchor="middle" dominant-baseline="middle">TinyLight</text>
+    <text x="3660" y="1428" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">15 × 15u = 1 × 1 cells</text>
+    <text x="3660" y="1468" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">real 1 × 1mm  +27.0%</text>
+  </g>
+  <g id="LABEL GAPS" data-name="LABEL GAPS">
+    <text x="60" y="1720" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">LABEL GAPS — label centre above control centre</text>
+      <g id="knob" data-name="knob">
+    <circle cx="300" cy="1880" r="60" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="284" y1="1880" x2="316" y2="1880" stroke="#ec652e" stroke-width="2"/>
+    <line x1="300" y1="1864" x2="300" y2="1896" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="300" y="1805" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">RATE</text>
+    <line x1="460" y1="1880" x2="460" y2="1805" stroke="#ec652e" stroke-width="1.6"/>
+    <text x="476" y="1842.5" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">6.35mm</text>
+      <g id="trim" data-name="trim">
+    <circle cx="900" cy="1880" r="37.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="884" y1="1880" x2="916" y2="1880" stroke="#ec652e" stroke-width="2"/>
+    <line x1="900" y1="1864" x2="900" y2="1896" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="900" y="1827.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">CURVE</text>
+    <line x1="1060" y1="1880" x2="1060" y2="1827.5" stroke="#ec652e" stroke-width="1.6"/>
+    <text x="1076" y="1853.75" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">4.44mm</text>
+      <g id="jack" data-name="jack">
+    <circle cx="1500" cy="1880" r="52.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="1484" y1="1880" x2="1516" y2="1880" stroke="#ec652e" stroke-width="2"/>
+    <line x1="1500" y1="1864" x2="1500" y2="1896" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="1500" y="1812.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">CLOCK</text>
+    <line x1="1660" y1="1880" x2="1660" y2="1812.5" stroke="#ec652e" stroke-width="1.6"/>
+    <text x="1676" y="1846.25" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">5.71mm</text>
+    <line x1="2240" y1="1880" x2="2360" y2="1880" stroke="#9a9aa6" stroke-width="4.1339"/>
+      <g id="pair-trim" data-name="pair-trim">
+    <circle cx="2240" cy="1880" r="37.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="2224" y1="1880" x2="2256" y2="1880" stroke="#ec652e" stroke-width="2"/>
+    <line x1="2240" y1="1864" x2="2240" y2="1896" stroke="#ec652e" stroke-width="2"/>
+  </g>
+      <g id="pair-jack" data-name="pair-jack">
+    <circle cx="2360" cy="1880" r="52.5" fill="#ffffff" fill-opacity="0.55" stroke="#b2b2b2" stroke-width="2"/>
+    <line x1="2344" y1="1880" x2="2376" y2="1880" stroke="#ec652e" stroke-width="2"/>
+    <line x1="2360" y1="1864" x2="2360" y2="1896" stroke="#ec652e" stroke-width="2"/>
+  </g>
+    <text x="2240" y="1828.0315" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">SPREAD</text>
+    <text x="2300" y="2016" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">pair() — 2 cells, no jack label</text>
+  </g>
+  <g id="PLATE + SCREEN" data-name="PLATE + SCREEN">
+    <text x="60" y="2180" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">PLATE (r = 24u) · SCREEN — both are stated by hand in the widget, so size them in whole cells</text>
+    <rect x="60" y="2240" width="360" height="180" rx="24" fill="#1a1a1a"/>
+    <text x="240" y="2330" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#e8e8f0" text-anchor="middle" dominant-baseline="middle">OUTPUTS</text>
+    <rect x="480" y="2240" width="480" height="180" rx="12" fill="#1a1a32"/>
+    <text x="720" y="2330" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#8a8aa5" text-anchor="middle" dominant-baseline="middle">SCREEN</text>
+  </g>
+  <g id="TYPE" data-name="TYPE">
+    <text x="1600" y="2240" font-family="Figtree" font-size="66.1417" font-weight="600" letter-spacing="1.1811" fill="#231f20" text-anchor="start" dominant-baseline="middle">CHIME</text>
+    <text x="1600" y="2320" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">TYPE_TITLE 5.6mm / 66.14u — Figtree SemiBold</text>
+    <text x="1600" y="2400" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="start" dominant-baseline="middle">STABILITY</text>
+    <text x="1600" y="2464" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">TYPE_LABEL 3.3mm / 38.98u · letter-spacing 1.18u — Figtree Regular</text>
+    <text x="1600" y="2544" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">BOW ←→ STRIKE</text>
+    <text x="1600" y="2600" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">TYPE_NOTE 2.5mm / 29.53u · letter-spacing 0.47u</text>
+  </g>
+  <g id="PALETTE" data-name="PALETTE">
+    <rect x="60" y="2660" width="184" height="80" rx="8" fill="#f0f0f0" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="60" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">PANEL</text>
+    <rect x="308" y="2660" width="184" height="80" rx="8" fill="#231f20" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="308" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">INK</text>
+    <rect x="556" y="2660" width="184" height="80" rx="8" fill="#6a6a78" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="556" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">INK_SOFT</text>
+    <rect x="804" y="2660" width="184" height="80" rx="8" fill="#1a1a1a" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="804" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">PLATE</text>
+    <rect x="1052" y="2660" width="184" height="80" rx="8" fill="#e8e8f0" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="1052" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">PLATE_INK</text>
+    <rect x="1300" y="2660" width="184" height="80" rx="8" fill="#b2b2b2" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="1300" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">HAIRLINE</text>
+    <rect x="1548" y="2660" width="184" height="80" rx="8" fill="#1a1a32" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="1548" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">SCREEN_BG</text>
+    <rect x="1796" y="2660" width="184" height="80" rx="8" fill="#0097de" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="1796" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">SCREEN_BLUE</text>
+    <rect x="2044" y="2660" width="184" height="80" rx="8" fill="#0d5986" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="2044" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">SCREEN_DEEP</text>
+    <rect x="2292" y="2660" width="184" height="80" rx="8" fill="#0d5988" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="2292" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">SCREEN_LINE</text>
+    <rect x="2540" y="2660" width="184" height="80" rx="8" fill="#35354d" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="2540" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">SCREEN_PURP</text>
+    <rect x="2788" y="2660" width="184" height="80" rx="8" fill="#4a4a66" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="2788" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">SCREEN_PMID</text>
+    <rect x="3036" y="2660" width="184" height="80" rx="8" fill="#ec652e" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="3036" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">SCREEN_HOT</text>
+    <rect x="3284" y="2660" width="184" height="80" rx="8" fill="#e8e8f0" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="3284" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">SCREEN_TEXT</text>
+    <rect x="3532" y="2660" width="184" height="80" rx="8" fill="#8a8aa5" stroke="#b2b2b2" stroke-width="1.6"/>
+    <text x="3532" y="2768" font-family="Figtree" font-size="20.8" font-weight="400" letter-spacing="0" fill="#6a6a78" text-anchor="start" dominant-baseline="middle">SCREEN_DIM</text>
+  </g>
+</svg>

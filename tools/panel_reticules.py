@@ -25,7 +25,12 @@ DISPLAY_BLUE = "#1a1a32"           # the same deep blue the displays clear to
 PANEL = "#f0f0f0"
 RETICULE = "#b2b2b2"               # matches the existing hand-drawn panels
 PLATE = "#1a1a1a"                  # dark inset grouping a section
-PLATE_R = 6.0                      # corner radius, in panel units
+# Held in mm, not panel units, because a panel may be authored at a larger scale
+# so its quarter-HP grid comes out integral (tools/figma_panel_template.py). A
+# file's own units-per-mm then scales these, and a 75dpi file is unchanged.
+PLATE_R_MM = 6.0 / MM              # corner radius
+SCREEN_R_MM = 3.0 / MM
+STROKE_MM = 0.5 / MM               # reticule hairline
 
 # Real component sizes, read from Rack's own ComponentLibrary (px).
 SIZES = {
@@ -219,30 +224,31 @@ def group_range(svg, gid):
     return None
 
 
-def shapes(elems, indent="    ", plates=()):
+def shapes(elems, indent="    ", plates=(), upmm=MM):
     """All reticules: plates, then screens, then controls, so nothing is buried."""
     out = []
+    pr, sr, sw = PLATE_R_MM * upmm, SCREEN_R_MM * upmm, STROKE_MM * upmm
     for (x, y, w, h) in plates:
         out.append(f'{indent}<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" '
-                   f'height="{h:.2f}" rx="{PLATE_R:.2f}" fill="{PLATE}"/>')
+                   f'height="{h:.2f}" rx="{pr:.2f}" fill="{PLATE}"/>')
     for k, cx, cy, w, h in elems:
         if k == "screen":
             out.append(f'{indent}<rect x="{cx-w/2:.2f}" y="{cy-h/2:.2f}" width="{w:.2f}" '
-                       f'height="{h:.2f}" rx="3" fill="{DISPLAY_BLUE}"/>')
+                       f'height="{h:.2f}" rx="{sr:.2f}" fill="{DISPLAY_BLUE}"/>')
     for k, cx, cy, w, h in elems:
         if k == "round":
             out.append(f'{indent}<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{w/2*SCALE:.2f}" '
-                       f'fill="none" stroke="{RETICULE}" stroke-width=".5"/>')
+                       f'fill="none" stroke="{RETICULE}" stroke-width="{sw:.2f}"/>')
         elif k == "flat":
             out.append(f'{indent}<rect x="{cx-w*SCALE/2:.2f}" y="{cy-h*SCALE/2:.2f}" '
                        f'width="{w*SCALE:.2f}" height="{h*SCALE:.2f}" rx="{w*0.12:.2f}" '
-                       f'fill="none" stroke="{RETICULE}" stroke-width=".5"/>')
+                       f'fill="none" stroke="{RETICULE}" stroke-width="{sw:.2f}"/>')
     return out
 
 
-def splice(path, old, elems, plates=()):
+def splice(path, old, elems, plates=(), upmm=MM):
     """Rewrite the single Reticules layer, leaving all other layers untouched."""
-    body = shapes(elems, "    ", plates)
+    body = shapes(elems, "    ", plates, upmm)
     out = old
     r = group_range(out, "Screens")            # retire the old two-layer form
     if r:
@@ -278,9 +284,19 @@ MODULES = {
     "chance":  ("Chance",  "src/chance.cpp",  "res/chance.svg",  {"NUM_NODES": 8}),
 }
 
+# Panels whose artwork is hand-made and is now the SOURCE of the layout rather
+# than a target for it. Splicing generated reticules into these would draw
+# circles straight over the design. Named explicitly on the command line they
+# still run, so the guard is against the bare sweep, not against intent.
+FINISHED = {"crystal"}
+
 if __name__ == "__main__":
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    explicit = bool(sys.argv[1:])
     for key in (sys.argv[1:] or MODULES.keys()):
+        if key in FINISHED and not explicit:
+            print(f"{key}: skipped — finished artwork, layout comes FROM the panel")
+            continue
         mod, cpp, svg, defs = MODULES[key]
         src = open(os.path.join(root, cpp)).read()
         body = widget_source(src, mod)
@@ -302,5 +318,5 @@ if __name__ == "__main__":
         elems = [(k, x / MM * upmm, y / MM * upmm, w / MM * upmm, h / MM * upmm)
                  for (k, x, y, w, h) in collect(body, env, defs)]
         pl = [(x * upmm, y * upmm, w * upmm, h * upmm) for (x, y, w, h) in PLATES.get(key, [])]
-        nc, ns = splice(p, old, elems, pl)
+        nc, ns = splice(p, old, elems, pl, upmm)
         print(f"{key:8} {nc:3} controls, {ns} screen(s) -> {svg}  ({upmm:.4f} units/mm)")

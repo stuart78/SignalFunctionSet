@@ -750,7 +750,6 @@ struct Crystal : Module {
 		configParam(EMIT_AZ_PARAM, -(float)M_PI, (float)M_PI, 0.6f, "Emitter azimuth");
 		configParam(EMIT_EL_PARAM, -1.5f, 1.5f, 0.3f, "Emitter elevation");
 		configButton(PING_PARAM, "Ping the crystal (alternates emitter A / B)");
-		configParam(PITCH_PARAM, -3.f, 3.f, 0.f, "Ping pitch", " oct");
 		configParam(DECAY_PARAM, 0.05f, 4.f, 0.7f, "Ping decay", " s");
 		configParam(ECHOES_PARAM, 2.f, (float)CR_TAPS, 8.f, "Echoes (reflections kept — few = discrete, many = dense)");
 		getParamQuantity(ECHOES_PARAM)->snapEnabled = true;
@@ -764,9 +763,6 @@ struct Crystal : Module {
 		configParam(EMIT_X_PARAM, -1.f, 1.f, 0.8f, "Emitter axis X");
 		configParam(EMIT_Y_PARAM, -1.f, 1.f, 0.3f, "Emitter axis Y");
 		configParam(EMIT_Z_PARAM, -1.f, 1.f, 0.2f, "Emitter axis Z");
-		configInput(EMIT_X_INPUT, "Emitter axis X CV (±5V)");
-		configInput(EMIT_Y_INPUT, "Emitter axis Y CV (±5V)");
-		configInput(EMIT_Z_INPUT, "Emitter axis Z CV (±5V)");
 		// heading, not orientation: these are rates, so the crystal keeps turning
 		// and the faces it presents to each speaker change as it goes
 		configParam(SPIN_X_PARAM, -0.8f, 0.8f, 0.f, "Turn about the X axis");
@@ -833,9 +829,9 @@ struct Crystal : Module {
 	// meets the surface, B where the opposite ray does — so they are always on
 	// opposite ends and three controls place both.
 	V3 emitAxis() {
-		V3 d(pv(EMIT_X_PARAM, EMIT_X_INPUT, 0.2f),
-		     pv(EMIT_Y_PARAM, EMIT_Y_INPUT, 0.2f),
-		     pv(EMIT_Z_PARAM, EMIT_Z_INPUT, 0.2f));
+		V3 d(params[EMIT_X_PARAM].getValue(),      // no CV jacks on the axis any more
+		     params[EMIT_Y_PARAM].getValue(),
+		     params[EMIT_Z_PARAM].getValue());
 		if (len3(d) < 1e-4f) d = V3(1.f, 0.f, 0.f);
 		return norm3(d);
 	}
@@ -968,9 +964,9 @@ struct Crystal : Module {
 				pv(DAMP_PARAM, DAMP_INPUT, 0.06f),
 				std::round(pv(MATERIAL_PARAM, MATERIAL_INPUT, 1.f)),
 				pv(TAIL_PARAM, TAIL_INPUT, 0.1f),
-				pv(EMIT_X_PARAM, EMIT_X_INPUT, 0.2f), pv(EMIT_Y_PARAM, EMIT_Y_INPUT, 0.2f),
+				params[EMIT_X_PARAM].getValue(), params[EMIT_Y_PARAM].getValue(),
 				pv(ECHOES_PARAM, ECHOES_INPUT, CR_TAPS / 10.f),
-				pv(EMIT_Z_PARAM, EMIT_Z_INPUT, 0.2f), 0.f,
+				params[EMIT_Z_PARAM].getValue(), 0.f,
 				params[MODE_PARAM].getValue()};
 			bool changed = false;
 			for (int i = 0; i < 11; i++)
@@ -987,8 +983,9 @@ struct Crystal : Module {
 		if (ping) {
 			if (pingAlternate) pingSide ^= 1;                // ping-pong across the crystal
 			else pingSide = 0;
-			exFreq[pingSide] = clamp(261.63f * std::exp2(params[PITCH_PARAM].getValue()
-			                                   + inputs[VOCT_INPUT].getVoltage()), 8.f, 12000.f);
+			// PITCH_PARAM is retired with the redesign — V/OCT alone sets the pitch
+			exFreq[pingSide] = clamp(261.63f * std::exp2(inputs[VOCT_INPUT].getVoltage()),
+			                         8.f, 12000.f);
 			for (int i = 0; i < 3; i++)
 				if (exEnv[pingSide][i] < 1e-4f) exPhase[pingSide][i] = 0.f;   // restart from silence only
 			exAtk[pingSide] = 0.002f;                        // 2ms rise — never a step
@@ -1972,20 +1969,11 @@ struct CrystalDisplay : Widget {
 	}
 };
 
-struct CrystalLabels : Widget {
-	std::shared_ptr<Font> font;
-	struct L { Vec p; std::string t; float sz; };
-	std::vector<L> labels;
-	void add(float x, float y, const std::string& t, float sz = 6.f) { labels.push_back({Vec(x, y), t, sz}); }
-	void draw(const DrawArgs& args) override {
-		if (!font || font->handle < 0)
-			font = APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
-		if (!font || font->handle < 0) return;
-		nvgFontFaceId(args.vg, font->handle);
-		nvgFillColor(args.vg, nvgRGB(0x40, 0x40, 0x40));
-		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		for (auto& l : labels) { nvgFontSize(args.vg, l.sz); nvgText(args.vg, mm2px(l.p.x), mm2px(l.p.y), l.t.c_str(), NULL); }
-		Widget::draw(args);
+struct CrystalToggle : app::SvgSwitch {
+	CrystalToggle() {
+		shadow->opacity = 0.f;
+		addFrame(Svg::load(asset::plugin(pluginInstance, "res/Toggle-Off.svg")));
+		addFrame(Svg::load(asset::plugin(pluginInstance, "res/Toggle-On.svg")));
 	}
 };
 
@@ -1994,75 +1982,55 @@ struct CrystalWidget : ModuleWidget {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/crystal.svg")));
 
+		// Positions read straight off the panel artwork (25HP, 1500 x 1518 units
+		// at 127 x 128.5mm). The panel carries its own labels, so there is no
+		// runtime label layer any more.
 		CrystalDisplay* disp = new CrystalDisplay();
 		disp->module = module;
-		disp->box.pos = mm2px(Vec(4.f, 10.f));
-		disp->box.size = mm2px(Vec(134.f, 56.f));
+		disp->box.pos = mm2px(Vec(5.08f, 10.07f));
+		disp->box.size = mm2px(Vec(116.84f, 56.04f));
 		addChild(disp);
 
-		// main controls: knob row + CV row
-		const float yK = 76.f, yC = 89.f;
-		const float kx[7] = {13.f, 31.f, 49.f, 67.f, 85.f, 103.f, 121.f};
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[0], yK)), module, Crystal::SIZE_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[1], yK)), module, Crystal::DAMP_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[2], yK)), module, Crystal::MATERIAL_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[3], yK)), module, Crystal::TAIL_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[4], yK)), module, Crystal::ECHOES_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[5], yK)), module, Crystal::FEEDBACK_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[6], yK)), module, Crystal::MIX_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[0], yC)), module, Crystal::SIZE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[1], yC)), module, Crystal::DAMP_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[2], yC)), module, Crystal::MATERIAL_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[3], yC)), module, Crystal::TAIL_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[4], yC)), module, Crystal::ECHOES_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[5], yC)), module, Crystal::FEEDBACK_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[6], yC)), module, Crystal::MIX_INPUT));
+		// SIZE MATERIAL DAMP TAIL ECHOES FDBK MIX — trimpot over its CV jack
+		const float yK = 76.21f, yC = 88.89f;
+		const float kx[7] = {10.16f, 25.40f, 40.68f, 55.92f, 71.12f, 86.36f, 101.60f};
+		const int kp[7] = {Crystal::SIZE_PARAM, Crystal::MATERIAL_PARAM, Crystal::DAMP_PARAM,
+		                   Crystal::TAIL_PARAM, Crystal::ECHOES_PARAM, Crystal::FEEDBACK_PARAM,
+		                   Crystal::MIX_PARAM};
+		const int ki[7] = {Crystal::SIZE_INPUT, Crystal::MATERIAL_INPUT, Crystal::DAMP_INPUT,
+		                   Crystal::TAIL_INPUT, Crystal::ECHOES_INPUT, Crystal::FEEDBACK_INPUT,
+		                   Crystal::MIX_INPUT};
+		for (int i = 0; i < 7; i++) {
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[i], yK)), module, kp[i]));
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(kx[i], yC)), module, ki[i]));
+		}
+		addParam(createParamCentered<CrystalToggle>(mm2px(Vec(116.84f, 82.67f)), module, Crystal::MODE_PARAM));
 
-		// emitter navigation: per-emitter heading + X/Y velocity, shared speed
-		const float yN = 104.f, yB = 118.f;
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(42.f, yN)), module, Crystal::EMIT_X_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(53.f, yN)), module, Crystal::EMIT_X_INPUT));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(68.f, yN)), module, Crystal::EMIT_Y_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(79.f, yN)), module, Crystal::EMIT_Y_INPUT));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(94.f, yN)), module, Crystal::EMIT_Z_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(105.f, yN)), module, Crystal::EMIT_Z_INPUT));
-		addParam(createParamCentered<CKSS>(mm2px(Vec(14.f, 104.f)), module, Crystal::MODE_PARAM));
-		addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(mm2px(Vec(122.f, yN)), module,
+		// PING · TRIG · P DECAY · V/OCT
+		const float yB = 104.08f;
+		addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(mm2px(Vec(10.16f, yB)), module,
 			Crystal::PING_PARAM, Crystal::PING_LIGHT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(133.f, yN)), module, Crystal::PING_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(25.40f, yB)), module, Crystal::PING_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(40.73f, yB)), module, Crystal::DECAY_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(55.95f, yB)), module, Crystal::VOCT_INPUT));
 
-		// heading: how fast the crystal turns on each axis, centre = held still
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(8.f, yB)), module, Crystal::SPIN_X_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(18.f, yB)), module, Crystal::SPIN_Y_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(28.f, yB)), module, Crystal::SPIN_Z_PARAM));
+		// SPIN x/y/z and the EMITTER axis x/y/z, stacked
+		const float ySpin[3] = {104.08f, 112.97f, 121.85f};
+		const int sp[3] = {Crystal::SPIN_X_PARAM, Crystal::SPIN_Y_PARAM, Crystal::SPIN_Z_PARAM};
+		const int em[3] = {Crystal::EMIT_X_PARAM, Crystal::EMIT_Y_PARAM, Crystal::EMIT_Z_PARAM};
+		for (int i = 0; i < 3; i++) {
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(71.04f, ySpin[i])), module, sp[i]));
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(86.28f, ySpin[i])), module, em[i]));
+		}
 
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(42.f, yB)), module, Crystal::AUDIO_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(53.f, yB)), module, Crystal::AUDIO_B_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(66.f, yB)), module, Crystal::VOCT_INPUT));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(77.f, yB)), module, Crystal::PITCH_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(87.f, yB)), module, Crystal::DECAY_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.16f, 121.85f)), module, Crystal::AUDIO_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(25.40f, 121.85f)), module, Crystal::AUDIO_B_INPUT));
+
+		// quad outs on the diamond: A top, B right, C bottom, D left
+		const Vec quad[4] = {Vec(109.37f, 104.76f), Vec(116.91f, 112.37f),
+		                     Vec(109.29f, 120.08f), Vec(101.67f, 112.37f)};
 		for (int i = 0; i < CR_NL; i++)
-			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(101.f + i * 11.f, yB)), module, Crystal::QUAD_OUTPUT + i));
-
-		CrystalLabels* lbl = new CrystalLabels();
-		lbl->box.size = box.size;
-		lbl->add(kx[0], 69.f, "SIZE"); lbl->add(kx[1], 69.f, "DAMP"); lbl->add(kx[2], 69.f, "MATERIAL");
-		lbl->add(kx[3], 69.f, "TAIL"); lbl->add(kx[4], 69.f, "ECHOES"); lbl->add(kx[5], 69.f, "FDBK");
-		lbl->add(kx[6], 69.f, "MIX");
-		lbl->add(14.f, 97.f, "DELAY", 5.f); lbl->add(14.f, 111.5f, "CHAMBER", 5.f);
-		lbl->add(73.5f, 97.5f, "EMITTER AXIS  (A one end, B the other)", 5.f);
-		lbl->add(47.5f, 110.f, "X", 5.f); lbl->add(73.5f, 110.f, "Y", 5.f);
-		lbl->add(99.5f, 110.f, "Z", 5.f);
-		lbl->add(122.f, 97.5f, "PING", 5.f);
-		lbl->add(133.f, 97.5f, "TRIG", 5.f);
-		lbl->add(8.f, 124.f, "SPIN X", 5.f); lbl->add(18.f, 124.f, "SPIN Y", 5.f);
-		lbl->add(28.f, 124.f, "SPIN Z", 5.f);
-		lbl->add(18.f, 111.5f, "TURN", 5.f);
-		lbl->add(42.f, 124.f, "IN A", 5.f); lbl->add(53.f, 124.f, "IN B", 5.f);
-		lbl->add(66.f, 124.f, "V/OCT", 5.f); lbl->add(77.f, 124.f, "PIT", 5.f); lbl->add(87.f, 124.f, "DEC", 5.f);
-		lbl->add(117.f, 124.f, "QUAD A-D", 5.f);
-		lbl->add(71.f, 7.f, "drag to rotate · shift-drag to swing the emitter axis", 5.f);
-		addChild(lbl);
+			addOutput(createOutputCentered<PJ301MPort>(mm2px(quad[i]), module, Crystal::QUAD_OUTPUT + i));
 	}
 
 	void appendContextMenu(Menu* menu) override {

@@ -69,18 +69,19 @@ widget so the modules read as one instrument.
 **Figtree**, bundled in `res/fonts/` under the SIL Open Font License (licence
 included). Loaded with `asset::plugin`, not `asset::system`.
 
-**One label size.** `TYPE_LABEL` 4.4mm — smaller than the 6mm the old mono face
+**One label size.** `TYPE_LABEL` 3.3mm — smaller than the 6mm the old mono face
 used, because Figtree's x-height is much larger and reads bigger at the same
-nominal size. Only two other sizes exist: `TYPE_NOTE` 3.2mm for annotations that
-mark what a pot position means, and `TYPE_TITLE` 7mm for the module name.
+nominal size. Only two other sizes exist: `TYPE_NOTE` 2.5mm for annotations that
+mark what a pot position means, and `TYPE_TITLE` 5.6mm for the module name.
 
 Labels are **above** their control, uppercase, centred, with a little letter
-spacing. The gap is a constant per control type, so callers state the *control's*
-position and never a label position:
+spacing. The gap is measured to the *middle* of the text, not its baseline
+(`NVG_ALIGN_MIDDLE`), and is a constant per control type — so callers state the
+*control's* position and never a label position:
 
 ```cpp
-lbl->knob(x, y, "RATE");     // 6.6mm above the knob centre
-lbl->trim(x, y, "CURVE");    // 5.2mm — trimpots are smaller
+lbl->knob(x, y, "RATE");     // 5.6mm above the knob centre
+lbl->trim(x, y, "CURVE");    // 4.4mm — trimpots are smaller
 lbl->jack(x, y, "CLOCK");
 lbl->add(x, y, "AUDIO", sfs::PanelLabels::ON_PLATE);   // light ink on a plate
 lbl->note(x, y, "BOW ←→ STRIKE");
@@ -124,4 +125,6 @@ python3 tools/panel_reticules.py            # every registered panel
 ```
 
 See `panel-reticules.md` for the reticule rules (99%, one shape, single layer)
-and the 72dpi-vs-75dpi trap.
+and the 72dpi-vs-75dpi trap, and `figma-template.md` for laying a panel out
+before the code exists — a ¼HP grid in Rack's own units, with the component
+sizes and label gaps to scale.
