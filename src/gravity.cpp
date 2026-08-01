@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "panel-style.hpp"
 #include <cmath>
 #include <vector>
 #include <deque>
@@ -63,6 +64,9 @@ struct Gravity : Module {
 		ANGLE_OUTPUT,
 		ENUMS(SECTOR_OUTPUT, NUM_SECTORS),
 		ENUMS(GATE_OUTPUT, NUM_SECTORS),
+		// Derived from the same ray crossings, so they hold for exactly as long
+		// as the ray gates do and never fire without one.
+		ANY_GATE_OUTPUT, ODD_GATE_OUTPUT, EVEN_GATE_OUTPUT, NEW_GATE_OUTPUT,
 		OUTPUTS_LEN
 	};
 	enum LightId {
@@ -251,6 +255,8 @@ struct Gravity : Module {
 	int    gpLastBucket[MAX_BALLS] = {};
 	bool   gpInit[MAX_BALLS] = {};
 	float gateTimer[NUM_SECTORS] = {};
+	float anyTimer = 0.f, oddTimer = 0.f, evenTimer = 0.f, newTimer = 0.f;
+	int   lastRayFired = -1;      // for NEW: the previous crossing, whenever it was
 	float sectorOut[NUM_SECTORS] = {};
 	bool initialized = false;
 
@@ -278,6 +284,10 @@ struct Gravity : Module {
 		configOutput(X_OUTPUT, "Tip X");
 		configOutput(Y_OUTPUT, "Tip Y");
 		configOutput(RADIUS_OUTPUT, "Radius (folded -5V .. +5V extended)");
+		configOutput(ANY_GATE_OUTPUT, "Any gate — any ray crossed");
+		configOutput(ODD_GATE_OUTPUT, "Odd gate — rays 1, 3, 5 (ray 1 is 0 deg)");
+		configOutput(EVEN_GATE_OUTPUT, "Even gate — rays 2, 4, 6");
+		configOutput(NEW_GATE_OUTPUT, "New gate — a different ray from the one before");
 		configOutput(ANGLE_OUTPUT, "Angle from gravity (±180° -> ±5V)");
 		for (int i = 0; i < NUM_SECTORS; i++) {
 			configOutput(SECTOR_OUTPUT + i, string::f("Sector %d distance", i + 1));
@@ -536,6 +546,11 @@ struct Gravity : Module {
 					int ray = ((boundary % NUM_SECTORS) + NUM_SECTORS) % NUM_SECTORS;
 					gateTimer[ray] = gateHoldSec;
 					dispGateFlash[ray] = 1.f;
+					anyTimer = gateHoldSec;
+					// ray index 0 is ray "1" at 0 degrees, so index parity is flipped
+					((ray % 2 == 0) ? oddTimer : evenTimer) = gateHoldSec;
+					if (ray != lastRayFired) newTimer = gateHoldSec;
+					lastRayFired = ray;
 				}
 				gpLastBucket[p] = bucket;
 			}
@@ -548,6 +563,14 @@ struct Gravity : Module {
 			// Gate LED: simply on while the gate is high.
 			lights[GATE_LIGHT + i].setBrightness(gateHigh ? 1.f : 0.f);
 			if (dispGateFlash[i] > 0.f) dispGateFlash[i] -= args.sampleTime * 6.f;
+		}
+		{
+			float* t[4] = {&anyTimer, &oddTimer, &evenTimer, &newTimer};
+			const int o[4] = {ANY_GATE_OUTPUT, ODD_GATE_OUTPUT, EVEN_GATE_OUTPUT, NEW_GATE_OUTPUT};
+			for (int i = 0; i < 4; i++) {
+				if (*t[i] > 0.f) *t[i] -= args.sampleTime;
+				outputs[o[i]].setVoltage(*t[i] > 0.f ? 10.f : 0.f);
+			}
 		}
 	}
 
@@ -2014,6 +2037,21 @@ struct GravityWidget : ModuleWidget {
 			addParam(createParamCentered<Trimpot>(mm2px(Vec(colL, lc[i].py)), module, lc[i].param));
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colL, lc[i].jy)), module, lc[i].input));
 		}
+
+		// Derived gates along the bottom, clear of the mandala's lowest LEDs.
+		const float yD = 121.93f;
+		const float dx[4] = {30.f, 45.f, 60.f, 75.f};
+		const int dout[4] = {Gravity::ANY_GATE_OUTPUT, Gravity::ODD_GATE_OUTPUT,
+		                     Gravity::EVEN_GATE_OUTPUT, Gravity::NEW_GATE_OUTPUT};
+		const char* dlbl[4] = {"ANY", "ODD", "EVEN", "NEW"};
+		for (int i = 0; i < 4; i++)
+			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(dx[i], yD)), module, dout[i]));
+		// This panel keeps its labels in the artwork, so the new row brings its
+		// own rather than shipping four unlabelled jacks.
+		sfs::PanelLabels* lbl = new sfs::PanelLabels();
+		lbl->box.size = box.size;
+		for (int i = 0; i < 4; i++) lbl->jack(dx[i], yD, dlbl[i]);
+		addChild(lbl);
 
 		// Right outputs: 2x2 plate, bottom-right. X Y on top, ANGLE RADIUS below.
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(127.00f, 106.67f)), module, Gravity::X_OUTPUT));
