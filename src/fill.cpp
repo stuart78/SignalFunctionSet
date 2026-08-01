@@ -1229,6 +1229,22 @@ struct FillDisplay : Widget {
 	float setColX()  { return 7.f + bankColW() + 4.f; }
 
 	int bankScroll = 0, setScroll = 0, queueScroll = 0;   // browser view state (per widget)
+	// Row buttons sit at unhighlighted-text weight until the mouse is on them,
+	// and flash white for a moment when pressed so the action is confirmed even
+	// when its effect is off-screen (a move at the end of a long queue).
+	Vec  hoverU = Vec(-1000.f, -1000.f);
+	float pressFlash = 0.f;
+	int   flashRow = -1, flashCol = -1;
+
+	void onHover(const event::Hover& e) override {
+		float U = u();
+		hoverU = Vec(e.pos.x / U, e.pos.y / U);
+		Widget::onHover(e);
+	}
+	void onLeave(const event::Leave& e) override {
+		hoverU = Vec(-1000.f, -1000.f);
+		Widget::onLeave(e);
+	}
 	int lastSelBank = -1, lastSelSet = -1, lastAxis = -1;
 	int visRows() { return std::max(1, (int)((box.size.y / u() - 35.f - 4.f) / BROW_PITCH)); }
 
@@ -1325,17 +1341,30 @@ struct FillDisplay : Widget {
 				nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 				nvgText(vg, (rightX + rightW - QADD_W - 5.f) * U, y + BROW_H * U / 2, info.c_str(), NULL);
 			}
-			drawGlyph(vg, (rightX + rightW - QADD_W / 2.f) * U, y + BROW_H * U / 2, U, '+');
+			{
+				float px = rightX + rightW - QADD_W / 2.f;
+				bool hot = hoverU.x >= px - 8.f && hoverU.x <= px + 8.f
+				        && hoverU.y >= 35.f + r * BROW_PITCH
+				        && hoverU.y <= 35.f + r * BROW_PITCH + BROW_H;
+				float fl = (flashRow == -2 && flashCol == r) ? pressFlash : 0.f;
+				drawGlyph(vg, px * U, y + BROW_H * U / 2, U, '+', false, hot, fl);
+			}
 		}
 		drawScrollbar(vg, W - 7.f + 0.5f, ns, setScroll, vis);
+		if (pressFlash > 0.f) pressFlash -= 0.10f;
 	}
 
 	// Small vector glyphs for the row buttons — one place, so they line up.
 	static constexpr float QADD_W = 14.f;      // width of the + hit zone on a set row
-	void drawGlyph(NVGcontext* vg, float cx, float cy, float U, char g, bool dim = false) {
+	void drawGlyph(NVGcontext* vg, float cx, float cy, float U, char g,
+	               bool disabled = false, bool hot = false, float flash = 0.f) {
 		float a = 3.2f * U;
-		nvgStrokeColor(vg, dim ? FTEXT_DIM : FTEXT);
-		nvgStrokeWidth(vg, 1.3f);
+		NVGcolor col = disabled ? nvgRGBA(FTEXT_DIM.r * 255, FTEXT_DIM.g * 255,
+		                                  FTEXT_DIM.b * 255, 90)
+		             : hot ? FTEXT : FTEXT_DIM;
+		if (flash > 0.f) col = nvgLerpRGBA(col, nvgRGB(0xFF, 0xFF, 0xFF), clamp(flash, 0.f, 1.f));
+		nvgStrokeColor(vg, col);
+		nvgStrokeWidth(vg, 0.9f);
 		nvgBeginPath(vg);
 		switch (g) {
 			case '+': nvgMoveTo(vg, cx - a, cy); nvgLineTo(vg, cx + a, cy);
@@ -1347,8 +1376,8 @@ struct FillDisplay : Widget {
 			          nvgLineTo(vg, cx + a, cy + a * 0.6f); break;
 			case 'd': nvgMoveTo(vg, cx - a, cy - a * 0.6f); nvgLineTo(vg, cx, cy + a * 0.6f);
 			          nvgLineTo(vg, cx + a, cy - a * 0.6f); break;
-			case 'c': nvgRect(vg, cx - a, cy - a, a * 1.5f, a * 1.5f);      // duplicate
-			          nvgRect(vg, cx - a * 0.5f, cy - a * 0.5f, a * 1.5f, a * 1.5f); break;
+			case 'c': nvgRect(vg, cx - a, cy - a * 0.7f, a * 1.4f, a * 1.4f);   // duplicate
+			          nvgRect(vg, cx - a * 0.35f, cy - a * 1.3f, a * 1.4f, a * 1.4f); break;
 		}
 		nvgStroke(vg);
 	}
@@ -1361,6 +1390,20 @@ struct FillDisplay : Widget {
 		c.plus = W - 90.f; c.count = W - 106.f; c.minus = W - 122.f;
 		c.nameEnd = c.minus - 8.f;
 		return c;
+	}
+
+	// col 0..6 = minus count plus up down dup del; 1 is the read-out, not a
+	// button. -1 with a valid row means the row body. Shared by draw and click
+	// so the hit zones and the highlight can never disagree.
+	int queueHit(float xu, float yu, int& row) {
+		QCols c = qcols(box.size.x / u());
+		row = (int)((yu - 35.f) / BROW_PITCH);
+		float inRow = yu - 35.f - row * BROW_PITCH;
+		if (row < 0 || row >= visRows() || inRow > BROW_H) { row = -1; return -1; }
+		const float cx[7] = {c.minus, c.count, c.plus, c.up, c.down, c.dup, c.del};
+		for (int i = 0; i < 7; i++)
+			if (i != 1 && xu >= cx[i] - 8.f && xu <= cx[i] + 8.f) return i;
+		return -1;
 	}
 
 	void drawQueueTab(NVGcontext* vg) {
@@ -1404,14 +1447,21 @@ struct FillDisplay : Widget {
 				                : string::f("x%d", it.reps);
 				nvgText(vg, c.count * U, mid, cnt.c_str(), NULL);
 			}
-			drawGlyph(vg, c.minus * U, mid, U, '-', it.reps <= 1);
-			drawGlyph(vg, c.plus  * U, mid, U, '+');
-			drawGlyph(vg, c.up    * U, mid, U, 'u', i == 0);
-			drawGlyph(vg, c.down  * U, mid, U, 'd', i == nq - 1);
-			drawGlyph(vg, c.dup   * U, mid, U, 'c');
-			drawGlyph(vg, c.del   * U, mid, U, 'x');
+			int hoverRow = -1, hoverCol = queueHit(hoverU.x, hoverU.y, hoverRow);
+			auto G = [&](int col, float cx, char g, bool dis) {
+				bool hot = (hoverRow == r && hoverCol == col);
+				float fl = (flashRow == i && flashCol == col) ? pressFlash : 0.f;
+				drawGlyph(vg, cx * U, mid, U, g, dis, hot, fl);
+			};
+			G(0, c.minus, '-', it.reps <= 1);
+			G(2, c.plus,  '+', false);
+			G(3, c.up,    'u', i == 0);
+			G(4, c.down,  'd', i == nq - 1);
+			G(5, c.dup,   'c', false);
+			G(6, c.del,   'x', false);
 		}
 		drawScrollbar(vg, W - 7.f + 0.5f, nq, queueScroll, vis);
+		if (pressFlash > 0.f) pressFlash -= 0.10f;   // ~6 frames
 	}
 
 	void onHoverScroll(const event::HoverScroll& e) override {
@@ -1451,24 +1501,22 @@ struct FillDisplay : Widget {
 				return;
 			}
 			if (module->screenTab == FILL_NAXIS + 1) {                    // queue tab
-				float W = box.size.x / U;
-				QCols c = qcols(W);
-				int vis = visRows(), nq = (int)module->queue.size();
-				int row = (int)((yu - 35.f) / BROW_PITCH);
-				float inRow = yu - 35.f - row * BROW_PITCH;
+				int row = -1, col = queueHit(xu, yu, row);
+				int nq = (int)module->queue.size();
 				int i = queueScroll + row;
-				if (row >= 0 && row < vis && inRow <= BROW_H && i < nq) {
+				if (row >= 0 && i < nq) {
 					auto& q = module->queue;
-					auto hit = [&](float cx) { return xu >= cx - 8.f && xu <= cx + 8.f; };
-					if      (hit(c.del))   { q.erase(q.begin() + i);
-					                         if (module->queuePos >= (int)q.size()) module->queuePos = 0; }
-					else if (hit(c.dup))   { q.insert(q.begin() + i + 1, q[i]); }
-					else if (hit(c.up))    { if (i > 0)      std::swap(q[i], q[i - 1]); }
-					else if (hit(c.down))  { if (i < nq - 1) std::swap(q[i], q[i + 1]); }
-					else if (hit(c.plus))  { q[i].reps = std::min(64, q[i].reps + 1); }
-					else if (hit(c.minus)) { q[i].reps = std::max(1, q[i].reps - 1); }
-					else                   { module->queuePos = i; module->queueDone = 0; }
-					e.consume(this); return;
+					switch (col) {
+						case 6: q.erase(q.begin() + i);
+						        if (module->queuePos >= (int)q.size()) module->queuePos = 0; break;
+						case 5: q.insert(q.begin() + i + 1, q[i]); break;
+						case 3: if (i > 0)      std::swap(q[i], q[i - 1]); break;
+						case 4: if (i < nq - 1) std::swap(q[i], q[i + 1]); break;
+						case 2: q[i].reps = std::min(64, q[i].reps + 1); break;
+						case 0: q[i].reps = std::max(1, q[i].reps - 1); break;
+						default: module->queuePos = i; module->queueDone = 0; break;
+					}
+					if (col >= 0) { flashRow = i; flashCol = col; pressFlash = 1.f; }
 				}
 				e.consume(this); return;
 			}
@@ -1490,7 +1538,10 @@ struct FillDisplay : Widget {
 						int k = setScroll + row;
 						if (k < (int)ss.size()) {
 							float W = box.size.x / U;
-							if (xu >= W - 7.f - QADD_W) module->queueAdd(ss[k]);   // + : queue it
+							if (xu >= W - 7.f - QADD_W) {                          // + : queue it
+								module->queueAdd(ss[k]);
+								flashRow = -2; flashCol = row; pressFlash = 1.f;
+							}
 							else module->params[Fill::SET_PARAM].setValue((float)ss[k]);
 							e.consume(this); return;
 						}
