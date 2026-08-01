@@ -409,8 +409,8 @@ static inline float fhashF(uint32_t a, uint32_t b) { return (fhash(a, b) & 0xFFF
 static inline uint32_t strHash(const std::string& s) { uint32_t h = 2166136261u; for (char c : s) { h ^= (uint8_t)c; h *= 16777619u; } return h; }
 
 struct Fill : Module {
-	enum ParamId { ACCUM_PARAM, DISCHARGE_PARAM, TIER_PARAM, PHRASE_PARAM, SYNC_PARAM, SET_PARAM, EXTRAS_PARAM, ENUMS(SWING_PARAM, FILL_NCH), PARAMS_LEN };
-	enum InputId { CLOCK_INPUT, BAR_INPUT, RESET_INPUT, RESEED_INPUT, ACCUM_CV_INPUT, DISCHARGE_CV_INPUT, TIER_CV_INPUT, SET_CV_INPUT, EXTRAS_CV_INPUT, INPUTS_LEN };
+	enum ParamId { ACCUM_PARAM, DISCHARGE_PARAM, TIER_PARAM, PHRASE_PARAM, SYNC_PARAM, SET_PARAM, EXTRAS_PARAM, ENUMS(SWING_PARAM, FILL_NCH), RESET_PARAM, PARAMS_LEN };
+	enum InputId { CLOCK_INPUT, BAR_INPUT, RESET_INPUT, RESEED_INPUT, ACCUM_CV_INPUT, DISCHARGE_CV_INPUT, TIER_CV_INPUT, SET_CV_INPUT, EXTRAS_CV_INPUT, NEXT_INPUT, INPUTS_LEN };
 	enum OutputId { ENUMS(GATE_OUTPUT, FILL_NCH), ENUMS(VEL_OUTPUT, FILL_NCH), ENUMS(ACC_OUTPUT, FILL_NCH), FILL_OUTPUT, SET_OUTPUT, NUM_OUTPUT, DEN_OUTPUT,
 		BPM_OUTPUT, OUTPUTS_LEN };
 	enum LightId { SYNC_LIGHT, FILL_LIGHT, LIGHTS_LEN };
@@ -418,6 +418,25 @@ struct Fill : Module {
 	Library lib;
 	std::mutex libMutex;                     // guards lib against live rescans (imports)
 	int curSet = 0, pendingSet = 0;
+
+	// ── pattern queue ───────────────────────────────────────────────────────
+	// A playlist of sets. While it holds anything it OVERRIDES the SET knob and
+	// CV, because two things steering the same choice is worse than either. It
+	// wraps at the end rather than stopping.
+	struct QueueItem { int set; int reps; };   // plain: C++11 aggregate init
+	std::vector<QueueItem> queue;
+	int  queuePos = 0;              // entry currently playing
+	int  queueDone = 0;             // cycles completed within it
+	int  advanceMode = 0;           // 0 = by repeat count, 1 = NEXT jack only
+	bool queueStep = false;         // NEXT fired: move on at the next cycle
+	dsp::SchmittTrigger nextTrig, resetBtnTrig;
+
+	void queueAdd(int set) { queue.push_back({set, 1}); }
+	void queueAdvance() {
+		if (queue.empty()) return;
+		queueDone = 0;
+		queuePos = (queuePos + 1) % (int)queue.size();
+	}
 
 	// Rebuild the library from disk after an import (GUI thread). The audio
 	// thread try-locks and skips its process body while the swap is in flight.
@@ -529,6 +548,8 @@ struct Fill : Module {
 		configInput(CLOCK_INPUT, "Clock — steps fire on its edges (required)");
 		configInput(BAR_INPUT, "Bar (downbeat; also sets how many clocks make a bar)");
 		configInput(RESET_INPUT, "Reset");
+		configInput(NEXT_INPUT, "Next queue entry (advances at the next cycle)");
+		configButton(RESET_PARAM, "Reset");
 		configInput(RESEED_INPUT, "Reseed variation");
 		configInput(ACCUM_CV_INPUT, "Accumulate CV");
 		configInput(DISCHARGE_CV_INPUT, "Discharge CV");
@@ -560,6 +581,7 @@ struct Fill : Module {
 
 	void onReset() override {
 		pressure = 0.f; peakPressure = 0.f; curTier = 0; barsSinceReset = 0; barsSinceFill = 0; fillActive = false;
+		queuePos = 0; queueDone = 0; queueStep = false;
 		started = false; cycleBar = 0; lastStep = -1; clockCount = 0; clocksPerBar = 16; barSuppress = 0;
 		for (int c = 0; c < FILL_NCH; c++) { swDelay[c] = 0.f; ratLeft[c] = 0; ratTimer[c] = ratPeriod[c] = 0.f; }
 		resolveCycle();
@@ -842,8 +864,13 @@ struct Fill : Module {
 	void applyPendingSet() {
 		int n = (int)lib.sets.size();
 		if (n <= 0) return;
-		float sel = params[SET_PARAM].getValue() + inputs[SET_CV_INPUT].getVoltage() / 10.f * (n - 1);
-		pendingSet = clamp((int)std::round(sel), 0, n - 1);
+		if (!queue.empty()) {
+			queuePos = clamp(queuePos, 0, (int)queue.size() - 1);
+			pendingSet = clamp(queue[queuePos].set, 0, n - 1);
+		} else {
+			float sel = params[SET_PARAM].getValue() + inputs[SET_CV_INPUT].getVoltage() / 10.f * (n - 1);
+			pendingSet = clamp((int)std::round(sel), 0, n - 1);
+		}
 		curSet = pendingSet;   // apply at the cycle boundary (called from onBar)
 	}
 
@@ -855,6 +882,13 @@ struct Fill : Module {
 		peakPressure = std::max(peakPressure, pressure);   // the tier latches from this, pre-vent
 		if (!started || cycleBar + 1 >= curBars) {   // start a new pattern cycle
 			cycleBar = 0; lastStep = -1;
+			// The queue moves between cycles, never mid-pattern. A NEXT trigger is
+			// held until this point for the same reason the set switch is.
+			if (!queue.empty() && started) {
+				if (queueStep) { queueAdvance(); queueStep = false; }
+				else if (advanceMode == 0 && ++queueDone >= std::max(1, queue[queuePos].reps))
+					queueAdvance();
+			}
 			applyPendingSet();
 			resolveCycle();
 		} else {                                     // continue a multi-bar cycle
@@ -910,6 +944,8 @@ struct Fill : Module {
 		if (!lk.owns_lock()) return;         // library rebuild in flight (rare, user import)
 		float dt = args.sampleTime;
 		if (resetTrig.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f)) onReset();
+		if (resetBtnTrig.process(params[RESET_PARAM].getValue())) onReset();
+		if (nextTrig.process(inputs[NEXT_INPUT].getVoltage(), 0.1f, 1.f)) queueStep = true;
 		if (reseedTrig.process(inputs[RESEED_INPUT].getVoltage(), 0.1f, 1.f)) reseedBase = random::u32();
 
 		bool barConn = inputs[BAR_INPUT].isConnected();
@@ -989,6 +1025,18 @@ struct Fill : Module {
 		json_object_set_new(root, "clockRes", json_integer(clockRes));
 		json_object_set_new(root, "tierMode", json_integer(tierMode));
 		json_object_set_new(root, "playFills", json_boolean(playFills));
+		json_object_set_new(root, "advanceMode", json_integer(advanceMode));
+		json_object_set_new(root, "queuePos", json_integer(queuePos));
+		{
+			json_t* q = json_array();
+			for (auto& it : queue) {
+				json_t* o = json_object();
+				json_object_set_new(o, "set", json_integer(it.set));
+				json_object_set_new(o, "reps", json_integer(it.reps));
+				json_array_append_new(q, o);
+			}
+			json_object_set_new(root, "queue", q);
+		}
 		json_object_set_new(root, "tierBalance", json_integer(tierBalance));
 		json_object_set_new(root, "pulseWidthIdx", json_integer(pulseWidthIdx));
 		json_object_set_new(root, "screenTab", json_integer(screenTab));
@@ -1002,10 +1050,23 @@ struct Fill : Module {
 		if (json_t* j = json_object_get(root, "clockRes")) clockRes = clamp((int)json_integer_value(j), 0, 48);
 		if (json_t* j = json_object_get(root, "tierMode")) tierMode = clamp((int)json_integer_value(j), 0, 1);
 		if (json_t* j = json_object_get(root, "playFills")) playFills = json_boolean_value(j);
+		if (json_t* j = json_object_get(root, "advanceMode")) advanceMode = clamp((int)json_integer_value(j), 0, 1);
+		if (json_t* q = json_object_get(root, "queue")) {
+			queue.clear();
+			size_t n = json_array_size(q);
+			for (size_t i = 0; i < n; i++) {
+				json_t* o = json_array_get(q, i);
+				QueueItem it = {0, 1};
+				if (json_t* v = json_object_get(o, "set")) it.set = (int)json_integer_value(v);
+				if (json_t* v = json_object_get(o, "reps")) it.reps = clamp((int)json_integer_value(v), 1, 64);
+				queue.push_back(it);
+			}
+		}
+		if (json_t* j = json_object_get(root, "queuePos")) queuePos = (int)json_integer_value(j);
 		if (json_t* j = json_object_get(root, "tierBalance")) tierBalance = clamp((int)json_integer_value(j), 0, 2);
 		if (json_t* j = json_object_get(root, "setIdx")) { curSet = pendingSet = clamp((int)json_integer_value(j), 0, std::max(0, (int)lib.sets.size() - 1)); }
 		if (json_t* j = json_object_get(root, "pulseWidthIdx")) pulseWidthIdx = clamp((int)json_integer_value(j), 0, sfs::NUM_PULSE_WIDTHS - 1);
-		if (json_t* j = json_object_get(root, "screenTab")) screenTab = clamp((int)json_integer_value(j), 0, FILL_NAXIS);
+		if (json_t* j = json_object_get(root, "screenTab")) screenTab = clamp((int)json_integer_value(j), 0, FILL_NAXIS + 1);
 		if (json_t* j = json_object_get(root, "browseBankG")) browseBank[0] = clamp((int)json_integer_value(j), 0, std::max(0, (int)lib.families[0].size() - 1));
 		if (json_t* j = json_object_get(root, "browseBankR")) browseBank[1] = clamp((int)json_integer_value(j), 0, std::max(0, (int)lib.families[1].size() - 1));
 		if (json_t* j = json_object_get(root, "browseBankU")) browseBank[2] = clamp((int)json_integer_value(j), 0, std::max(0, (int)lib.families[2].size() - 1));
@@ -1048,8 +1109,8 @@ struct FillDisplay : Widget {
 
 	void drawTabs(NVGcontext* vg, int tab) {
 		const float U = u(), w = box.size.x;
-		const char* names[5] = {"PATTERN", "GENRE", "REGION", "USER", "FAVS"};
-		for (int i = 0; i < 5; i++) {
+		const char* names[6] = {"PATTERN", "GENRE", "REGION", "USER", "FAVS", "QUEUE"};
+		for (int i = 0; i < 6; i++) {
 			float x = (7.f + i * 52.f) * U;                       // 50-unit tabs, 2-unit gap (Note: 38+2)
 			nvgBeginPath(vg); nvgRoundedRect(vg, x, 8.f * U, 50.f * U, 18.f * U, 2.f * U);
 			nvgFillColor(vg, i == tab ? FBLUE_DARK : FPURPLE); nvgFill(vg);
@@ -1167,7 +1228,7 @@ struct FillDisplay : Widget {
 	float bankColW() { return (box.size.x / u() - 18.f) / 3.f; }
 	float setColX()  { return 7.f + bankColW() + 4.f; }
 
-	int bankScroll = 0, setScroll = 0;        // browser view state (per widget)
+	int bankScroll = 0, setScroll = 0, queueScroll = 0;   // browser view state (per widget)
 	int lastSelBank = -1, lastSelSet = -1, lastAxis = -1;
 	int visRows() { return std::max(1, (int)((box.size.y / u() - 35.f - 4.f) / BROW_PITCH)); }
 
@@ -1262,14 +1323,104 @@ struct FillDisplay : Widget {
 				const char* meter = (st.main >= 0 && st.main < (int)lib.pats.size()) ? lib.pats[st.main].meter.c_str() : "4/4";
 				std::string info = string::f("%s · %d", meter, (int)std::round(st.bpm));
 				nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-				nvgText(vg, (rightX + rightW - 5.f) * U, y + BROW_H * U / 2, info.c_str(), NULL);
+				nvgText(vg, (rightX + rightW - QADD_W - 5.f) * U, y + BROW_H * U / 2, info.c_str(), NULL);
 			}
+			drawGlyph(vg, (rightX + rightW - QADD_W / 2.f) * U, y + BROW_H * U / 2, U, '+');
 		}
 		drawScrollbar(vg, W - 7.f + 0.5f, ns, setScroll, vis);
 	}
 
+	// Small vector glyphs for the row buttons — one place, so they line up.
+	static constexpr float QADD_W = 14.f;      // width of the + hit zone on a set row
+	void drawGlyph(NVGcontext* vg, float cx, float cy, float U, char g, bool dim = false) {
+		float a = 3.2f * U;
+		nvgStrokeColor(vg, dim ? FTEXT_DIM : FTEXT);
+		nvgStrokeWidth(vg, 1.3f);
+		nvgBeginPath(vg);
+		switch (g) {
+			case '+': nvgMoveTo(vg, cx - a, cy); nvgLineTo(vg, cx + a, cy);
+			          nvgMoveTo(vg, cx, cy - a); nvgLineTo(vg, cx, cy + a); break;
+			case '-': nvgMoveTo(vg, cx - a, cy); nvgLineTo(vg, cx + a, cy); break;
+			case 'x': nvgMoveTo(vg, cx - a, cy - a); nvgLineTo(vg, cx + a, cy + a);
+			          nvgMoveTo(vg, cx + a, cy - a); nvgLineTo(vg, cx - a, cy + a); break;
+			case 'u': nvgMoveTo(vg, cx - a, cy + a * 0.6f); nvgLineTo(vg, cx, cy - a * 0.6f);
+			          nvgLineTo(vg, cx + a, cy + a * 0.6f); break;
+			case 'd': nvgMoveTo(vg, cx - a, cy - a * 0.6f); nvgLineTo(vg, cx, cy + a * 0.6f);
+			          nvgLineTo(vg, cx + a, cy - a * 0.6f); break;
+			case 'c': nvgRect(vg, cx - a, cy - a, a * 1.5f, a * 1.5f);      // duplicate
+			          nvgRect(vg, cx - a * 0.5f, cy - a * 0.5f, a * 1.5f, a * 1.5f); break;
+		}
+		nvgStroke(vg);
+	}
+
+	// Queue row geometry, measured in from the right edge so it survives resizing.
+	struct QCols { float minus, count, plus, up, down, dup, del, nameEnd; };
+	QCols qcols(float W) {
+		QCols c;
+		c.del = W - 16.f; c.dup = W - 34.f; c.down = W - 52.f; c.up = W - 70.f;
+		c.plus = W - 90.f; c.count = W - 106.f; c.minus = W - 122.f;
+		c.nameEnd = c.minus - 8.f;
+		return c;
+	}
+
+	void drawQueueTab(NVGcontext* vg) {
+		if (!module) return;
+		const float U = u(), W = box.size.x / U;
+		Library& lib = module->lib;
+		if (module->queue.empty()) {
+			if (font) {
+				nvgFontFaceId(vg, font->handle); nvgFontSize(vg, 9.f * U);
+				nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+				nvgFillColor(vg, FTEXT_DIM);
+				nvgText(vg, box.size.x / 2, 62.f * U, "Queue is empty", NULL);
+				nvgText(vg, box.size.x / 2, 76.f * U, "Press + on any set in the browser tabs", NULL);
+			}
+			return;
+		}
+		QCols c = qcols(W);
+		int vis = visRows(), nq = (int)module->queue.size();
+		queueScroll = clamp(queueScroll, 0, std::max(0, nq - vis));
+		for (int r = 0; r < vis && queueScroll + r < nq; r++) {
+			int i = queueScroll + r;
+			auto& it = module->queue[i];
+			float y = (35.f + r * BROW_PITCH) * U, mid = y + BROW_H * U / 2;
+			bool isPlay = (i == module->queuePos);
+			nvgBeginPath(vg); nvgRoundedRect(vg, 7.f * U, y, (W - 14.f) * U, BROW_H * U, 2.f * U);
+			nvgFillColor(vg, isPlay ? FBLUE_DARK : FPURPLE); nvgFill(vg);
+			if (isPlay) { nvgStrokeColor(vg, FORANGE); nvgStrokeWidth(vg, 1.f); nvgStroke(vg); }
+			if (font) {
+				nvgFontFaceId(vg, font->handle); nvgFontSize(vg, 9.f * U);
+				nvgFillColor(vg, isPlay ? FTEXT : FTEXT_DIM);
+				nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+				std::string nm = (it.set >= 0 && it.set < (int)lib.sets.size()) ? lib.sets[it.set].name : "?";
+				size_t lim = (size_t)std::max(6.f, (c.nameEnd - 14.f) / 5.2f);
+				if (nm.size() > lim) nm = nm.substr(0, lim - 1) + "…";
+				nvgText(vg, 12.f * U, mid, nm.c_str(), NULL);
+				// repeats, with the progress through them on the playing entry
+				nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+				nvgFillColor(vg, FTEXT);
+				std::string cnt = isPlay && module->advanceMode == 0
+				                ? string::f("%d/%d", module->queueDone + 1, it.reps)
+				                : string::f("x%d", it.reps);
+				nvgText(vg, c.count * U, mid, cnt.c_str(), NULL);
+			}
+			drawGlyph(vg, c.minus * U, mid, U, '-', it.reps <= 1);
+			drawGlyph(vg, c.plus  * U, mid, U, '+');
+			drawGlyph(vg, c.up    * U, mid, U, 'u', i == 0);
+			drawGlyph(vg, c.down  * U, mid, U, 'd', i == nq - 1);
+			drawGlyph(vg, c.dup   * U, mid, U, 'c');
+			drawGlyph(vg, c.del   * U, mid, U, 'x');
+		}
+		drawScrollbar(vg, W - 7.f + 0.5f, nq, queueScroll, vis);
+	}
+
 	void onHoverScroll(const event::HoverScroll& e) override {
-		if (module && module->screenTab >= 1 && !module->lib.sets.empty()) {
+		if (module && module->screenTab == FILL_NAXIS + 1) {
+			queueScroll += (e.scrollDelta.y > 0.f) ? -1 : 1;   // clamped in draw
+			e.consume(this);
+			return;
+		}
+		if (module && module->screenTab >= 1 && module->screenTab <= FILL_NAXIS && !module->lib.sets.empty()) {
 			float xu = e.pos.x / u();
 			int d = (e.scrollDelta.y > 0.f) ? -1 : 1;
 			if (xu < setColX()) bankScroll += d; else setScroll += d;   // clamped in draw
@@ -1283,11 +1434,11 @@ struct FillDisplay : Widget {
 		if (!font) font = APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
 		NVGcontext* vg = args.vg;
 		const float w = box.size.x, h = box.size.y;
-		int tab = module ? clamp(module->screenTab, 0, FILL_NAXIS) : 0;
+		int tab = module ? clamp(module->screenTab, 0, FILL_NAXIS + 1) : 0;
 		nvgBeginPath(vg); nvgRoundedRect(vg, 0, 0, w, h, 3.f);
 		nvgFillColor(vg, FBG); nvgFill(vg);
 		drawTabs(vg, tab);
-		if (tab >= 1) drawBrowserTab(vg, tab - 1); else drawPatternTab(vg);
+		if (tab == 5) drawQueueTab(vg); else if (tab >= 1) drawBrowserTab(vg, tab - 1); else drawPatternTab(vg);
 	}
 
 	void onButton(const event::Button& e) override {
@@ -1295,11 +1446,33 @@ struct FillDisplay : Widget {
 			const float U = u();
 			float xu = e.pos.x / U, yu = e.pos.y / U;                 // click position in Note units
 			if (yu < 32.f) {                                          // tab row
-				for (int i = 0; i < 5; i++)
+				for (int i = 0; i < 6; i++)
 					if (xu >= 7.f + i * 52.f && xu <= 57.f + i * 52.f) { module->screenTab = i; e.consume(this); return; }
 				return;
 			}
-			if (module->screenTab >= 1 && !module->lib.sets.empty()) {
+			if (module->screenTab == FILL_NAXIS + 1) {                    // queue tab
+				float W = box.size.x / U;
+				QCols c = qcols(W);
+				int vis = visRows(), nq = (int)module->queue.size();
+				int row = (int)((yu - 35.f) / BROW_PITCH);
+				float inRow = yu - 35.f - row * BROW_PITCH;
+				int i = queueScroll + row;
+				if (row >= 0 && row < vis && inRow <= BROW_H && i < nq) {
+					auto& q = module->queue;
+					auto hit = [&](float cx) { return xu >= cx - 8.f && xu <= cx + 8.f; };
+					if      (hit(c.del))   { q.erase(q.begin() + i);
+					                         if (module->queuePos >= (int)q.size()) module->queuePos = 0; }
+					else if (hit(c.dup))   { q.insert(q.begin() + i + 1, q[i]); }
+					else if (hit(c.up))    { if (i > 0)      std::swap(q[i], q[i - 1]); }
+					else if (hit(c.down))  { if (i < nq - 1) std::swap(q[i], q[i + 1]); }
+					else if (hit(c.plus))  { q[i].reps = std::min(64, q[i].reps + 1); }
+					else if (hit(c.minus)) { q[i].reps = std::max(1, q[i].reps - 1); }
+					else                   { module->queuePos = i; module->queueDone = 0; }
+					e.consume(this); return;
+				}
+				e.consume(this); return;
+			}
+			if (module->screenTab >= 1 && module->screenTab <= FILL_NAXIS && !module->lib.sets.empty()) {
 				Library& lib = module->lib;
 				int axis = module->screenTab - 1;
 				if (lib.families[axis].empty()) { Widget::onButton(e); return; }
@@ -1315,14 +1488,19 @@ struct FillDisplay : Widget {
 						int bank = clamp(module->browseBank[axis], 0, (int)lib.families[axis].size() - 1);
 						const std::vector<int>& ss = lib.famSets[axis][bank];
 						int k = setScroll + row;
-						if (k < (int)ss.size()) { module->params[Fill::SET_PARAM].setValue((float)ss[k]); e.consume(this); return; }
+						if (k < (int)ss.size()) {
+							float W = box.size.x / U;
+							if (xu >= W - 7.f - QADD_W) module->queueAdd(ss[k]);   // + : queue it
+							else module->params[Fill::SET_PARAM].setValue((float)ss[k]);
+							e.consume(this); return;
+						}
 					}
 				}
 			}
 		}
 		// right-click a set row (any browser tab) → toggle favorite
 		if (module && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_RIGHT
-		    && module->screenTab >= 1 && !module->lib.sets.empty()) {
+		    && module->screenTab >= 1 && module->screenTab <= FILL_NAXIS && !module->lib.sets.empty()) {
 			Library& lib = module->lib;
 			int axis = module->screenTab - 1;
 			if (!lib.families[axis].empty()) {
@@ -1375,6 +1553,8 @@ struct FillWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(28.f, 108.f)), module, Fill::BAR_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(44.f, 108.f)), module, Fill::RESET_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(60.f, 108.f)), module, Fill::RESEED_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(72.f, 108.f)), module, Fill::NEXT_INPUT));
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(44.f, 120.f)), module, Fill::RESET_PARAM));
 		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(86.f, 102.f)), module, Fill::FILL_LIGHT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(86.f, 108.f)), module, Fill::FILL_OUTPUT));
 
@@ -1412,6 +1592,12 @@ struct FillWidget : ModuleWidget {
 		}
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createBoolPtrMenuItem("Play fills", "", &module->playFills));
+		menu->addChild(createIndexSubmenuItem("Queue advance",
+			{"By repeat count", "By NEXT input only"},
+			[=]() { return module->advanceMode; },
+			[module](int i) { module->advanceMode = clamp(i, 0, 1); }));
+		menu->addChild(createMenuItem("Clear queue", "", [module]() {
+			module->queue.clear(); module->queuePos = 0; module->queueDone = 0; }));
 		menu->addChild(createMenuLabel("Intensity"));
 		menu->addChild(createIndexPtrSubmenuItem("Tier follows",
 			{"Rise through the phrase", "One tier per phrase"}, &module->tierMode));
