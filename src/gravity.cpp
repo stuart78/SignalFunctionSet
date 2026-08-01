@@ -258,6 +258,10 @@ struct Gravity : Module {
 	float anyTimer = 0.f, oddTimer = 0.f, evenTimer = 0.f, newTimer = 0.f;
 	int   lastRayFired = -1;      // for NEW: the previous crossing, whenever it was
 	float sectorOut[NUM_SECTORS] = {};
+	// 0 = morph: a sector speaks only while the point is inside its wedge.
+	// 1 = bipolar distance: every sector reports where the point sits along ITS
+	//     axis, whatever sextant the point is actually in, so all six stay live.
+	int   sectorMode = 0;
 	bool initialized = false;
 
 	// --- Exposed for the display (UI thread reads these; benign races) ---
@@ -290,7 +294,7 @@ struct Gravity : Module {
 		configOutput(NEW_GATE_OUTPUT, "New gate — a different ray from the one before");
 		configOutput(ANGLE_OUTPUT, "Angle from gravity (±180° -> ±5V)");
 		for (int i = 0; i < NUM_SECTORS; i++) {
-			configOutput(SECTOR_OUTPUT + i, string::f("Sector %d distance", i + 1));
+			configOutput(SECTOR_OUTPUT + i, string::f("Sector %d distance (morph 0-10V, or bipolar +-5V)", i + 1));
 			configOutput(GATE_OUTPUT + i, string::f("Ray %d gate", i + 1));
 		}
 	}
@@ -517,13 +521,26 @@ struct Gravity : Module {
 		float radV = radius / REACH * 10.f;
 		for (int i = 0; i < NUM_SECTORS; i++) {
 			float center = (i * 60.f + 30.f) * DEG;
-			float dd = std::abs(wrapPi(phi - center)) / (60.f * DEG);
-			float wgt = clamp(1.f - dd, 0.f, 1.f);
-			float target = wgt * radV;
+			float target;
+			if (sectorMode == 0) {
+				float dd = std::abs(wrapPi(phi - center)) / (60.f * DEG);
+				float wgt = clamp(1.f - dd, 0.f, 1.f);
+				target = wgt * radV;
+			} else {
+				// Project the point onto this sector's own axis. phi is measured
+				// from straight down, so the axis is (sin, cos) — the same frame
+				// the panel places the jacks in. +5V means the point is ON the rim
+				// in this sector's direction, 0V the centre, -5V the far rim: the
+				// distance from the edge is (5 - out) in the same units.
+				float proj = (tx * std::sin(center) + ty * std::cos(center)) / REACH;
+				target = clamp(proj, -1.f, 1.f) * 5.f;
+			}
 			sectorOut[i] += (target - sectorOut[i]) * 0.02f;
 			outputs[SECTOR_OUTPUT + i].setVoltage(sectorOut[i]);
 			// Sector LED: brightness tracks signal strength (0..10V -> 0..1).
-			lights[SECTOR_LIGHT + i].setBrightness(clamp(sectorOut[i] / 10.f, 0.f, 1.f));
+			lights[SECTOR_LIGHT + i].setBrightness(sectorMode == 0
+				? clamp(sectorOut[i] / 10.f, 0.f, 1.f)
+				: clamp(std::abs(sectorOut[i]) / 5.f, 0.f, 1.f));
 		}
 
 		// Ray-cross gates: every gate point fires the ray it crosses. Each point
@@ -1227,6 +1244,7 @@ struct Gravity : Module {
 		json_object_set_new(root, "w1", json_real(w1));
 		json_object_set_new(root, "w2", json_real(w2));
 		json_object_set_new(root, "gateHoldSec", json_real(gateHoldSec));
+		json_object_set_new(root, "sectorMode", json_integer(sectorMode));
 		json_object_set_new(root, "trailLength", json_integer(trailLength));
 		json_object_set_new(root, "mode", json_integer(mode));
 		json_object_set_new(root, "hmLevel", json_integer(hmLevel));
@@ -1240,6 +1258,7 @@ struct Gravity : Module {
 		if (json_t* j = json_object_get(root, "w1")) w1 = json_number_value(j);
 		if (json_t* j = json_object_get(root, "w2")) w2 = json_number_value(j);
 		if (json_t* j = json_object_get(root, "gateHoldSec")) gateHoldSec = json_number_value(j);
+		if (json_t* j = json_object_get(root, "sectorMode")) sectorMode = clamp((int) json_integer_value(j), 0, 1);
 		if (json_t* j = json_object_get(root, "trailLength")) trailLength = (int) json_integer_value(j);
 		if (json_t* j = json_object_get(root, "mode")) {
 			mode = clamp((int) json_integer_value(j), 0, (int) NUM_MODES - 1);
@@ -1849,7 +1868,9 @@ struct GravityDisplay : OpaqueWidget {
 
 		// Sector morph arcs near the rim — brightness = that sector's CV level
 		for (int i = 0; i < NUM_SECTORS; i++) {
-			float lvl = clamp(module->sectorOut[i] / 10.f, 0.f, 1.f);
+			float lvl = (module->sectorMode == 0)
+			          ? clamp(module->sectorOut[i] / 10.f, 0.f, 1.f)
+			          : clamp(std::abs(module->sectorOut[i]) / 5.f, 0.f, 1.f);
 			if (lvl < 0.01f) continue;
 			float a0 = (i * 60.f) * DEG;
 			float a1 = ((i + 1) * 60.f) * DEG;
@@ -2077,6 +2098,12 @@ struct GravityWidget : ModuleWidget {
 				if (turtle) module->initTurtle(); else module->initPattern();
 			}));
 		}
+
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createIndexSubmenuItem("Sector CV",
+			{"Morph (0-10V, in-sector only)", "Bipolar distance (+-5V, always live)"},
+			[=]() { return module->sectorMode; },
+			[=](int i) { module->sectorMode = clamp(i, 0, 1); }));
 
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Gate hold"));
