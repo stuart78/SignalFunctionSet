@@ -1515,17 +1515,36 @@ struct FillDisplay : Widget {
 	}
 
 	void onHoverScroll(const event::HoverScroll& e) override {
-		if (module && module->screenTab == FILL_NAXIS + 1) {
-			queueScroll += (e.scrollDelta.y > 0.f) ? -1 : 1;   // clamped in draw
-			e.consume(this);
-			return;
-		}
-		if (module && module->screenTab >= 1 && module->screenTab <= FILL_NAXIS && !module->lib.sets.empty()) {
-			float xu = e.pos.x / u();
+		// Only swallow the wheel when there is genuinely something to scroll.
+		// Consuming it unconditionally means two-finger scrolling the Rack canvas
+		// dies wherever the pointer happens to cross this module, which is a much
+		// bigger cost than the convenience of scrolling a list that already fits.
+		if (module) {
+			const float U = u();
+			float xu = e.pos.x / U, yu = e.pos.y / U;
+			int vis = visRows();
 			int d = (e.scrollDelta.y > 0.f) ? -1 : 1;
-			if (xu < setColX()) bankScroll += d; else setScroll += d;   // clamped in draw
-			e.consume(this);
-			return;
+			if (yu >= 35.f) {                                   // never over the tab row
+				if (module->screenTab == FILL_NAXIS + 1) {
+					if ((int)module->queue.size() > vis) {
+						queueScroll += d; e.consume(this); return;
+					}
+				} else if (module->screenTab >= 1 && module->screenTab <= FILL_NAXIS
+				           && !module->lib.sets.empty()) {
+					Library& lib = module->lib;
+					int axis = module->screenTab - 1;
+					if (!lib.families[axis].empty()) {
+						int nb = (int)lib.families[axis].size();
+						int bank = clamp(module->browseBank[axis], 0, nb - 1);
+						int ns = (int)lib.famSets[axis][bank].size();
+						bool leftCol = xu < setColX();
+						if ((leftCol ? nb : ns) > vis) {
+							if (leftCol) bankScroll += d; else setScroll += d;
+							e.consume(this); return;
+						}
+					}
+				}
+			}
 		}
 		Widget::onHoverScroll(e);
 	}
@@ -1568,8 +1587,9 @@ struct FillDisplay : Widget {
 						default: dragIdx = i; dragAccum = 0.f; break;   // body: reorder
 					}
 					if (col >= 0) { flashRow = i; flashCol = col; pressFlash = 1.f; }
+					e.consume(this);
 				}
-				e.consume(this); return;
+				return;                       // a click on empty space is not ours
 			}
 			if (module->screenTab >= 1 && module->screenTab <= FILL_NAXIS && !module->lib.sets.empty()) {
 				Library& lib = module->lib;
