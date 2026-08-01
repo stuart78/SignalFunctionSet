@@ -429,6 +429,7 @@ struct Fill : Module {
 	int  queueDone = 0;             // cycles completed within it
 	int  advanceMode = 0;           // 0 = by repeat count, 1 = NEXT jack only
 	bool queueStep = false;         // NEXT fired: move on at the next cycle
+	int  queueJumpTo = -1;          // play pressed on a row: take THAT one next cycle
 	dsp::SchmittTrigger nextTrig, resetBtnTrig;
 
 	void queueAdd(int set) { queue.push_back({set, 1}); }
@@ -581,7 +582,7 @@ struct Fill : Module {
 
 	void onReset() override {
 		pressure = 0.f; peakPressure = 0.f; curTier = 0; barsSinceReset = 0; barsSinceFill = 0; fillActive = false;
-		queuePos = 0; queueDone = 0; queueStep = false;
+		queuePos = 0; queueDone = 0; queueStep = false; queueJumpTo = -1;
 		started = false; cycleBar = 0; lastStep = -1; clockCount = 0; clocksPerBar = 16; barSuppress = 0;
 		for (int c = 0; c < FILL_NCH; c++) { swDelay[c] = 0.f; ratLeft[c] = 0; ratTimer[c] = ratPeriod[c] = 0.f; }
 		resolveCycle();
@@ -885,7 +886,11 @@ struct Fill : Module {
 			// The queue moves between cycles, never mid-pattern. A NEXT trigger is
 			// held until this point for the same reason the set switch is.
 			if (!queue.empty() && started) {
-				if (queueStep) { queueAdvance(); queueStep = false; }
+				if (queueJumpTo >= 0) {
+					queuePos = clamp(queueJumpTo, 0, (int)queue.size() - 1);
+					queueDone = 0; queueJumpTo = -1; queueStep = false;
+				}
+				else if (queueStep) { queueAdvance(); queueStep = false; }
 				else if (advanceMode == 0 && ++queueDone >= std::max(1, queue[queuePos].reps))
 					queueAdvance();
 			}
@@ -1236,6 +1241,40 @@ struct FillDisplay : Widget {
 	float pressFlash = 0.f;
 	int   flashRow = -1, flashCol = -1;
 
+	int   dragIdx = -1;        // queue entry under a reorder drag
+	float dragAccum = 0.f;     // travel since the last swap, in Note units
+
+	void onDragMove(const event::DragMove& e) override {
+		if (module && dragIdx >= 0 && !module->queue.empty()) {
+			auto& q = module->queue;
+			dragAccum += e.mouseDelta.y / getAbsoluteZoom() / u();
+			// Swap one place at a time, moving the play head with the entry it is
+			// pointing at so the queue does not appear to jump under the drag.
+			auto move = [&](int to) {
+				std::swap(q[dragIdx], q[to]);
+				if (module->queuePos == dragIdx) module->queuePos = to;
+				else if (module->queuePos == to) module->queuePos = dragIdx;
+				dragIdx = to;
+			};
+			// Strict on both sides: the two thresholds meet at exactly +-half a
+			// pitch, and a swap that lands the accumulator on the boundary would
+			// be undone by the opposite loop in the same call.
+			while (dragAccum > BROW_PITCH * 0.5f && dragIdx < (int)q.size() - 1) {
+				move(dragIdx + 1); dragAccum -= BROW_PITCH;
+			}
+			while (dragAccum < -BROW_PITCH * 0.5f && dragIdx > 0) {
+				move(dragIdx - 1); dragAccum += BROW_PITCH;
+			}
+			e.consume(this);
+			return;
+		}
+		Widget::onDragMove(e);
+	}
+	void onDragEnd(const event::DragEnd& e) override {
+		dragIdx = -1;
+		Widget::onDragEnd(e);
+	}
+
 	void onHover(const event::Hover& e) override {
 		float U = u();
 		hoverU = Vec(e.pos.x / U, e.pos.y / U);
@@ -1376,6 +1415,9 @@ struct FillDisplay : Widget {
 			          nvgLineTo(vg, cx + a, cy + a * 0.6f); break;
 			case 'd': nvgMoveTo(vg, cx - a, cy - a * 0.6f); nvgLineTo(vg, cx, cy + a * 0.6f);
 			          nvgLineTo(vg, cx + a, cy - a * 0.6f); break;
+			case 'p': nvgMoveTo(vg, cx - a * 0.7f, cy - a);      // play
+			          nvgLineTo(vg, cx + a * 0.9f, cy);
+			          nvgLineTo(vg, cx - a * 0.7f, cy + a); nvgClosePath(vg); break;
 			case 'c': nvgRect(vg, cx - a, cy - a * 0.7f, a * 1.4f, a * 1.4f);   // duplicate
 			          nvgRect(vg, cx - a * 0.35f, cy - a * 1.3f, a * 1.4f, a * 1.4f); break;
 		}
@@ -1383,9 +1425,10 @@ struct FillDisplay : Widget {
 	}
 
 	// Queue row geometry, measured in from the right edge so it survives resizing.
-	struct QCols { float minus, count, plus, up, down, dup, del, nameEnd; };
+	struct QCols { float play, minus, count, plus, up, down, dup, del, nameEnd; };
 	QCols qcols(float W) {
 		QCols c;
+		c.play = 15.f;
 		c.del = W - 16.f; c.dup = W - 34.f; c.down = W - 52.f; c.up = W - 70.f;
 		c.plus = W - 90.f; c.count = W - 106.f; c.minus = W - 122.f;
 		c.nameEnd = c.minus - 8.f;
@@ -1400,8 +1443,8 @@ struct FillDisplay : Widget {
 		row = (int)((yu - 35.f) / BROW_PITCH);
 		float inRow = yu - 35.f - row * BROW_PITCH;
 		if (row < 0 || row >= visRows() || inRow > BROW_H) { row = -1; return -1; }
-		const float cx[7] = {c.minus, c.count, c.plus, c.up, c.down, c.dup, c.del};
-		for (int i = 0; i < 7; i++)
+		const float cx[8] = {c.minus, c.count, c.plus, c.up, c.down, c.dup, c.del, c.play};
+		for (int i = 0; i < 8; i++)
 			if (i != 1 && xu >= cx[i] - 8.f && xu <= cx[i] + 8.f) return i;
 		return -1;
 	}
@@ -1431,14 +1474,15 @@ struct FillDisplay : Widget {
 			nvgBeginPath(vg); nvgRoundedRect(vg, 7.f * U, y, (W - 14.f) * U, BROW_H * U, 2.f * U);
 			nvgFillColor(vg, isPlay ? FBLUE_DARK : FPURPLE); nvgFill(vg);
 			if (isPlay) { nvgStrokeColor(vg, FORANGE); nvgStrokeWidth(vg, 1.f); nvgStroke(vg); }
+			if (i == dragIdx) { nvgStrokeColor(vg, FTEXT); nvgStrokeWidth(vg, 1.f); nvgStroke(vg); }
 			if (font) {
 				nvgFontFaceId(vg, font->handle); nvgFontSize(vg, 9.f * U);
 				nvgFillColor(vg, isPlay ? FTEXT : FTEXT_DIM);
 				nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 				std::string nm = (it.set >= 0 && it.set < (int)lib.sets.size()) ? lib.sets[it.set].name : "?";
-				size_t lim = (size_t)std::max(6.f, (c.nameEnd - 14.f) / 5.2f);
+				size_t lim = (size_t)std::max(6.f, (c.nameEnd - 28.f) / 5.2f);
 				if (nm.size() > lim) nm = nm.substr(0, lim - 1) + "…";
-				nvgText(vg, 12.f * U, mid, nm.c_str(), NULL);
+				nvgText(vg, 26.f * U, mid, nm.c_str(), NULL);
 				// repeats, with the progress through them on the playing entry
 				nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 				nvgFillColor(vg, FTEXT);
@@ -1453,6 +1497,12 @@ struct FillDisplay : Widget {
 				float fl = (flashRow == i && flashCol == col) ? pressFlash : 0.f;
 				drawGlyph(vg, cx * U, mid, U, g, dis, hot, fl);
 			};
+			// play stays lit while its jump is pending, so the queued switch is visible
+			{
+				bool hot = (hoverRow == r && hoverCol == 7) || module->queueJumpTo == i;
+				float fl = (flashRow == i && flashCol == 7) ? pressFlash : 0.f;
+				drawGlyph(vg, c.play * U, mid, U, 'p', false, hot, fl);
+			}
 			G(0, c.minus, '-', it.reps <= 1);
 			G(2, c.plus,  '+', false);
 			G(3, c.up,    'u', i == 0);
@@ -1514,7 +1564,8 @@ struct FillDisplay : Widget {
 						case 4: if (i < nq - 1) std::swap(q[i], q[i + 1]); break;
 						case 2: q[i].reps = std::min(64, q[i].reps + 1); break;
 						case 0: q[i].reps = std::max(1, q[i].reps - 1); break;
-						default: module->queuePos = i; module->queueDone = 0; break;
+						case 7: module->queueJumpTo = i; break;    // play: next cycle
+						default: dragIdx = i; dragAccum = 0.f; break;   // body: reorder
 					}
 					if (col >= 0) { flashRow = i; flashCol = col; pressFlash = 1.f; }
 				}
