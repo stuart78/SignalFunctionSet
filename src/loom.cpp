@@ -35,15 +35,47 @@ static const int LOOM_AP   = 4;              // dispersion sections per string
 // and a full strum near 5V. Eight strings bowed at once still runs into the
 // rail, which is correct — that is eight self-oscillators, not eight notes.
 static const float LOOM_OUT_GAIN = 12.f;
+// Bow shaping. SAT is where the friction curve softly saturates (it peaks near
+// 2.5, so this is active most of the cycle and its shape IS the timbre).
+static const float LOOM_BOW_SAT   = 0.55f;
+static const float LOOM_BOW_DRIVE = 0.12f;
+// How hard the string's own velocity pushes back into the friction curve. This
+// is the harshness control, and it is not obvious: high values drive the limit
+// cycle CHAOTIC, filling the gaps between the partials with broadband noise at
+// only -11 dB. What sounded like a bright bow was a noisy one. Dropping it from
+// 12 to 1.5 takes the inter-harmonic floor to -50 dB — a clean periodic tone.
+static const float LOOM_BOW_FEEDBACK = 1.5f;
+static const float LOOM_BOW_HAIR     = 0.07f;
+static const float LOOM_WIND_DRIVE = 0.020f;
+// A bridge transmits lows far better than highs; this is the corner.
+static const float LOOM_BRIDGE_HZ = 1200.f;
+// Ceiling on the fraction a string trades with the bridge. Real bridges pass a
+// few percent — the first version passed 35%, which cost 89% of the sustain and
+// bought no extra sympathetic ring at all.
+static const float LOOM_COUPLE_MAX = 0.06f;
 
 // Strings are tuned, not quantized — a harp is tuned to a chord. The range
 // covers five octaves so the bank can span an instrument rather than a chord.
 static const float LOOM_TUNE_MIN = -24.f;
 static const float LOOM_TUNE_MAX =  36.f;
 
-enum ExciterId { EX_PLUCK, EX_HAMMER, EX_BOW, EX_AEOLIAN, EX_COUNT };
-static const char* EX_NAME[EX_COUNT]  = {"PLUCK", "HAMMER", "BOW", "AEOLIAN"};
-static const char* EX_SHORT[EX_COUNT] = {"PLK", "HAM", "BOW", "AEO"};
+// EXCITE is a continuous axis, not a switch: two ways of striking, then two
+// ways of sustaining, so it sweeps from a soft hit through a hard one into
+// friction and finally into wind. The four are NODES on that axis — dial one
+// exactly and you get it undiluted, which is what keeps the pluck and hammer
+// tones intact rather than smeared into their neighbours.
+enum ExciterId { EX_HAMMER, EX_PLUCK, EX_BOW, EX_AEOLIAN, EX_COUNT };
+static const char* EX_NAME[EX_COUNT]  = {"HAMMER", "PLUCK", "BOW", "WIND"};
+static const char* EX_SHORT[EX_COUNT] = {"HAM", "PLK", "BOW", "WND"};
+
+static inline void loomExciteWeights(float e, float w[EX_COUNT]) {
+	float p = clamp(e, 0.f, 1.f) * (float)(EX_COUNT - 1);
+	int i0 = clamp((int)p, 0, EX_COUNT - 2);
+	float f = p - (float)i0;
+	for (int k = 0; k < EX_COUNT; k++) w[k] = 0.f;
+	w[i0] = 1.f - f;
+	w[i0 + 1] = f;
+}
 
 enum PatternId {
 	PAT_UP, PAT_DOWN, PAT_UPDOWN, PAT_DOWNUP, PAT_CONVERGE, PAT_DIVERGE,
@@ -130,7 +162,12 @@ struct LoomString {
 
 	// excitation
 	float burst = 0.f, burstLen = 1.f, burstAmp = 0.f;
+	float burstMix = 0.f;                   // 1 = pure hammer shape, 0 = pure pick
 	float excLp = 0.f;
+	float bowLp = 0.f, bowRamp = 0.f;       // bow contact width, and its attack
+	float gustPhase = 0.f;                  // wind does not blow at a constant rate
+	LoomSVF aeo;                            // the narrow band the wind actually drives
+	float brLp = 0.f;                       // what this string sends to the bridge
 	float velocity = 1.f;
 	float pickPos = 0.25f;                  // position this excitation caught it at
 	float sustainTimer = 0.f;               // a bare trigger still bows, briefly
@@ -153,6 +190,8 @@ struct LoomString {
 		burst = 0.f; sustainTimer = 0.f; gateHeld = false;
 		pending = -1.f; loopSig = out = amp = flash = 0.f;
 		dTarget = dSm = 0.f;
+		bowLp = bowRamp = gustPhase = brLp = 0.f;
+		aeo.clear();
 	}
 
 	float tap(float d) const {
@@ -193,7 +232,7 @@ struct Loom : Module {
 	float decayOff[LOOM_N] = {};    // 0..1 → ×0.25 .. ×4 of the global decay
 	float stiff[LOOM_N]    = {};
 	float pickPos[LOOM_N]  = {};    // 0.02 .. 0.5 along the string
-	int   exciter[LOOM_N]  = {};
+	float excite[LOOM_N]   = {};   // 0..1 along the exciter axis
 	float level[LOOM_N]    = {};
 	bool  enabled[LOOM_N]  = {};
 
@@ -280,7 +319,7 @@ struct Loom : Module {
 			decayOff[i] = 0.5f;
 			stiff[i]    = 0.12f;
 			pickPos[i]  = 0.22f;
-			exciter[i]  = EX_PLUCK;
+			excite[i]   = 1.f / 3.f;       // the PLUCK node
 			level[i]    = 0.8f;
 			enabled[i]  = true;
 			str[i].clear();
@@ -330,24 +369,27 @@ struct Loom : Module {
 
 		float pick = paramCV(PICK_PARAM, PICK_CV_INPUT, 0.f, 1.f);
 		float sr = APP->engine->getSampleRate();
-		if (exciter[i] == EX_HAMMER)
-			s.burstLen = sr * (0.0090f - 0.0068f * pick);      // a wide, soft contact
-		else
-			s.burstLen = sr * (0.0026f - 0.0022f * pick);      // a pick is nearly a click
-		s.burstLen = std::max(s.burstLen, 3.f);
-		s.burst    = s.burstLen;
-		// A hammer's energy sits at and below the fundamental, where the loop is
-		// nearly lossless, while a pick's is spread up into the band the loop
-		// filter eats — so matched amplitudes are nowhere near matched loudness.
-		s.burstAmp = s.velocity * (exciter[i] == EX_HAMMER ? 0.14f : 0.7f);
-		s.excLp    = 0.f;
+		float w[EX_COUNT];
+		loomExciteWeights(excite[i], w);
+		float strike = w[EX_HAMMER] + w[EX_PLUCK];     // how much of a hit this is
 
-		// Bow and aeolian are sustained exciters. A bare trigger with no held
-		// gate would otherwise do nothing at all, so it buys a short bow stroke.
-		if (exciter[i] == EX_BOW || exciter[i] == EX_AEOLIAN) {
-			s.sustainTimer = 0.55f;
-			s.burstAmp *= 0.35f;
+		if (strike > 1e-4f) {
+			float hw = w[EX_HAMMER] / strike;          // the hammer's share of it
+			float lenH = sr * (0.0090f - 0.0068f * pick);   // a wide, soft contact
+			float lenP = sr * (0.0026f - 0.0022f * pick);   // a pick is nearly a click
+			s.burstLen = std::max(hw * lenH + (1.f - hw) * lenP, 3.f);
+			s.burst    = s.burstLen;
+			s.burstMix = hw;
+			// A hammer's energy sits at and below the fundamental, where the loop
+			// is nearly lossless, while a pick's is spread up into the band the
+			// loop filter eats — so matched amplitudes are nowhere near matched
+			// loudness, and the crossfade has to interpolate the LEVELS too.
+			s.burstAmp = s.velocity * (hw * 0.14f + (1.f - hw) * 0.7f) * strike;
+			s.excLp    = 0.f;
 		}
+		// Bow and wind are sustained exciters. A bare trigger with no held gate
+		// would otherwise do nothing at all, so it buys a short stroke.
+		if (strike < 0.9999f) s.sustainTimer = 0.55f;
 		s.flash = 1.f;
 	}
 
@@ -448,6 +490,13 @@ struct Loom : Module {
 		float dampC  = clamp(1.f - std::exp(-2.f * (float)M_PI * dampHz / sr), 0.02f, 0.999f);
 		float excHz  = 700.f * std::pow(11000.f / 700.f, pick);
 		float excC   = clamp(1.f - std::exp(-2.f * (float)M_PI * excHz / sr), 0.01f, 1.f);
+		// PICK is the exciter's brightness everywhere: for the bow it is the
+		// contact width, for the wind it is which partial the gusts sit on.
+		float bowHz  = 900.f * std::pow(3200.f / 900.f, pick);
+		float bowC   = clamp(1.f - std::exp(-2.f * (float)M_PI * bowHz / sr), 0.01f, 1.f);
+		float bowAtk = 1.f - std::exp(-args.sampleTime / 0.045f);   // ~45ms to speak
+		float brC    = clamp(1.f - std::exp(-2.f * (float)M_PI * LOOM_BRIDGE_HZ / sr), 0.01f, 1.f);
+		float windBand = 3.f + 5.f * pick;      // which partial the wind excites
 
 		// ── pitch ──────────────────────────────────────────────────────────────
 		float rootSemis = params[ROOT_PARAM].getValue();
@@ -543,6 +592,7 @@ struct Loom : Module {
 				                  - loomOnePoleDelay(dampC, w),
 				                  8.f, (float)LOOM_BUF / 1.62f);
 				if (s.dSm <= 0.f) s.dSm = s.dTarget;
+				s.aeo.set(freq * windBand, 2.5f, sr);
 			}
 			s.dSm += (s.dTarget - s.dSm) * 0.004f;
 			float d = s.dSm;
@@ -564,40 +614,84 @@ struct Loom : Module {
 			// ── excitation ─────────────────────────────────────────────────────
 			float exc = 0.f;
 			bool sustaining = s.gateHeld || s.sustainTimer > 0.f;
+			float exw[EX_COUNT];
+			loomExciteWeights(excite[i], exw);
+
 			if (s.burst > 0.f) {
 				float t = 1.f - s.burst / s.burstLen;
-				float w = 0.5f - 0.5f * std::cos(2.f * (float)M_PI * t);
+				float win = 0.5f - 0.5f * std::cos(2.f * (float)M_PI * t);
 				// A hammer imparts a velocity pulse, which is bipolar — a plain
 				// one-sided bump is a DC step, and a delay loop passes DC at very
 				// nearly unity, so it came out roughly ten times louder than a
 				// pluck and rang on the fundamental for seconds.
-				float raw = (exciter[i] == EX_HAMMER)
-				          ? w * (std::sin(2.f * (float)M_PI * t)
-				                 + 0.12f * (2.f * random::uniform() - 1.f))
-				          : w * (2.f * random::uniform() - 1.f);
+				// The three branches are not just an optimisation: at the pure
+				// nodes they draw exactly as many random numbers as the
+				// single-exciter version did, so a pluck is bit-for-bit the
+				// pluck that was already right.
+				float raw;
+				if (s.burstMix <= 0.f)
+					raw = win * (2.f * random::uniform() - 1.f);
+				else if (s.burstMix >= 1.f)
+					raw = win * (std::sin(2.f * (float)M_PI * t)
+					             + 0.12f * (2.f * random::uniform() - 1.f));
+				else {
+					float ham = win * (std::sin(2.f * (float)M_PI * t)
+					                   + 0.12f * (2.f * random::uniform() - 1.f));
+					float plk = win * (2.f * random::uniform() - 1.f);
+					raw = s.burstMix * ham + (1.f - s.burstMix) * plk;
+				}
 				s.excLp += excC * (raw - s.excLp);
 				exc = s.excLp * s.burstAmp;
 				s.burst -= 1.f;
 			}
-			else if (sustaining && exciter[i] == EX_BOW) {
+
+			if (sustaining && exw[EX_BOW] > 1e-4f) {
 				// Smith's friction curve. The string sticks to the bow until the
 				// relative velocity is large enough to slip, and it is that
 				// stick-slip alternation — not the steady force — that sustains
-				// the tone, so the drive has to be strong enough to keep winning
-				// against the loop loss.
-				// These four numbers are not free: a shallow curve (a large
-				// offset) or a weak drive settles at a stable DC operating point
-				// and makes no sound at all, and the wrong balance locks the
-				// string into its sub-octave. Swept against the real loop.
-				float vd = (0.12f + 0.26f * s.velocity) - v * 12.f;
+				// the tone. The four constants were swept against the real loop:
+				// a shallow curve or a weak drive settles at a stable DC
+				// operating point and makes no sound at all, and the wrong
+				// balance locks the string into its sub-octave.
+				s.bowRamp += (1.f - s.bowRamp) * bowAtk;    // bows do not start instantly
+				// Bow speed sets how LOUD, not whether it speaks: the drive stays
+				// above the threshold at every velocity and the level is scaled
+				// after the loop instead. A drive that scaled with velocity left
+				// gentle bowing silent.
+				// The hair noise is not decoration. Without it the string locks
+				// into its sub-octave at the top of the range — a real bifurcation,
+				// insensitive to drive level — and real bow hair is not uniform.
+				float vd = (0.38f + 0.16f * s.velocity) * s.bowRamp
+				         - v * LOOM_BOW_FEEDBACK
+				         + LOOM_BOW_HAIR * (2.f * random::uniform() - 1.f);
 				float a = std::fabs(vd) + 0.35f;
 				float a2 = a * a;
 				float ff = vd / (a2 * a2);
-				exc = clamp(ff, -0.9f, 0.9f) * (0.14f + 0.05f * pick);
+				// A soft knee, not a clamp. The curve peaks near 2.5 and the old
+				// hard limit at 0.9 was active most of the cycle, so the limit
+				// cycle was being squared off — and a square wave IS the harshness.
+				ff = LOOM_BOW_SAT * ff / (LOOM_BOW_SAT + std::fabs(ff));
+				// Finite bow width: the force is a spatial average over the hair
+				// in contact, which is a lowpass. Without it the string is driven
+				// broadband and screams.
+				s.bowLp += bowC * (ff - s.bowLp);
+				exc += s.bowLp * LOOM_BOW_DRIVE * (0.35f + 0.65f * s.velocity) * exw[EX_BOW];
 			}
-			else if (sustaining && exciter[i] == EX_AEOLIAN) {
-				s.excLp += excC * ((2.f * random::uniform() - 1.f) - s.excLp);
-				exc = s.excLp * 0.11f * s.velocity;
+			else s.bowRamp *= 0.9995f;
+
+			if (sustaining && exw[EX_AEOLIAN] > 1e-4f) {
+				// Wind, not hiss. An aeolian harp is played by vortices shedding
+				// off the string, which drive a NARROW band — and the instrument
+				// sings on the string's upper partials, which is why it sounds
+				// like a flute rather than a bowed string. Feeding it broadband
+				// noise, as the first version did, is just noise through a comb.
+				s.gustPhase += args.sampleTime;
+				float gust = 0.55f + 0.45f
+				           * std::sin(2.f * (float)M_PI * 0.23f * s.gustPhase)
+				           * std::sin(2.f * (float)M_PI * 0.081f * s.gustPhase);
+				float n = 2.f * random::uniform() - 1.f;
+				exc += s.aeo.bandpass(n) * LOOM_WIND_DRIVE * s.velocity * gust
+				       * exw[EX_AEOLIAN];
 			}
 
 			// ── the loop ───────────────────────────────────────────────────────
@@ -619,8 +713,18 @@ struct Loom : Module {
 			// keeping eight resonators with a loop gain of 0.999 from howling
 			// the moment they are joined. Injecting without the matching loss
 			// has no stable setting: it is inaudible until it runs away.
-			float k = coupAmt * coupAmt * 0.35f;
-			x = x * (1.f - k) + k * couplePrev;
+			// What this string sends to the bridge. A real bridge passes lows
+			// far better than highs, and making the transmission band-limited is
+			// what stops COUPLE reading as a plain dampener: the string gives up
+			// its low end and keeps its brightness.
+			s.brLp += brC * (v - s.brLp);
+			// Sympathetic exchange through the bridge. Subtracting exactly what
+			// this string contributed and adding back the bank's mean means the
+			// in-phase mode is preserved (gain 1) while everything else is damped
+			// only in the transmitted band — so it is unconditionally stable
+			// without costing the sustain across the whole spectrum.
+			float k = coupAmt * coupAmt * LOOM_COUPLE_MAX;
+			x += k * (couplePrev - s.brLp);
 			x += exc;
 
 			if (x > 1.6f) x = 1.6f; else if (x < -1.6f) x = -1.6f;
@@ -630,7 +734,7 @@ struct Loom : Module {
 			// ── mix ────────────────────────────────────────────────────────────
 			float y = s.out * level[i];
 			bridge += y;
-			motion += s.loopSig;
+			motion += s.brLp;
 
 			float p = ((float)i / (float)(LOOM_N - 1) * 2.f - 1.f) * stereoWidth;
 			float th = (p + 1.f) * (float)M_PI_4;
@@ -659,10 +763,10 @@ struct Loom : Module {
 		// into eight high-Q strings guarantees a howl at the body's own pitches.
 		// The bus carries the MEAN string motion, so a string's own share of it
 		// is 1/8 and cannot outweigh the (1 − k) it gave up to be there.
+		// Already band-limited per string, so the bus only needs the DC guard.
 		float cin = motion / (float)LOOM_N;
-		coupleLp += 0.35f * (cin - coupleLp);
-		float cdy = coupleLp - coupleDcX + 0.9993f * coupleDcY;
-		coupleDcX = coupleLp; coupleDcY = cdy;
+		float cdy = cin - coupleDcX + 0.9993f * coupleDcY;
+		coupleDcX = cin; coupleDcY = cdy;
 		coupleBus = clamp(cdy, -3.f, 3.f);
 
 		float wetL = mixL + bodyOut * bodyAmt;
@@ -707,7 +811,7 @@ struct Loom : Module {
 			json_object_set_new(s, "decay", json_real(decayOff[i]));
 			json_object_set_new(s, "stiff", json_real(stiff[i]));
 			json_object_set_new(s, "pos", json_real(pickPos[i]));
-			json_object_set_new(s, "exciter", json_integer(exciter[i]));
+			json_object_set_new(s, "excite", json_real(excite[i]));
 			json_object_set_new(s, "level", json_real(level[i]));
 			json_object_set_new(s, "enabled", json_boolean(enabled[i]));
 			json_array_append_new(sa, s);
@@ -733,8 +837,8 @@ struct Loom : Module {
 			if (json_t* j = json_object_get(s, "decay")) decayOff[i] = json_number_value(j);
 			if (json_t* j = json_object_get(s, "stiff")) stiff[i] = json_number_value(j);
 			if (json_t* j = json_object_get(s, "pos")) pickPos[i] = json_number_value(j);
-			if (json_t* j = json_object_get(s, "exciter"))
-				exciter[i] = clamp((int)json_integer_value(j), 0, EX_COUNT - 1);
+			if (json_t* j = json_object_get(s, "excite"))
+				excite[i] = clamp((float)json_number_value(j), 0.f, 1.f);
 			if (json_t* j = json_object_get(s, "level")) level[i] = json_number_value(j);
 			if (json_t* j = json_object_get(s, "enabled")) enabled[i] = json_boolean_value(j);
 		}
@@ -798,7 +902,7 @@ struct LoomDisplay : OpaqueWidget {
 			case 2: return module->decayOff[i];
 			case 3: return module->stiff[i];
 			case 4: return (module->pickPos[i] - 0.02f) / 0.48f;
-			case 5: return ((float)module->exciter[i] + 0.5f) / (float)EX_COUNT;
+			case 5: return module->excite[i];
 			case 6: return module->level[i];
 		}
 		return 0.f;
@@ -813,7 +917,7 @@ struct LoomDisplay : OpaqueWidget {
 			case 2: module->decayOff[i] = v; break;
 			case 3: module->stiff[i] = v; break;
 			case 4: module->pickPos[i] = 0.02f + v * 0.48f; break;
-			case 5: module->exciter[i] = clamp((int)(v * EX_COUNT), 0, EX_COUNT - 1); break;
+			case 5: module->excite[i] = v; break;
 			case 6: module->level[i] = v; break;
 		}
 	}
@@ -824,7 +928,17 @@ struct LoomDisplay : OpaqueWidget {
 			case 2: return string::f("%.0f%%", module->decayOff[i] * 100.f);
 			case 3: return string::f("%.0f%%", module->stiff[i] * 100.f);
 			case 4: return string::f("%.0f%%", module->pickPos[i] * 200.f);
-			case 5: return EX_SHORT[module->exciter[i]];
+			case 5: {
+				float w[EX_COUNT];
+				loomExciteWeights(module->excite[i], w);
+				int a = -1, b = -1;
+				for (int k = 0; k < EX_COUNT; k++)
+					if (w[k] > 0.f) { if (a < 0) a = k; else b = k; }
+				if (a < 0) return "";
+				if (b < 0 || w[b] < 0.10f) return EX_SHORT[a];
+				if (w[a] < 0.10f) return EX_SHORT[b];
+				return std::string(EX_SHORT[a]) + "\u00b7" + EX_SHORT[b];
+			}
 			case 6: return string::f("%.0f%%", module->level[i] * 100.f);
 		}
 		// PLAY and TUNE both want to know what note the string is
@@ -1063,7 +1177,7 @@ struct LoomDisplay : OpaqueWidget {
 		nvgFontSize(vg, L.h * 0.052f);
 		nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 		for (int e = 0; e < EX_COUNT; e++) {
-			float y = L.bridgeY - span * ((float)e + 0.5f) / (float)EX_COUNT;
+			float y = L.bridgeY - span * (float)e / (float)(EX_COUNT - 1);
 			nvgBeginPath(vg);
 			nvgMoveTo(vg, L.w * 0.030f, y + L.h * 0.035f);
 			nvgLineTo(vg, L.w * 0.125f, y + L.h * 0.035f);
