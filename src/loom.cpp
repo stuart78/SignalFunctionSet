@@ -1,0 +1,1294 @@
+#include "plugin.hpp"
+#include "panel-style.hpp"
+#include "scales.hpp"
+#include <cmath>
+#include <cstring>
+#include <atomic>
+#include <string>
+
+// =============================================================================
+// Loom — an eight-string resonator.
+//
+// Eight vertical strings stretched on one frame. Each is a digital waveguide:
+// a delay loop whose length sets the pitch, a lowpass in the loop that eats the
+// treble first (as a real string does), a chain of allpasses that make the
+// partials stretch sharp (stiffness), and a comb on the output tap that puts
+// the notch where the string was plucked.
+//
+// What makes it ONE instrument rather than eight voices is the bridge. Every
+// string's output sums into a shared bridge bus, and a fraction of that bus is
+// fed back into every OTHER string's loop — so striking one string sets its
+// undamped neighbours ringing. That is the COUPLE control, and it is the whole
+// difference between a loom and eight separate strings on eight separate
+// frames. The body is a bank of modal resonances hung on the same bus.
+//
+// The display IS the instrument: in the PLAY tab the mouse strums across the
+// strings, and mouse Y picks where along the string you caught it. The other
+// tabs edit one attribute per string by height, the same idiom Beat uses.
+// =============================================================================
+
+static const int LOOM_N    = 8;
+static const int LOOM_BUF  = 16384;          // ≥ 1.6× the longest loop we allow
+static const int LOOM_MASK = LOOM_BUF - 1;
+static const int LOOM_AP   = 4;              // dispersion sections per string
+// Set from measurement, not arithmetic: this puts an ordinary pluck near 4V
+// and a full strum near 5V. Eight strings bowed at once still runs into the
+// rail, which is correct — that is eight self-oscillators, not eight notes.
+static const float LOOM_OUT_GAIN = 12.f;
+
+// Strings are tuned, not quantized — a harp is tuned to a chord. The range
+// covers five octaves so the bank can span an instrument rather than a chord.
+static const float LOOM_TUNE_MIN = -24.f;
+static const float LOOM_TUNE_MAX =  36.f;
+
+enum ExciterId { EX_PLUCK, EX_HAMMER, EX_BOW, EX_AEOLIAN, EX_COUNT };
+static const char* EX_NAME[EX_COUNT]  = {"PLUCK", "HAMMER", "BOW", "AEOLIAN"};
+static const char* EX_SHORT[EX_COUNT] = {"PLK", "HAM", "BOW", "AEO"};
+
+enum PatternId {
+	PAT_UP, PAT_DOWN, PAT_UPDOWN, PAT_DOWNUP, PAT_CONVERGE, PAT_DIVERGE,
+	PAT_THUMB, PAT_PAIRS, PAT_SKIP, PAT_RANDOM, PAT_WALK, PAT_STRUM, PAT_COUNT
+};
+static const char* PAT_NAME[PAT_COUNT] = {
+	"Up", "Down", "Up-down", "Down-up", "Converge", "Diverge",
+	"Thumb", "Pairs", "Skip 3", "Random", "Walk", "Strum"
+};
+
+struct LoomTuning { const char* name; float semis[LOOM_N]; };
+static const LoomTuning LOOM_TUNINGS[] = {
+	{"Major pentatonic", {0,  2,  4,  7,  9, 12, 14, 16}},
+	{"Minor pentatonic", {0,  3,  5,  7, 10, 12, 15, 17}},
+	{"Major scale",      {0,  2,  4,  5,  7,  9, 11, 12}},
+	{"Natural minor",    {0,  2,  3,  5,  7,  8, 10, 12}},
+	{"Dorian",           {0,  2,  3,  5,  7,  9, 10, 12}},
+	{"Major triad",      {0,  4,  7, 12, 16, 19, 24, 28}},
+	{"Minor seventh",    {0,  3,  7, 10, 12, 15, 19, 22}},
+	{"Fourths & fifths", {0,  5,  7, 12, 17, 19, 24, 29}},
+	{"Octaves",          {0,  0, 12, 12, 24, 24, 36, 36}},
+	{"Unison",           {0,  0,  0,  0,  0,  0,  0,  0}},
+	{"Harmonic series",  {0, 12, 19, 24, 28, 31, 34, 36}},
+	{"Whole tone",       {0,  2,  4,  6,  8, 10, 12, 14}},
+	{"Chromatic",        {0,  1,  2,  3,  4,  5,  6,  7}},
+};
+static const int LOOM_NTUNINGS = (int)(sizeof(LOOM_TUNINGS) / sizeof(LOOM_TUNINGS[0]));
+
+static const char* LOOM_NOTES[12] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+
+static std::string loomNoteName(float semisFromC4) {
+	int s = (int)std::round(semisFromC4);
+	int oct = 4 + (int)std::floor(s / 12.f);
+	int pc = ((s % 12) + 12) % 12;
+	return std::string(LOOM_NOTES[pc]) + std::to_string(oct);
+}
+
+// The loop's filters delay the signal as well as shaping it, and that delay is
+// part of the pitch. Estimating it at DC leaves the string measurably sharp —
+// and sharper the higher it is tuned, because the error is a fixed number of
+// samples against a shrinking period. So both are evaluated exactly, at the
+// string's own fundamental, and subtracted from the delay line.
+static inline float loomAllpassDelay(float a, float w) {
+	float cw = std::cos(w), sw = std::sin(w);
+	float argN = std::atan2(-sw, a + cw);
+	float argD = std::atan2(-a * sw, 1.f + a * cw);
+	return -(argN - argD) / w;
+}
+static inline float loomOnePoleDelay(float c, float w) {
+	float b = 1.f - c;
+	return std::atan2(b * std::sin(w), 1.f - b * std::cos(w)) / w;
+}
+
+// ── a two-pole state-variable filter, used for the body resonances ──────────
+struct LoomSVF {
+	float ic1 = 0.f, ic2 = 0.f;
+	float a1 = 0.f, a2 = 0.f, a3 = 0.f;
+	void set(float freq, float q, float sr) {
+		float g = std::tan((float)M_PI * clamp(freq, 20.f, sr * 0.45f) / sr);
+		float k = 1.f / std::max(q, 0.5f);
+		a1 = 1.f / (1.f + g * (g + k));
+		a2 = g * a1;
+		a3 = g * a2;
+	}
+	float bandpass(float v0) {
+		float v3 = v0 - ic2;
+		float v1 = a1 * ic1 + a2 * v3;
+		float v2 = ic2 + a2 * ic1 + a3 * v3;
+		ic1 = 2.f * v1 - ic1;
+		ic2 = 2.f * v2 - ic2;
+		return v1;
+	}
+	void clear() { ic1 = ic2 = 0.f; }
+};
+
+// ── one string ──────────────────────────────────────────────────────────────
+struct LoomString {
+	float buf[LOOM_BUF] = {};
+	int   wi = 0;
+
+	float lp = 0.f;                         // loop lowpass (treble loss)
+	float apX[LOOM_AP] = {}, apY[LOOM_AP] = {};
+	float dcX = 0.f, dcY = 0.f;             // DC blocker, INSIDE the loop
+
+	// excitation
+	float burst = 0.f, burstLen = 1.f, burstAmp = 0.f;
+	float excLp = 0.f;
+	float velocity = 1.f;
+	float pickPos = 0.25f;                  // position this excitation caught it at
+	float sustainTimer = 0.f;               // a bare trigger still bows, briefly
+	bool  gateHeld = false;
+
+	// strum scheduling
+	float pending = -1.f, pendVel = 1.f, pendPos = -1.f;
+
+	float dTarget = 0.f, dSm = 0.f;         // delay-line length, and its glide
+	float loopSig = 0.f;                    // what the string itself is doing
+	float out = 0.f;                        // what the pickup hears
+	float amp = 0.f, flash = 0.f;           // display only
+	float wobble = 0.f;
+
+	void clear() {
+		std::memset(buf, 0, sizeof(buf));
+		wi = 0; lp = 0.f; dcX = dcY = 0.f; excLp = 0.f;
+		std::memset(apX, 0, sizeof(apX));
+		std::memset(apY, 0, sizeof(apY));
+		burst = 0.f; sustainTimer = 0.f; gateHeld = false;
+		pending = -1.f; loopSig = out = amp = flash = 0.f;
+		dTarget = dSm = 0.f;
+	}
+
+	float tap(float d) const {
+		float rp = (float)wi - d;
+		while (rp < 0.f) rp += (float)LOOM_BUF;
+		int i0 = (int)rp;
+		float fr = rp - (float)i0;
+		return buf[i0 & LOOM_MASK] * (1.f - fr) + buf[(i0 + 1) & LOOM_MASK] * fr;
+	}
+};
+
+struct Loom : Module {
+	enum ParamId {
+		BODY_PARAM, COUPLE_PARAM, DECAY_PARAM, DAMP_PARAM, PICK_PARAM, SPREAD_PARAM,
+		ROOT_PARAM, OCT_PARAM,
+		PATTERN_PARAM, DENSITY_PARAM,
+		AUTO_PARAM, RESET_PARAM,
+		PARAMS_LEN
+	};
+	enum InputId {
+		BODY_CV_INPUT, COUPLE_CV_INPUT, DECAY_CV_INPUT, DAMP_CV_INPUT,
+		PICK_CV_INPUT, SPREAD_CV_INPUT,
+		ROOT_CV_INPUT, OCT_CV_INPUT,
+		VOCT_INPUT, GATE_INPUT, VEL_INPUT,
+		CLOCK_INPUT, RESET_INPUT, PATTERN_CV_INPUT, DENSITY_CV_INPUT,
+		ENUMS(STRING_GATE_INPUT, LOOM_N),
+		INPUTS_LEN
+	};
+	enum OutputId {
+		MIX_L_OUTPUT, MIX_R_OUTPUT,
+		ENUMS(STRING_OUTPUT, LOOM_N),
+		OUTPUTS_LEN
+	};
+	enum LightId { AUTO_LIGHT, LIGHTS_LEN };
+
+	// ── per-string attributes: screen-edited, so plain state + JSON (as Beat) ──
+	float tune[LOOM_N]     = {};
+	float decayOff[LOOM_N] = {};    // 0..1 → ×0.25 .. ×4 of the global decay
+	float stiff[LOOM_N]    = {};
+	float pickPos[LOOM_N]  = {};    // 0.02 .. 0.5 along the string
+	int   exciter[LOOM_N]  = {};
+	float level[LOOM_N]    = {};
+	bool  enabled[LOOM_N]  = {};
+
+	LoomString str[LOOM_N];
+	// A string's delay line is 64kB, so the GUI never memsets one itself — it
+	// asks, and the audio thread does it between samples.
+	bool clearReq[LOOM_N] = {};
+
+	// body: a soundboard's first modes, plus a broad air resonance
+	static const int NBODY = 5;
+	LoomSVF body[NBODY];
+	float bodyFreq[NBODY] = {104.f, 217.f, 396.f, 731.f, 2380.f};
+	float bodyQ[NBODY]    = {  7.f,   9.f,  10.f,   8.f,    3.f};
+	float bodyW[NBODY]    = {1.00f, 0.78f, 0.62f, 0.45f, 0.30f};
+	float bodySr = 0.f;
+	float coupleLp = 0.f, coupleDcX = 0.f, coupleDcY = 0.f;
+
+	// ── UI / options ───────────────────────────────────────────────────────────
+	int   tab = 0;                  // 0 = PLAY, then TUNE DECAY STIFF POS EXCITE LEVEL
+	int   quantScale = -1;          // -1 = free tuning; else index into sfs::SCALES
+	float stereoWidth = 0.6f;
+	int   mouseMode = 0;            // 0 = hover strums, 1 = click-drag only
+	float internalHz = 6.f;         // auto-play fallback when CLOCK is unpatched
+
+	// ── play state ─────────────────────────────────────────────────────────────
+	dsp::SchmittTrigger gateTrig, clockTrig, resetTrig, resetBtnTrig;
+	dsp::SchmittTrigger strTrig[LOOM_N];
+	int   autoIdx = 0, autoWalk = 0;
+	int   geomCount = 0;
+	float intPhase = 0.f;
+
+	Loom() {
+		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
+
+		configParam(BODY_PARAM,   0.f, 1.f, 0.45f, "Body resonance", "%", 0.f, 100.f);
+		configParam(COUPLE_PARAM, 0.f, 1.f, 0.35f, "Sympathetic coupling", "%", 0.f, 100.f);
+		configParam(DECAY_PARAM,  0.15f, 20.f, 3.5f, "Decay", " s");
+		configParam(DAMP_PARAM,   0.f, 1.f, 0.55f, "Damping (treble loss)", "%", 0.f, 100.f);
+		configParam(PICK_PARAM,   0.f, 1.f, 0.5f, "Pick hardness", "%", 0.f, 100.f);
+		configParam(SPREAD_PARAM, -1.f, 1.f, 0.35f, "Strum spread (− up / + down)", "%", 0.f, 100.f);
+
+		configParam(ROOT_PARAM, -12.f, 12.f, 0.f, "Root", " semitones");
+		getParamQuantity(ROOT_PARAM)->snapEnabled = true;
+		configParam(OCT_PARAM, -4.f, 3.f, -2.f, "Octave");
+		getParamQuantity(OCT_PARAM)->snapEnabled = true;
+
+		configSwitch(PATTERN_PARAM, 0.f, (float)(PAT_COUNT - 1), 0.f, "Auto pattern",
+		             {PAT_NAME[0], PAT_NAME[1], PAT_NAME[2], PAT_NAME[3], PAT_NAME[4],
+		              PAT_NAME[5], PAT_NAME[6], PAT_NAME[7], PAT_NAME[8], PAT_NAME[9],
+		              PAT_NAME[10], PAT_NAME[11]});
+		configParam(DENSITY_PARAM, 0.f, 1.f, 1.f, "Auto density", "%", 0.f, 100.f);
+		configSwitch(AUTO_PARAM, 0.f, 1.f, 0.f, "Auto play", {"Off", "On"});
+		configButton(RESET_PARAM, "Reset auto pattern");
+
+		configInput(BODY_CV_INPUT,   "Body CV (±5V)");
+		configInput(COUPLE_CV_INPUT, "Coupling CV (±5V)");
+		configInput(DECAY_CV_INPUT,  "Decay CV (±5V)");
+		configInput(DAMP_CV_INPUT,   "Damping CV (±5V)");
+		configInput(PICK_CV_INPUT,   "Pick hardness CV (±5V)");
+		configInput(SPREAD_CV_INPUT, "Strum spread CV (±5V)");
+		configInput(ROOT_CV_INPUT,   "Root CV (1V/oct, semitone-quantized)");
+		configInput(OCT_CV_INPUT,    "Octave CV (1V per octave)");
+		configInput(VOCT_INPUT,      "V/oct — transposes the whole loom");
+		configInput(GATE_INPUT,      "Gate — strums every enabled string");
+		configInput(VEL_INPUT,       "Velocity (0–10V, polyphonic: channel N → string N)");
+		configInput(CLOCK_INPUT,     "Clock — advances the auto pattern");
+		configInput(RESET_INPUT,     "Reset the auto pattern");
+		configInput(PATTERN_CV_INPUT, "Auto pattern CV (1V per pattern)");
+		configInput(DENSITY_CV_INPUT, "Auto density CV (±5V)");
+
+		configOutput(MIX_L_OUTPUT, "Mix left");
+		configOutput(MIX_R_OUTPUT, "Mix right");
+		for (int i = 0; i < LOOM_N; i++) {
+			configInput(STRING_GATE_INPUT + i, string::f("String %d gate", i + 1));
+			configOutput(STRING_OUTPUT + i, string::f("String %d audio", i + 1));
+		}
+
+		resetStrings();
+	}
+
+	void resetStrings() {
+		applyTuning(0);
+		for (int i = 0; i < LOOM_N; i++) {
+			decayOff[i] = 0.5f;
+			stiff[i]    = 0.12f;
+			pickPos[i]  = 0.22f;
+			exciter[i]  = EX_PLUCK;
+			level[i]    = 0.8f;
+			enabled[i]  = true;
+			str[i].clear();
+		}
+	}
+
+	void applyTuning(int t) {
+		t = clamp(t, 0, LOOM_NTUNINGS - 1);
+		for (int i = 0; i < LOOM_N; i++)
+			tune[i] = LOOM_TUNINGS[t].semis[i];
+	}
+
+	void onReset() override {
+		resetStrings();
+		tab = 0; quantScale = -1; stereoWidth = 0.6f; mouseMode = 0; internalHz = 6.f;
+		autoIdx = autoWalk = 0; intPhase = 0.f;
+		for (int k = 0; k < NBODY; k++) body[k].clear();
+		coupleLp = coupleDcX = coupleDcY = 0.f;
+	}
+
+	void onSampleRateChange() override {
+		bodySr = 0.f;                        // forces the body bank to re-tune
+		for (int i = 0; i < LOOM_N; i++) str[i].clear();
+	}
+
+	// A string is TUNED, not quantized — but the menu can snap it to a scale.
+	float tuneOf(int i) const {
+		if (quantScale < 0 || quantScale >= sfs::NUM_SCALES) return tune[i];
+		const sfs::Scale& sc = sfs::SCALES[quantScale];
+		float best = tune[i], bestD = 1e9f;
+		for (int oct = -3; oct <= 4; oct++) {
+			for (int d = 0; d < sc.size; d++) {
+				float cand = sc.intervals[d] + 12.f * oct;
+				float dist = std::fabs(cand - tune[i]);
+				if (dist < bestD) { bestD = dist; best = cand; }
+			}
+		}
+		return best;
+	}
+
+	// ── excitation ─────────────────────────────────────────────────────────────
+	void pluck(int i, float vel, float posOverride) {
+		if (i < 0 || i >= LOOM_N || !enabled[i]) return;
+		LoomString& s = str[i];
+		s.velocity = clamp(vel, 0.03f, 1.f);
+		s.pickPos  = posOverride > 0.f ? clamp(posOverride, 0.02f, 0.5f) : pickPos[i];
+
+		float pick = paramCV(PICK_PARAM, PICK_CV_INPUT, 0.f, 1.f);
+		float sr = APP->engine->getSampleRate();
+		if (exciter[i] == EX_HAMMER)
+			s.burstLen = sr * (0.0090f - 0.0068f * pick);      // a wide, soft contact
+		else
+			s.burstLen = sr * (0.0026f - 0.0022f * pick);      // a pick is nearly a click
+		s.burstLen = std::max(s.burstLen, 3.f);
+		s.burst    = s.burstLen;
+		// A hammer's energy sits at and below the fundamental, where the loop is
+		// nearly lossless, while a pick's is spread up into the band the loop
+		// filter eats — so matched amplitudes are nowhere near matched loudness.
+		s.burstAmp = s.velocity * (exciter[i] == EX_HAMMER ? 0.14f : 0.7f);
+		s.excLp    = 0.f;
+
+		// Bow and aeolian are sustained exciters. A bare trigger with no held
+		// gate would otherwise do nothing at all, so it buys a short bow stroke.
+		if (exciter[i] == EX_BOW || exciter[i] == EX_AEOLIAN) {
+			s.sustainTimer = 0.55f;
+			s.burstAmp *= 0.35f;
+		}
+		s.flash = 1.f;
+	}
+
+	void strum(float vel, float posOverride) {
+		float spread = paramCV(SPREAD_PARAM, SPREAD_CV_INPUT, -1.f, 1.f);
+		float total = std::fabs(spread) * 0.28f;              // seconds nut-to-nut
+		for (int i = 0; i < LOOM_N; i++) {
+			if (!enabled[i]) continue;
+			int k = (spread >= 0.f) ? i : (LOOM_N - 1 - i);
+			str[i].pending = total * (float)k / (float)(LOOM_N - 1);
+			str[i].pendVel = vel * velFor(i);
+			str[i].pendPos = posOverride;
+			if (str[i].pending <= 0.f) {
+				str[i].pending = -1.f;
+				pluck(i, str[i].pendVel, posOverride);
+			}
+		}
+	}
+
+	float velFor(int i) {
+		if (!inputs[VEL_INPUT].isConnected()) return 1.f;
+		return clamp(inputs[VEL_INPUT].getPolyVoltage(i) / 10.f, 0.03f, 1.f);
+	}
+
+	float paramCV(int p, int in, float lo, float hi) {
+		float v = params[p].getValue();
+		if (in >= 0 && inputs[in].isConnected())
+			v += inputs[in].getVoltage() / 5.f * (hi - lo) * 0.5f;
+		return clamp(v, lo, hi);
+	}
+
+	// ── auto play ──────────────────────────────────────────────────────────────
+	void autoStep() {
+		int list[LOOM_N], n = 0;
+		for (int i = 0; i < LOOM_N; i++)
+			if (enabled[i]) list[n++] = i;
+		if (n == 0) return;
+
+		int pat = (int)std::round(params[PATTERN_PARAM].getValue()
+		                          + inputs[PATTERN_CV_INPUT].getVoltage());
+		pat = clamp(pat, 0, PAT_COUNT - 1);
+
+		float density = paramCV(DENSITY_PARAM, DENSITY_CV_INPUT, 0.f, 1.f);
+		float vel = clamp(0.82f + 0.14f * (2.f * random::uniform() - 1.f), 0.1f, 1.f);
+
+		if (pat == PAT_STRUM) {
+			if (random::uniform() <= density) strum(vel, -1.f);
+			return;
+		}
+
+		int sel = 0;
+		int period = (n > 1) ? 2 * n - 2 : 1;
+		switch (pat) {
+			case PAT_UP:       sel = autoIdx % n; break;
+			case PAT_DOWN:     sel = n - 1 - (autoIdx % n); break;
+			case PAT_UPDOWN:   { int p = autoIdx % period; sel = (p < n) ? p : period - p; } break;
+			case PAT_DOWNUP:   { int p = autoIdx % period; int q = (p < n) ? p : period - p;
+			                     sel = n - 1 - q; } break;
+			case PAT_CONVERGE: { int p = autoIdx % n; sel = (p % 2 == 0) ? p / 2 : n - 1 - p / 2; } break;
+			case PAT_DIVERGE:  { int p = autoIdx % n; int c = n / 2;
+			                     sel = (p % 2 == 0) ? c + p / 2 : c - 1 - p / 2; } break;
+			case PAT_THUMB:    sel = (autoIdx % 2 == 0) ? 0
+			                       : 1 + ((autoIdx / 2) % std::max(1, n - 1)); break;
+			case PAT_PAIRS:    { int p = autoIdx % n;
+			                     sel = (p % 2 == 0) ? p / 2 : (p / 2 + n / 2) % n; } break;
+			case PAT_SKIP:     sel = (autoIdx * 3) % n; break;
+			case PAT_RANDOM:   sel = (int)(random::uniform() * n); break;
+			case PAT_WALK:     autoWalk += (random::uniform() < 0.5f) ? -1 : 1;
+			                   if (autoWalk < 0) autoWalk = std::min(1, n - 1);
+			                   if (autoWalk >= n) autoWalk = std::max(0, n - 2);
+			                   sel = autoWalk; break;
+		}
+		autoIdx = (autoIdx + 1) & 0xFFFFF;
+		sel = clamp(sel, 0, n - 1);
+		if (random::uniform() <= density) pluck(list[sel], vel, -1.f);
+	}
+
+	void process(const ProcessArgs& args) override {
+		const float sr = args.sampleRate;
+
+		if (bodySr != sr) {
+			for (int k = 0; k < NBODY; k++) body[k].set(bodyFreq[k], bodyQ[k], sr);
+			bodySr = sr;
+		}
+
+		// ── global controls ────────────────────────────────────────────────────
+		float bodyAmt = paramCV(BODY_PARAM,   BODY_CV_INPUT,   0.f, 1.f);
+		float coupAmt = paramCV(COUPLE_PARAM, COUPLE_CV_INPUT, 0.f, 1.f);
+		float dampAmt = paramCV(DAMP_PARAM,   DAMP_CV_INPUT,   0.f, 1.f);
+		float pick    = paramCV(PICK_PARAM,   PICK_CV_INPUT,   0.f, 1.f);
+		float decaySec = params[DECAY_PARAM].getValue();
+		if (inputs[DECAY_CV_INPUT].isConnected())
+			decaySec *= std::pow(2.f, inputs[DECAY_CV_INPUT].getVoltage() / 5.f);
+		decaySec = clamp(decaySec, 0.05f, 40.f);
+
+		// Loop lowpass: 0 = dark and short-lived treble, 1 = wire-bright.
+		float dampHz = 420.f * std::pow(11500.f / 420.f, dampAmt);
+		float dampC  = clamp(1.f - std::exp(-2.f * (float)M_PI * dampHz / sr), 0.02f, 0.999f);
+		float excHz  = 700.f * std::pow(11000.f / 700.f, pick);
+		float excC   = clamp(1.f - std::exp(-2.f * (float)M_PI * excHz / sr), 0.01f, 1.f);
+
+		// ── pitch ──────────────────────────────────────────────────────────────
+		float rootSemis = params[ROOT_PARAM].getValue();
+		if (inputs[ROOT_CV_INPUT].isConnected())
+			rootSemis += std::round(inputs[ROOT_CV_INPUT].getVoltage() * 12.f);
+		float oct = params[OCT_PARAM].getValue();
+		if (inputs[OCT_CV_INPUT].isConnected()) oct += inputs[OCT_CV_INPUT].getVoltage();
+		float basePitch = oct + rootSemis / 12.f + inputs[VOCT_INPUT].getVoltage();
+
+		// ── triggers ───────────────────────────────────────────────────────────
+		if (resetTrig.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f)
+		    || resetBtnTrig.process(params[RESET_PARAM].getValue() > 0.5f ? 10.f : 0.f, 0.1f, 1.f)) {
+			autoIdx = 0; autoWalk = 0; intPhase = 0.f;
+		}
+
+		bool globalGate = inputs[GATE_INPUT].getVoltage() >= 1.f;
+		if (gateTrig.process(inputs[GATE_INPUT].getVoltage(), 0.1f, 1.f))
+			strum(1.f, -1.f);
+
+		bool autoOn = params[AUTO_PARAM].getValue() > 0.5f;
+		lights[AUTO_LIGHT].setBrightness(autoOn ? 1.f : 0.f);
+		if (autoOn) {
+			bool tick = false;
+			if (inputs[CLOCK_INPUT].isConnected()) {
+				tick = clockTrig.process(inputs[CLOCK_INPUT].getVoltage(), 0.1f, 1.f);
+			}
+			else {
+				intPhase += args.sampleTime * internalHz;
+				if (intPhase >= 1.f) { intPhase -= 1.f; tick = true; }
+			}
+			if (tick) autoStep();
+		}
+
+		// Mouse plucks land on the GUI thread; drain them here so a strum never
+		// tries to touch the delay lines mid-sample.
+		int mqr = mouseQueueRead.load(std::memory_order_relaxed);
+		while (mqr != mouseQueueWrite.load(std::memory_order_acquire)) {
+			MouseHit h = mouseQueue[mqr];
+			mqr = (mqr + 1) % MOUSE_Q;
+			mouseQueueRead.store(mqr, std::memory_order_release);
+			pluck(h.string, h.vel, h.pos);
+		}
+
+		// ── per-string voice ───────────────────────────────────────────────────
+		float bridge = 0.f;
+		float couplePrev = coupleBus;               // last sample's bus: the delay
+		                                            // is what keeps this stable
+		float mixL = 0.f, mixR = 0.f;
+		// What the bridge feels is the string's MOTION, not what the pickup
+		// hears: the pickup signal has been through the pluck-position comb,
+		// which peaks at +6 dB, and putting that gain inside the coupling
+		// feedback is what made every large setting howl.
+		float motion = 0.f;
+		geomCount++;
+
+		for (int i = 0; i < LOOM_N; i++) {
+			LoomString& s = str[i];
+			if (clearReq[i]) { s.clear(); clearReq[i] = false; }
+
+			// per-string gate
+			float gv = inputs[STRING_GATE_INPUT + i].getVoltage();
+			if (strTrig[i].process(gv, 0.1f, 1.f)) pluck(i, velFor(i), -1.f);
+			s.gateHeld = enabled[i] && (globalGate || gv >= 1.f);
+			if (s.sustainTimer > 0.f) s.sustainTimer -= args.sampleTime;
+
+			// scheduled strum arrival
+			if (s.pending >= 0.f) {
+				s.pending -= args.sampleTime;
+				if (s.pending <= 0.f) { s.pending = -1.f; pluck(i, s.pendVel, s.pendPos); }
+			}
+
+			if (!enabled[i]) {
+				s.out = 0.f;
+				s.amp *= 0.90f;
+				s.flash *= 0.88f;
+				outputs[STRING_OUTPUT + i].setVoltage(0.f);
+				continue;
+			}
+
+			// ── geometry of the loop ───────────────────────────────────────────
+			float semis = basePitch * 12.f + tuneOf(i);
+			float freq = dsp::FREQ_C4 * std::pow(2.f, semis / 12.f);
+			freq = clamp(freq, 20.f, std::min(8000.f, sr * 0.24f));
+
+			float b = stiff[i] * 0.42f;
+			float apC = -b;
+			// Recomputing the exact filter delay costs three atan2s, so it runs
+			// every 32 samples with the strings staggered, and `d` glides to it.
+			if (((geomCount + i) & 31) == 0 || s.dSm <= 0.f) {
+				float w = 2.f * (float)M_PI * freq / sr;
+				s.dTarget = clamp(sr / freq
+				                  - LOOM_AP * loomAllpassDelay(apC, w)
+				                  - loomOnePoleDelay(dampC, w),
+				                  8.f, (float)LOOM_BUF / 1.62f);
+				if (s.dSm <= 0.f) s.dSm = s.dTarget;
+			}
+			s.dSm += (s.dTarget - s.dSm) * 0.004f;
+			float d = s.dSm;
+
+			// Loop gain for a T60: the round trip happens `freq` times a second.
+			float t60 = decaySec * std::pow(4.f, (decayOff[i] - 0.5f) * 2.f);
+			float g = std::exp(-6.907755f / (freq * std::max(t60, 0.02f)));
+			g = std::min(g, 0.99995f);
+
+			// ── read ───────────────────────────────────────────────────────────
+			float v = s.tap(d);
+			s.loopSig = v;
+			// The pluck-position notch, taken on the OUTPUT tap so the loop stays
+			// a plain delay: y = x(t-d) − x(t-d-pos·d) is the same comb a pick at
+			// `pos` along the string puts in the spectrum.
+			float combD = std::min(d * (1.f + s.pickPos), (float)LOOM_BUF - 4.f);
+			s.out = v - s.tap(combD);
+
+			// ── excitation ─────────────────────────────────────────────────────
+			float exc = 0.f;
+			bool sustaining = s.gateHeld || s.sustainTimer > 0.f;
+			if (s.burst > 0.f) {
+				float t = 1.f - s.burst / s.burstLen;
+				float w = 0.5f - 0.5f * std::cos(2.f * (float)M_PI * t);
+				// A hammer imparts a velocity pulse, which is bipolar — a plain
+				// one-sided bump is a DC step, and a delay loop passes DC at very
+				// nearly unity, so it came out roughly ten times louder than a
+				// pluck and rang on the fundamental for seconds.
+				float raw = (exciter[i] == EX_HAMMER)
+				          ? w * (std::sin(2.f * (float)M_PI * t)
+				                 + 0.12f * (2.f * random::uniform() - 1.f))
+				          : w * (2.f * random::uniform() - 1.f);
+				s.excLp += excC * (raw - s.excLp);
+				exc = s.excLp * s.burstAmp;
+				s.burst -= 1.f;
+			}
+			else if (sustaining && exciter[i] == EX_BOW) {
+				// Smith's friction curve. The string sticks to the bow until the
+				// relative velocity is large enough to slip, and it is that
+				// stick-slip alternation — not the steady force — that sustains
+				// the tone, so the drive has to be strong enough to keep winning
+				// against the loop loss.
+				// These four numbers are not free: a shallow curve (a large
+				// offset) or a weak drive settles at a stable DC operating point
+				// and makes no sound at all, and the wrong balance locks the
+				// string into its sub-octave. Swept against the real loop.
+				float vd = (0.12f + 0.26f * s.velocity) - v * 12.f;
+				float a = std::fabs(vd) + 0.35f;
+				float a2 = a * a;
+				float ff = vd / (a2 * a2);
+				exc = clamp(ff, -0.9f, 0.9f) * (0.14f + 0.05f * pick);
+			}
+			else if (sustaining && exciter[i] == EX_AEOLIAN) {
+				s.excLp += excC * ((2.f * random::uniform() - 1.f) - s.excLp);
+				exc = s.excLp * 0.11f * s.velocity;
+			}
+
+			// ── the loop ───────────────────────────────────────────────────────
+			s.lp += dampC * (v - s.lp);
+			float x = g * s.lp;
+			for (int k = 0; k < LOOM_AP; k++) {
+				float y = apC * x + s.apX[k] - apC * s.apY[k];
+				s.apX[k] = x; s.apY[k] = y; x = y;
+			}
+			// DC blocker sits INSIDE the loop — on the input it would do nothing,
+			// because it is the recirculation that accumulates the offset.
+			float dy = x - s.dcX + 0.99985f * s.dcY;
+			s.dcX = x; s.dcY = dy; x = dy;
+
+			// Sympathetic bleed through the bridge. This MIXES rather than adds:
+			// what a string takes from the bridge it gives up out of its own
+			// loop. That is what a real bridge does — energy leaving a string is
+			// energy that string no longer has — and it is also the only thing
+			// keeping eight resonators with a loop gain of 0.999 from howling
+			// the moment they are joined. Injecting without the matching loss
+			// has no stable setting: it is inaudible until it runs away.
+			float k = coupAmt * coupAmt * 0.35f;
+			x = x * (1.f - k) + k * couplePrev;
+			x += exc;
+
+			if (x > 1.6f) x = 1.6f; else if (x < -1.6f) x = -1.6f;
+			s.buf[s.wi] = x + 1e-20f;
+			s.wi = (s.wi + 1) & LOOM_MASK;
+
+			// ── mix ────────────────────────────────────────────────────────────
+			float y = s.out * level[i];
+			bridge += y;
+			motion += s.loopSig;
+
+			float p = ((float)i / (float)(LOOM_N - 1) * 2.f - 1.f) * stereoWidth;
+			float th = (p + 1.f) * (float)M_PI_4;
+			mixL += y * std::cos(th);
+			mixR += y * std::sin(th);
+
+			outputs[STRING_OUTPUT + i].setVoltage(clamp(y * LOOM_OUT_GAIN, -10.f, 10.f));
+
+			// display envelope: fast attack, slow release
+			float a = std::fabs(s.out);
+			s.amp += (a > s.amp ? 0.02f : 0.0009f) * (a - s.amp);
+			s.flash *= 0.9994f;
+			s.wobble += args.sampleTime;
+		}
+
+		// ── bridge, body, coupling bus ─────────────────────────────────────────
+		float bodyOut = 0.f;
+		for (int k = 0; k < NBODY; k++)
+			bodyOut += body[k].bandpass(bridge) * bodyW[k];
+		bodyOut *= 0.42f;
+
+		// The coupling medium is the BRIDGE, not the body. That is how a real
+		// instrument works — strings talk through the bridge whether or not the
+		// box behind it resonates — and it is also what makes the feedback safe:
+		// the body's modes have a gain of Q at resonance, so routing them back
+		// into eight high-Q strings guarantees a howl at the body's own pitches.
+		// The bus carries the MEAN string motion, so a string's own share of it
+		// is 1/8 and cannot outweigh the (1 − k) it gave up to be there.
+		float cin = motion / (float)LOOM_N;
+		coupleLp += 0.35f * (cin - coupleLp);
+		float cdy = coupleLp - coupleDcX + 0.9993f * coupleDcY;
+		coupleDcX = coupleLp; coupleDcY = cdy;
+		coupleBus = clamp(cdy, -3.f, 3.f);
+
+		float wetL = mixL + bodyOut * bodyAmt;
+		float wetR = mixR + bodyOut * bodyAmt;
+		outputs[MIX_L_OUTPUT].setVoltage(clamp(wetL * LOOM_OUT_GAIN, -10.f, 10.f));
+		outputs[MIX_R_OUTPUT].setVoltage(clamp(wetR * LOOM_OUT_GAIN, -10.f, 10.f));
+	}
+
+	float coupleBus = 0.f;
+
+	// ── mouse plucks: GUI thread → audio thread ───────────────────────────────
+	struct MouseHit { int string; float vel; float pos; };
+	static const int MOUSE_Q = 32;
+	MouseHit mouseQueue[MOUSE_Q] = {};
+	// Single producer (the GUI), single consumer (the audio thread). The release
+	// on the write index is what guarantees the audio thread sees a fully
+	// written MouseHit and not half of one.
+	std::atomic<int> mouseQueueRead{0}, mouseQueueWrite{0};
+
+	void mousePluck(int i, float vel, float pos) {
+		int w = mouseQueueWrite.load(std::memory_order_relaxed);
+		int nw = (w + 1) % MOUSE_Q;
+		if (nw == mouseQueueRead.load(std::memory_order_acquire))
+			return;                                  // full: drop, never block audio
+		mouseQueue[w] = {i, vel, pos};
+		mouseQueueWrite.store(nw, std::memory_order_release);
+	}
+
+	// ── persistence ────────────────────────────────────────────────────────────
+	json_t* dataToJson() override {
+		json_t* root = json_object();
+		json_object_set_new(root, "tab", json_integer(tab));
+		json_object_set_new(root, "quantScale", json_integer(quantScale));
+		json_object_set_new(root, "stereoWidth", json_real(stereoWidth));
+		json_object_set_new(root, "mouseMode", json_integer(mouseMode));
+		json_object_set_new(root, "internalHz", json_real(internalHz));
+
+		json_t* sa = json_array();
+		for (int i = 0; i < LOOM_N; i++) {
+			json_t* s = json_object();
+			json_object_set_new(s, "tune", json_real(tune[i]));
+			json_object_set_new(s, "decay", json_real(decayOff[i]));
+			json_object_set_new(s, "stiff", json_real(stiff[i]));
+			json_object_set_new(s, "pos", json_real(pickPos[i]));
+			json_object_set_new(s, "exciter", json_integer(exciter[i]));
+			json_object_set_new(s, "level", json_real(level[i]));
+			json_object_set_new(s, "enabled", json_boolean(enabled[i]));
+			json_array_append_new(sa, s);
+		}
+		json_object_set_new(root, "strings", sa);
+		return root;
+	}
+
+	void dataFromJson(json_t* root) override {
+		if (json_t* j = json_object_get(root, "tab")) tab = clamp((int)json_integer_value(j), 0, 6);
+		if (json_t* j = json_object_get(root, "quantScale"))
+			quantScale = clamp((int)json_integer_value(j), -1, sfs::NUM_SCALES - 1);
+		if (json_t* j = json_object_get(root, "stereoWidth")) stereoWidth = json_number_value(j);
+		if (json_t* j = json_object_get(root, "mouseMode")) mouseMode = (int)json_integer_value(j);
+		if (json_t* j = json_object_get(root, "internalHz")) internalHz = json_number_value(j);
+
+		json_t* sa = json_object_get(root, "strings");
+		if (!sa) return;
+		for (int i = 0; i < LOOM_N && i < (int)json_array_size(sa); i++) {
+			json_t* s = json_array_get(sa, i);
+			if (json_t* j = json_object_get(s, "tune"))
+				tune[i] = clamp((float)json_number_value(j), LOOM_TUNE_MIN, LOOM_TUNE_MAX);
+			if (json_t* j = json_object_get(s, "decay")) decayOff[i] = json_number_value(j);
+			if (json_t* j = json_object_get(s, "stiff")) stiff[i] = json_number_value(j);
+			if (json_t* j = json_object_get(s, "pos")) pickPos[i] = json_number_value(j);
+			if (json_t* j = json_object_get(s, "exciter"))
+				exciter[i] = clamp((int)json_integer_value(j), 0, EX_COUNT - 1);
+			if (json_t* j = json_object_get(s, "level")) level[i] = json_number_value(j);
+			if (json_t* j = json_object_get(s, "enabled")) enabled[i] = json_boolean_value(j);
+		}
+	}
+};
+
+
+// =============================================================================
+// Display — the instrument itself.
+// =============================================================================
+
+static const int LOOM_NTABS = 7;
+static const char* LOOM_TABS[LOOM_NTABS] =
+	{"PLAY", "TUNE", "DECAY", "STIFF", "POS", "EXCITE", "LEVEL"};
+
+struct LoomLayout {
+	float w = 0.f, h = 0.f;
+	float tabY = 0.f, tabH = 0.f, tabX0 = 0.f, tabW = 0.f;
+	float nutY = 0.f, bridgeY = 0.f, dotY = 0.f, footY = 0.f;
+	// The eight strings sit over the eight jack columns on the panel below: the
+	// display is 20 cells wide with the columns at cells 3, 5 ... 17.
+	float sx(int i) const { return w * (3.f + 2.f * (float)i) / 20.f; }
+	float vy(float v) const { return bridgeY - clamp(v, 0.f, 1.f) * (bridgeY - nutY); }
+};
+
+struct LoomDisplay : OpaqueWidget {
+	Loom* module = nullptr;
+	std::shared_ptr<Font> font;
+
+	int   dragString = -1;
+	Vec   dragPos;
+	bool  dragIsPlay = false;
+	float phase = 0.f;
+
+	LoomLayout layout() const {
+		LoomLayout L;
+		L.w = box.size.x; L.h = box.size.y;
+		L.tabY = L.h * 0.022f;  L.tabH = L.h * 0.098f;
+		L.tabX0 = L.w * 0.030f; L.tabW = (L.w * 0.940f) / (float)LOOM_NTABS;
+		L.nutY = L.h * 0.180f;  L.bridgeY = L.h * 0.800f;
+		L.dotY = L.h * 0.858f;  L.footY = L.h * 0.945f;
+		return L;
+	}
+
+	int tabHit(const LoomLayout& L, float x) const {
+		int t = (int)std::floor((x - L.tabX0) / L.tabW);
+		return (t >= 0 && t < LOOM_NTABS) ? t : -1;
+	}
+
+	int stringHit(const LoomLayout& L, float x) const {
+		for (int i = 0; i < LOOM_N; i++)
+			if (std::fabs(x - L.sx(i)) < L.w * 0.055f) return i;
+		return -1;
+	}
+
+	// ── attribute read/write ──────────────────────────────────────────────────
+	float attrOf(int i) const {
+		if (!module) return 0.5f;
+		switch (module->tab) {
+			case 1: return (module->tune[i] - LOOM_TUNE_MIN) / (LOOM_TUNE_MAX - LOOM_TUNE_MIN);
+			case 2: return module->decayOff[i];
+			case 3: return module->stiff[i];
+			case 4: return (module->pickPos[i] - 0.02f) / 0.48f;
+			case 5: return ((float)module->exciter[i] + 0.5f) / (float)EX_COUNT;
+			case 6: return module->level[i];
+		}
+		return 0.f;
+	}
+
+	void setAttr(int i, float v) {
+		if (!module) return;
+		v = clamp(v, 0.f, 1.f);
+		switch (module->tab) {
+			case 1: module->tune[i] = std::round(LOOM_TUNE_MIN
+			            + v * (LOOM_TUNE_MAX - LOOM_TUNE_MIN)); break;
+			case 2: module->decayOff[i] = v; break;
+			case 3: module->stiff[i] = v; break;
+			case 4: module->pickPos[i] = 0.02f + v * 0.48f; break;
+			case 5: module->exciter[i] = clamp((int)(v * EX_COUNT), 0, EX_COUNT - 1); break;
+			case 6: module->level[i] = v; break;
+		}
+	}
+
+	std::string footText(int i) const {
+		if (!module) return "";
+		switch (module->tab) {
+			case 2: return string::f("%.0f%%", module->decayOff[i] * 100.f);
+			case 3: return string::f("%.0f%%", module->stiff[i] * 100.f);
+			case 4: return string::f("%.0f%%", module->pickPos[i] * 200.f);
+			case 5: return EX_SHORT[module->exciter[i]];
+			case 6: return string::f("%.0f%%", module->level[i] * 100.f);
+		}
+		// PLAY and TUNE both want to know what note the string is
+		float semis = module->params[Loom::OCT_PARAM].getValue() * 12.f
+		            + module->params[Loom::ROOT_PARAM].getValue()
+		            + module->tuneOf(i);
+		return loomNoteName(semis);
+	}
+
+	// ── interaction ───────────────────────────────────────────────────────────
+	// Nothing here consumes an event it has no use for: a click that hits no
+	// string falls through to the panel, and onHoverScroll is deliberately NOT
+	// overridden so the wheel always reaches the rack.
+	void onButton(const ButtonEvent& e) override {
+		if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
+			OpaqueWidget::onButton(e);
+			return;
+		}
+		LoomLayout L = layout();
+		if (e.pos.y < L.tabY + L.tabH) {
+			int t = tabHit(L, e.pos.x);
+			if (t >= 0) { module->tab = t; e.consume(this); }
+			return;
+		}
+		// the enable dots, just under the bridge
+		if (std::fabs(e.pos.y - L.dotY) < L.h * 0.035f) {
+			int s = stringHit(L, e.pos.x);
+			if (s >= 0) {
+				module->enabled[s] = !module->enabled[s];
+				module->clearReq[s] = true;
+				e.consume(this);
+			}
+			return;
+		}
+		if (e.pos.y < L.nutY - L.h * 0.02f || e.pos.y > L.bridgeY + L.h * 0.02f) return;
+
+		int s = stringHit(L, e.pos.x);
+		if (s < 0) return;
+		e.consume(this);
+		dragPos = e.pos;
+		dragString = s;
+		dragIsPlay = (module->tab == 0);
+		if (dragIsPlay) module->mousePluck(s, 0.8f, pickFromY(L, e.pos.y));
+		else            setAttr(s, valueFromY(L, e.pos.y));
+	}
+
+	float valueFromY(const LoomLayout& L, float y) const {
+		return clamp((L.bridgeY - y) / (L.bridgeY - L.nutY), 0.f, 1.f);
+	}
+
+	// Where along the string the mouse caught it. Near either end is a hard,
+	// nasal attack; the middle is mellow — which is exactly how a real string
+	// behaves, so the gesture teaches the control.
+	float pickFromY(const LoomLayout& L, float y) const {
+		float t = clamp((y - L.nutY) / std::max(L.bridgeY - L.nutY, 1.f), 0.f, 1.f);
+		return 0.03f + 0.47f * (1.f - std::fabs(1.f - 2.f * t));
+	}
+
+	void crossStrings(const LoomLayout& L, Vec pos, Vec delta) {
+		if (!module) return;
+		if (pos.y < L.nutY - 4.f || pos.y > L.bridgeY + 4.f) return;
+		float speed = std::fabs(delta.x);
+		if (speed < 0.35f) return;
+		float x1 = pos.x, x0 = pos.x - delta.x;
+		float lo = std::min(x0, x1), hi = std::max(x0, x1);
+		float vel = clamp(0.22f + speed / 20.f, 0.12f, 1.f);
+		float pk = pickFromY(L, pos.y);
+		for (int i = 0; i < LOOM_N; i++) {
+			float sx = L.sx(i);
+			if (sx > lo && sx <= hi) module->mousePluck(i, vel, pk);
+		}
+	}
+
+	void onHover(const HoverEvent& e) override {
+		OpaqueWidget::onHover(e);            // consumed so we keep receiving moves
+		if (!module || module->tab != 0 || module->mouseMode != 0) return;
+		crossStrings(layout(), e.pos, e.mouseDelta);
+	}
+
+	void onDragMove(const DragMoveEvent& e) override {
+		if (!module || dragString < 0) return;
+		float zoom = std::max(getAbsoluteZoom(), 0.01f);
+		Vec d = e.mouseDelta.div(zoom);
+		dragPos = dragPos.plus(d);
+		LoomLayout L = layout();
+		if (dragIsPlay) crossStrings(L, dragPos, d);
+		else {
+			// drag paints sideways and adjusts vertically at the same time
+			int s = stringHit(L, dragPos.x);
+			if (s >= 0) dragString = s;
+			setAttr(dragString, valueFromY(L, dragPos.y));
+		}
+	}
+
+	void onDragEnd(const DragEndEvent& e) override { dragString = -1; }
+
+	void step() override {
+		phase += 0.28f;
+		if (phase > 1e6f) phase = 0.f;
+		OpaqueWidget::step();
+	}
+
+	// ── drawing ───────────────────────────────────────────────────────────────
+	void drawLayer(const DrawArgs& args, int layer) override {
+		if (layer != 1) { OpaqueWidget::drawLayer(args, layer); return; }
+		if (!font || font->handle < 0) font = sfs::panelFont();
+		if (!font || font->handle < 0) return;
+
+		nvgSave(args.vg);
+		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		if (!module) drawPreview(args);
+		else         drawLive(args);
+		nvgRestore(args.vg);
+	}
+
+	void drawTabs(const DrawArgs& args, const LoomLayout& L, int sel) {
+		NVGcontext* vg = args.vg;
+		for (int t = 0; t < LOOM_NTABS; t++) {
+			float x = L.tabX0 + t * L.tabW;
+			nvgBeginPath(vg);
+			nvgRoundedRect(vg, x + 1.f, L.tabY, L.tabW - 2.f, L.tabH, 2.f);
+			nvgFillColor(vg, t == sel ? sfs::SCREEN_DEEP : nvgRGB(0x24, 0x24, 0x3C));
+			nvgFill(vg);
+
+			nvgFontFaceId(vg, font->handle);
+			nvgFontSize(vg, L.tabH * 0.52f);
+			nvgTextLetterSpacing(vg, 0.4f);
+			nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			nvgFillColor(vg, t == sel ? sfs::SCREEN_TEXT : sfs::SCREEN_DIM);
+			nvgText(vg, x + L.tabW * 0.5f, L.tabY + L.tabH * 0.55f, LOOM_TABS[t], NULL);
+		}
+	}
+
+	void drawFrame(const DrawArgs& args, const LoomLayout& L) {
+		NVGcontext* vg = args.vg;
+		float x0 = L.sx(0) - L.w * 0.055f, x1 = L.sx(LOOM_N - 1) + L.w * 0.055f;
+		for (int k = 0; k < 2; k++) {
+			float y = k ? L.bridgeY : L.nutY;
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, x0, y);
+			nvgLineTo(vg, x1, y);
+			nvgStrokeColor(vg, sfs::SCREEN_LINE);
+			nvgStrokeWidth(vg, k ? 2.2f : 1.4f);      // the bridge is the heavy one
+			nvgStroke(vg);
+		}
+	}
+
+	// One string, drawn as it is actually behaving: displacement peaks at the
+	// middle and goes to zero at both ends, because that is where it is clamped.
+	void drawString(const DrawArgs& args, const LoomLayout& L, int i,
+	                float amp, float flash, bool on, float thickness, float ph) {
+		NVGcontext* vg = args.vg;
+		float x = L.sx(i);
+		float span = L.bridgeY - L.nutY;
+		float A = std::min(amp, 1.f) * L.w * 0.020f;
+
+		NVGcolor col = on ? sfs::SCREEN_BLUE : sfs::SCREEN_PURP;
+		if (on && flash > 0.01f)
+			col = nvgLerpRGBA(col, sfs::SCREEN_HOT, clamp(flash, 0.f, 1.f));
+
+		nvgBeginPath(vg);
+		if (A < 0.25f) {
+			nvgMoveTo(vg, x, L.nutY);
+			nvgLineTo(vg, x, L.bridgeY);
+		}
+		else {
+			const int SEG = 22;
+			for (int k = 0; k <= SEG; k++) {
+				float t = (float)k / (float)SEG;
+				float env = std::sin((float)M_PI * t);
+				float dx = A * env * std::sin(ph + t * (float)M_PI * 2.f);
+				float y = L.nutY + t * span;
+				if (k == 0) nvgMoveTo(vg, x + dx, y); else nvgLineTo(vg, x + dx, y);
+			}
+		}
+		nvgStrokeColor(vg, col);
+		nvgStrokeWidth(vg, thickness);
+		nvgStroke(vg);
+
+		// the envelope the string is sweeping out, so loud strings read as loud
+		if (A > 0.6f) {
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, x, L.nutY);
+			nvgQuadTo(vg, x + A * 1.7f, L.nutY + span * 0.5f, x, L.bridgeY);
+			nvgQuadTo(vg, x - A * 1.7f, L.nutY + span * 0.5f, x, L.nutY);
+			nvgFillColor(vg, nvgTransRGBA(col, 34));
+			nvgFill(vg);
+		}
+	}
+
+	void drawEnableDot(const DrawArgs& args, const LoomLayout& L, int i, bool on) {
+		NVGcontext* vg = args.vg;
+		nvgBeginPath(vg);
+		nvgCircle(vg, L.sx(i), L.dotY, L.h * 0.016f);
+		if (on) { nvgFillColor(vg, sfs::SCREEN_BLUE); nvgFill(vg); }
+		else {
+			nvgStrokeColor(vg, sfs::SCREEN_PMID);
+			nvgStrokeWidth(vg, 1.f);
+			nvgStroke(vg);
+		}
+	}
+
+	void drawMarker(const DrawArgs& args, const LoomLayout& L, int i, float v, bool on) {
+		NVGcontext* vg = args.vg;
+		float x = L.sx(i), y = L.vy(v), hw = L.w * 0.038f;
+		nvgBeginPath(vg);
+		nvgRect(vg, x - hw, y, hw * 2.f, L.bridgeY - y);
+		nvgFillColor(vg, nvgTransRGBA(on ? sfs::SCREEN_DEEP : sfs::SCREEN_PURP, 130));
+		nvgFill(vg);
+
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, x - hw, y);
+		nvgLineTo(vg, x + hw, y);
+		nvgStrokeColor(vg, on ? sfs::SCREEN_HOT : sfs::SCREEN_PMID);
+		nvgStrokeWidth(vg, 2.f);
+		nvgStroke(vg);
+	}
+
+	void drawFoot(const DrawArgs& args, const LoomLayout& L, int i,
+	              const std::string& t, bool on) {
+		NVGcontext* vg = args.vg;
+		nvgFontFaceId(vg, font->handle);
+		nvgFontSize(vg, L.h * 0.058f);
+		nvgTextLetterSpacing(vg, 0.2f);
+		nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgFillColor(vg, on ? sfs::SCREEN_TEXT : sfs::SCREEN_PMID);
+		nvgText(vg, L.sx(i), L.footY, t.c_str(), NULL);
+	}
+
+	// In EXCITE the string's height picks one of four bands, so the bands have
+	// to be named or the gesture is a guess.
+	void drawExciteLegend(const DrawArgs& args, const LoomLayout& L) {
+		NVGcontext* vg = args.vg;
+		float span = L.bridgeY - L.nutY;
+		nvgFontFaceId(vg, font->handle);
+		nvgFontSize(vg, L.h * 0.052f);
+		nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+		for (int e = 0; e < EX_COUNT; e++) {
+			float y = L.bridgeY - span * ((float)e + 0.5f) / (float)EX_COUNT;
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, L.w * 0.030f, y + L.h * 0.035f);
+			nvgLineTo(vg, L.w * 0.125f, y + L.h * 0.035f);
+			nvgStrokeColor(vg, sfs::SCREEN_PURP);
+			nvgStrokeWidth(vg, 0.8f);
+			nvgStroke(vg);
+			nvgFillColor(vg, sfs::SCREEN_DIM);
+			nvgText(vg, L.w * 0.030f, y, EX_NAME[e], NULL);
+		}
+	}
+
+	void drawLive(const DrawArgs& args) {
+		LoomLayout L = layout();
+		drawTabs(args, L, module->tab);
+		drawFrame(args, L);
+		if (module->tab == 5) drawExciteLegend(args, L);
+
+		for (int i = 0; i < LOOM_N; i++) {
+			bool on = module->enabled[i];
+			// low strings are visibly fatter, the way a real course is strung
+			float pitchN = clamp((module->tuneOf(i) - LOOM_TUNE_MIN)
+			                     / (LOOM_TUNE_MAX - LOOM_TUNE_MIN), 0.f, 1.f);
+			float th = 0.9f + 2.3f * (1.f - pitchN);
+
+			if (module->tab > 0) drawMarker(args, L, i, attrOf(i), on);
+			drawString(args, L, i, module->str[i].amp * 3.2f,
+			           module->str[i].flash, on, th, phase * (0.9f + 0.13f * i));
+			drawEnableDot(args, L, i, on);
+			drawFoot(args, L, i, footText(i), on);
+		}
+	}
+
+	// Browser thumbnail: no module, so a representative loom — mid-strum, with
+	// the low strings still ringing from the pass that already went by.
+	void drawPreview(const DrawArgs& args) {
+		LoomLayout L = layout();
+		drawTabs(args, L, 0);
+		drawFrame(args, L);
+		static const float amp[LOOM_N]   = {0.95f, 0.80f, 0.62f, 0.44f, 0.26f, 0.12f, 0.f, 0.f};
+		static const float flash[LOOM_N] = {0.f, 0.f, 0.f, 0.2f, 0.6f, 1.f, 0.f, 0.f};
+		static const char* note[LOOM_N]  = {"C2","D2","E2","G2","A2","C3","D3","E3"};
+		static const bool  on[LOOM_N]    = {true,true,true,true,true,true,true,false};
+		for (int i = 0; i < LOOM_N; i++) {
+			float th = 0.9f + 2.3f * (1.f - (float)i / (float)(LOOM_N - 1)) * 0.55f;
+			drawString(args, L, i, amp[i], flash[i], on[i], th, 0.7f * i);
+			drawEnableDot(args, L, i, on[i]);
+			drawFoot(args, L, i, note[i], on[i]);
+		}
+	}
+};
+
+
+// =============================================================================
+// Panel — 28HP. Left column is the instrument, the plate under the display is
+// the eight strings, the bottom row is the player.
+// =============================================================================
+
+struct LoomWidget : ModuleWidget {
+	LoomWidget(Loom* module) {
+		setModule(module);
+		setPanel(createPanel(asset::plugin(pluginInstance, "res/loom.svg")));
+		using sfs::hp;
+
+		const float potX = hp(2), cvX = hp(4);
+
+		sfs::PanelLabels* lbl = new sfs::PanelLabels();
+		lbl->box.size = box.size;
+		addChild(lbl);
+		lbl->title(hp(1), hp(1.6f), "LOOM");
+
+		LoomDisplay* disp = new LoomDisplay();
+		disp->module = module;
+		// 20 cells wide from hp(7) puts the display's eight string columns exactly
+		// over the eight jack columns at hp(10), hp(12) ... hp(24).
+		disp->box.pos  = mm2px(Vec(hp(7), hp(2)));
+		disp->box.size = mm2px(Vec(hp(20), hp(13.2f)));
+		addChild(disp);
+
+		// ── left column: the instrument ────────────────────────────────────────
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(4))), module, Loom::BODY_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(4))), module, Loom::BODY_CV_INPUT));
+		lbl->pair(potX, hp(4), "BODY");
+
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(6))), module, Loom::COUPLE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(6))), module, Loom::COUPLE_CV_INPUT));
+		lbl->pair(potX, hp(6), "COUPLE");
+
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(8))), module, Loom::DECAY_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(8))), module, Loom::DECAY_CV_INPUT));
+		lbl->pair(potX, hp(8), "DECAY");
+
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(10))), module, Loom::DAMP_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(10))), module, Loom::DAMP_CV_INPUT));
+		lbl->pair(potX, hp(10), "DAMP");
+
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(12))), module, Loom::PICK_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(12))), module, Loom::PICK_CV_INPUT));
+		lbl->pair(potX, hp(12), "PICK");
+
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(14))), module, Loom::SPREAD_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(14))), module, Loom::SPREAD_CV_INPUT));
+		lbl->pair(potX, hp(14), "SPREAD");
+
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(17.4f))), module, Loom::ROOT_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(17.4f))), module, Loom::ROOT_CV_INPUT));
+		lbl->pair(potX, hp(17.4f), "ROOT");
+
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(19.4f))), module, Loom::OCT_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(19.4f))), module, Loom::OCT_CV_INPUT));
+		lbl->pair(potX, hp(19.4f), "OCT");
+
+		// ── the eight strings: gate in, audio out, one column each ─────────────
+		// Same x as the display's eight strings, so a column reads top to bottom
+		// as one string: what it looks like, how you trigger it, what comes out.
+		for (int i = 0; i < LOOM_N; i++) {
+			float x = hp(10 + 2 * i);
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(x, hp(17.4f))), module, Loom::STRING_GATE_INPUT + i));
+			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, hp(19.4f))), module, Loom::STRING_OUTPUT + i));
+		}
+		lbl->add(hp(9.0f), hp(17.4f), "GATE",  sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
+		lbl->add(hp(9.0f), hp(19.4f), "AUDIO", sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
+
+		// ── bottom: the player ─────────────────────────────────────────────────
+		const float rowY = hp(22.4f);
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(2), rowY)), module, Loom::VOCT_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(4), rowY)), module, Loom::GATE_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(6), rowY)), module, Loom::VEL_INPUT));
+		lbl->jack(hp(2), rowY, "V/OCT");
+		lbl->jack(hp(4), rowY, "GATE");
+		lbl->jack(hp(6), rowY, "VEL");
+
+		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(
+			mm2px(Vec(hp(9), rowY)), module, Loom::AUTO_PARAM, Loom::AUTO_LIGHT));
+		lbl->add(hp(9), rowY - sfs::LABEL_GAP_TRIM, "AUTO");
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(11), rowY)), module, Loom::CLOCK_INPUT));
+		lbl->jack(hp(11), rowY, "CLK");
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(hp(13), rowY)), module, Loom::RESET_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(15), rowY)), module, Loom::RESET_INPUT));
+		lbl->add(hp(13), rowY - sfs::LABEL_GAP_TRIM, "RESET");
+		lbl->link(hp(13), rowY, hp(15), rowY);
+
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(16.6f), rowY)), module, Loom::PATTERN_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(18.6f), rowY)), module, Loom::PATTERN_CV_INPUT));
+		lbl->pair(hp(16.6f), rowY, "PATTERN");
+
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(20.6f), rowY)), module, Loom::DENSITY_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(22.6f), rowY)), module, Loom::DENSITY_CV_INPUT));
+		lbl->pair(hp(20.6f), rowY, "DENSITY");
+
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(24.5f), rowY)), module, Loom::MIX_L_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(26.5f), rowY)), module, Loom::MIX_R_OUTPUT));
+		lbl->add(hp(25.5f), rowY - sfs::LABEL_GAP_JACK, "MIX L / R", sfs::PanelLabels::ON_PLATE);
+	}
+
+	void appendContextMenu(Menu* menu) override {
+		Loom* m = dynamic_cast<Loom*>(this->module);
+		assert(m);
+		menu->addChild(new MenuSeparator);
+
+		menu->addChild(createSubmenuItem("Tuning", "", [=](Menu* sub) {
+			for (int t = 0; t < LOOM_NTUNINGS; t++)
+				sub->addChild(createMenuItem(LOOM_TUNINGS[t].name, "",
+					[=]() { m->applyTuning(t); }));
+		}));
+
+		menu->addChild(createSubmenuItem("Quantize tuning",
+			m->quantScale < 0 ? "Off" : sfs::SCALES[m->quantScale].longName,
+			[=](Menu* sub) {
+				sub->addChild(createCheckMenuItem("Off (free tuning)", "",
+					[=]() { return m->quantScale < 0; }, [=]() { m->quantScale = -1; }));
+				for (int s = 0; s < sfs::NUM_SCALES; s++)
+					sub->addChild(createCheckMenuItem(sfs::SCALES[s].longName, "",
+						[=]() { return m->quantScale == s; }, [=]() { m->quantScale = s; }));
+			}));
+
+		menu->addChild(createIndexPtrSubmenuItem("Mouse strum",
+			{"Hover over the strings", "Click and drag only"}, &m->mouseMode));
+
+		menu->addChild(createSubmenuItem("Stereo width", string::f("%.0f%%", m->stereoWidth * 100.f),
+			[=](Menu* sub) {
+				sub->addChild(new MenuSeparator);
+				struct WidthQuantity : Quantity {
+					Loom* m;
+					void setValue(float v) override { m->stereoWidth = clamp(v, 0.f, 1.f); }
+					float getValue() override { return m->stereoWidth; }
+					float getDefaultValue() override { return 0.6f; }
+					std::string getLabel() override { return "Stereo width"; }
+					std::string getUnit() override { return "%"; }
+					float getDisplayValue() override { return m->stereoWidth * 100.f; }
+					void setDisplayValue(float v) override { setValue(v / 100.f); }
+				};
+				WidthQuantity* q = new WidthQuantity;
+				q->m = m;
+				Slider* sl = new Slider;
+				sl->quantity = q;
+				sl->box.size.x = 180.f;
+				sub->addChild(sl);
+			}));
+
+		menu->addChild(createSubmenuItem("Auto rate (no clock patched)",
+			string::f("%.1f Hz", m->internalHz), [=](Menu* sub) {
+				struct RateQuantity : Quantity {
+					Loom* m;
+					void setValue(float v) override { m->internalHz = clamp(v, 0.5f, 24.f); }
+					float getValue() override { return m->internalHz; }
+					float getDefaultValue() override { return 6.f; }
+					float getMinValue() override { return 0.5f; }
+					float getMaxValue() override { return 24.f; }
+					std::string getLabel() override { return "Rate"; }
+					std::string getUnit() override { return " Hz"; }
+				};
+				RateQuantity* q = new RateQuantity;
+				q->m = m;
+				Slider* sl = new Slider;
+				sl->quantity = q;
+				sl->box.size.x = 180.f;
+				sub->addChild(sl);
+			}));
+
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuItem("Enable all strings", "",
+			[=]() { for (int i = 0; i < LOOM_N; i++) m->enabled[i] = true; }));
+		menu->addChild(createMenuItem("Silence all strings", "",
+			[=]() { for (int i = 0; i < LOOM_N; i++) m->clearReq[i] = true; }));
+	}
+};
+
+Model* modelLoom = createModel<Loom, LoomWidget>("Loom");

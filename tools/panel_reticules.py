@@ -275,6 +275,9 @@ PLATES = {
     "crystal": [],
     "fill": [(117.0, 8.0, 43.0, 116.0)],           # swing + the three output columns
     "chance": [],
+    # the eight string columns, and the mix pair at the foot
+    "loom": [(hp(6.2), hp(15.8), hp(19.0), hp(4.7)),
+             (hp(23.5), hp(20.9), hp(4.2), hp(2.9))],
 }
 
 MODULES = {
@@ -282,6 +285,7 @@ MODULES = {
     "chime":   ("Chime",   "src/chime.cpp",   "res/chime.svg",   {"CHIME_NCH": 8}),
     "fill":    ("Fill",    "src/fill.cpp",    "res/fill.svg",    {"FILL_NCH": 8}),
     "chance":  ("Chance",  "src/chance.cpp",  "res/chance.svg",  {"NUM_NODES": 8}),
+    "loom":    ("Loom",    "src/loom.cpp",    "res/loom.svg",    {"LOOM_N": 8}),
 }
 
 # Panels whose artwork is hand-made and is now the SOURCE of the layout rather

@@ -39,3 +39,4 @@ extern Model* modelArrange;
 extern Model* modelFill;
 extern Model* modelChime;
 extern Model* modelCrystal;
+extern Model* modelLoom;

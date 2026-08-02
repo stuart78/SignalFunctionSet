@@ -361,6 +361,18 @@
         "Physical modeling"
       ],
       "hidden": true
+    },
+    {
+      "slug": "Loom",
+      "name": "Loom",
+      "description": "An eight-string resonator. Eight waveguide strings share one bridge, so striking one sets its undamped neighbours ringing. Per string: tuning, decay, stiffness, pluck position and exciter (pluck, hammer, bow, aeolian). Strum them with the mouse, play them by CV/gate, or let the auto patterns arpeggiate.",
+      "tags": [
+        "Physical modeling",
+        "Synth voice",
+        "Polyphonic",
+        "Sequencer"
+      ],
+      "hidden": true
     }
   ]
 }
