@@ -35,6 +35,17 @@ static const int LOOM_AP   = 4;              // dispersion sections per string
 // and a full strum near 5V. Eight strings bowed at once still runs into the
 // rail, which is correct — that is eight self-oscillators, not eight notes.
 static const float LOOM_OUT_GAIN = 12.f;
+
+// Eight bowed strings have a crest factor a single pluck never approaches, and
+// the output used to end in a hard clamp — which is the harshest thing an
+// overload can do. This is linear to ±6 V and then bends, asymptotic to ±10, so
+// the worst case compresses instead of tearing.
+static inline float loomSoftClip(float x) {
+	const float T = 6.f, K = 4.f;
+	float a = std::fabs(x);
+	if (a <= T) return x;
+	return std::copysign(T + K * (1.f - K / (K + a - T)), x);
+}
 // Bow shaping. SAT is where the friction curve softly saturates (it peaks near
 // 2.5, so this is active most of the cycle and its shape IS the timbre).
 static const float LOOM_BOW_SAT   = 0.55f;
@@ -46,6 +57,15 @@ static const float LOOM_BOW_DRIVE = 0.12f;
 // 12 to 1.5 takes the inter-harmonic floor to -50 dB — a clean periodic tone.
 static const float LOOM_BOW_FEEDBACK = 1.5f;
 static const float LOOM_BOW_HAIR     = 0.07f;
+static const float LOOM_BOW_TARGET   = 0.06f;  // amplitude the regulator holds
+static const float LOOM_BOW_NORM     = 0.10f;  // scale the friction curve is solved at  // string amplitude the bow holds
+static const int   LOOM_BOW_OS       = 4;    // sub-steps per sample for the friction curve
+static const float LOOM_DAMP_FLOOR   = 10.f; // the loop always keeps this many partials
+// ^ DAMP is an absolute cutoff, which is wrong for a bank spanning octaves: at
+// the dark end a high string was filtered below its own second partial, and
+// with so few partials left the pluck-position comb's null (near the 4.5th)
+// removed most of what remained — so a dark, high, bowed string made almost no
+// sound. Ten partials is what it takes for the comb to stop gutting it.
 static const float LOOM_WIND_DRIVE = 0.020f;
 // A bridge transmits lows far better than highs; this is the corner.
 static const float LOOM_BRIDGE_HZ = 1200.f;
@@ -165,7 +185,10 @@ struct LoomString {
 	float burstMix = 0.f;                   // 1 = pure hammer shape, 0 = pure pick
 	float excLp = 0.f;
 	float bowLp = 0.f, bowRamp = 0.f;       // bow contact width, and its attack
-	float gustPhase = 0.f;                  // wind does not blow at a constant rate
+	float bowEnv = 0.f, bowGain = 1.f;      // what the string is doing, and the pressure answer
+	float vPrev = 0.f;                      // for oversampling the friction curve
+	float dampC = 0.f;                      // loop lowpass, floored at this string's pitch
+	float gustPhase = 0.f, gust = 0.f;      // wind does not blow at a constant rate
 	LoomSVF aeo;                            // the narrow band the wind actually drives
 	float brLp = 0.f;                       // what this string sends to the bridge
 	float velocity = 1.f;
@@ -190,7 +213,9 @@ struct LoomString {
 		burst = 0.f; sustainTimer = 0.f; gateHeld = false;
 		pending = -1.f; loopSig = out = amp = flash = 0.f;
 		dTarget = dSm = 0.f;
-		bowLp = bowRamp = gustPhase = brLp = 0.f;
+		bowLp = bowRamp = gustPhase = brLp = vPrev = 0.f;
+		bowEnv = 0.f; bowGain = 1.f;
+		dampC = 0.f;
 		aeo.clear();
 	}
 
@@ -487,7 +512,6 @@ struct Loom : Module {
 
 		// Loop lowpass: 0 = dark and short-lived treble, 1 = wire-bright.
 		float dampHz = 420.f * std::pow(11500.f / 420.f, dampAmt);
-		float dampC  = clamp(1.f - std::exp(-2.f * (float)M_PI * dampHz / sr), 0.02f, 0.999f);
 		float excHz  = 700.f * std::pow(11000.f / 700.f, pick);
 		float excC   = clamp(1.f - std::exp(-2.f * (float)M_PI * excHz / sr), 0.01f, 1.f);
 		// PICK is the exciter's brightness everywhere: for the bow it is the
@@ -495,6 +519,8 @@ struct Loom : Module {
 		float bowHz  = 900.f * std::pow(3200.f / 900.f, pick);
 		float bowC   = clamp(1.f - std::exp(-2.f * (float)M_PI * bowHz / sr), 0.01f, 1.f);
 		float bowAtk = 1.f - std::exp(-args.sampleTime / 0.045f);   // ~45ms to speak
+		float bowEnvC = 1.f - std::exp(-args.sampleTime / 0.030f);
+		float bowAgcC = args.sampleTime / 0.12f;                    // pressure follows slowly
 		float brC    = clamp(1.f - std::exp(-2.f * (float)M_PI * LOOM_BRIDGE_HZ / sr), 0.01f, 1.f);
 		float windBand = 3.f + 5.f * pick;      // which partial the wind excites
 
@@ -587,12 +613,33 @@ struct Loom : Module {
 			// every 32 samples with the strings staggered, and `d` glides to it.
 			if (((geomCount + i) & 31) == 0 || s.dSm <= 0.f) {
 				float w = 2.f * (float)M_PI * freq / sr;
+				// DAMP is an absolute cutoff, which is wrong for a bank of strings
+				// spanning octaves: at the dark end a 262 Hz string was filtered
+				// BELOW its own second partial, so it could barely sustain and the
+				// exciter's own noise dominated it. Flooring the cutoff at a
+				// multiple of the string's OWN pitch fixes the top of the range
+				// and leaves everything at or above the default untouched.
+				// Each string sits in its own eddy, so they must not gust together.
+				s.gustPhase += 32.f / sr;
+				float ph = s.gustPhase + 1.37f * (float)i;
+				s.gust = clamp(0.5f + 0.5f * std::sin(2.f * (float)M_PI * 0.19f * ph)
+				                          * std::sin(2.f * (float)M_PI * 0.067f * ph)
+				               + 0.18f * std::sin(2.f * (float)M_PI * 0.041f * ph),
+				               0.f, 1.f);
+				float dHz = std::max(dampHz, freq * LOOM_DAMP_FLOOR);
+				s.dampC = clamp(1.f - std::exp(-2.f * (float)M_PI * dHz / sr), 0.02f, 0.999f);
 				s.dTarget = clamp(sr / freq
 				                  - LOOM_AP * loomAllpassDelay(apC, w)
-				                  - loomOnePoleDelay(dampC, w),
+				                  - loomOnePoleDelay(s.dampC, w),
 				                  8.f, (float)LOOM_BUF / 1.62f);
 				if (s.dSm <= 0.f) s.dSm = s.dTarget;
-				s.aeo.set(freq * windBand, 2.5f, sr);
+				// Vortex shedding frequency rises with wind speed (Strouhal), so
+				// the band the wind drives MOVES as the gust swells — and the harp
+				// climbs and falls between the string's partials. That wandering
+				// is the whole character of an aeolian harp; a fixed band just
+				// sounds like a differently-filtered bow.
+				float band = windBand * (0.45f + 1.10f * s.gust);
+				s.aeo.set(freq * band, 9.f, sr);
 			}
 			s.dSm += (s.dTarget - s.dSm) * 0.004f;
 			float d = s.dSm;
@@ -661,21 +708,58 @@ struct Loom : Module {
 				// The hair noise is not decoration. Without it the string locks
 				// into its sub-octave at the top of the range — a real bifurcation,
 				// insensitive to drive level — and real bow hair is not uniform.
-				float vd = (0.38f + 0.16f * s.velocity) * s.bowRamp
-				         - v * LOOM_BOW_FEEDBACK
-				         + LOOM_BOW_HAIR * (2.f * random::uniform() - 1.f);
-				float a = std::fabs(vd) + 0.35f;
-				float a2 = a * a;
-				float ff = vd / (a2 * a2);
-				// A soft knee, not a clamp. The curve peaks near 2.5 and the old
-				// hard limit at 0.9 was active most of the cycle, so the limit
-				// cycle was being squared off — and a square wave IS the harshness.
-				ff = LOOM_BOW_SAT * ff / (LOOM_BOW_SAT + std::fabs(ff));
+				// A friction model's equilibrium amplitude is not controlled by
+				// anything: measured at steady state it was silent on some strings
+				// and pinned to the output clamp on others, and it took as long as
+				// six seconds to get there. A player does not accept that — they
+				// lean on the bow until the note sits where they want it. So the
+				// bow watches the string and answers with pressure. This is what
+				// makes the level the same on every string, at every DAMP and
+				// DECAY, instead of only near the settings it was tuned at.
+				s.bowEnv += (std::fabs(v) - s.bowEnv) * bowEnvC;
+				float target = LOOM_BOW_TARGET * (0.25f + 0.75f * s.velocity);
+				s.bowGain = clamp(s.bowGain + (target - s.bowEnv) * bowAgcC,
+				                  0.02f, 24.f);
+				// The regulator drives FORCE, not bow speed. The friction curve is
+				// non-monotonic in speed — it peaks and then falls away — so a
+				// controller pushing on speed can push straight past the peak and
+				// lose the string. Force scales the curve's output and is
+				// monotonic, which is what makes the loop behave.
+				float drive = (0.30f + 0.20f * s.velocity) * s.bowRamp
+				            + LOOM_BOW_HAIR * (2.f * random::uniform() - 1.f);
+				// The slip transition is a corner, and at 500 Hz there are only
+				// ~90 samples in a period to resolve it — so the curve throws
+				// harmonics far above Nyquist and they fold back down as noise.
+				// That, not brightness, is what made a high bowed string harsh:
+				// at 192 kHz the very same note measures 25 dB cleaner. Nothing
+				// downstream can fix it, because the aliases are already inside
+				// the band, so the curve is evaluated OVERSAMPLED and averaged.
+				float ff = 0.f;
+				for (int o = 1; o <= LOOM_BOW_OS; o++) {
+					float vo = s.vPrev + (v - s.vPrev) * ((float)o / (float)LOOM_BOW_OS);
+					// Normalising by the string's own envelope is what makes the
+					// bow behave the same on every string. Otherwise the friction
+					// curve sees a signal whose scale depends on pitch, decay and
+					// damping, and its operating point — hence the whole character
+					// — drifts with them. This is the difference between a bow
+					// that is right where it was tuned and one that is right
+					// everywhere.
+					float vn = vo * LOOM_BOW_NORM / std::max(s.bowEnv, 1e-4f);
+					float vd = drive - vn * LOOM_BOW_FEEDBACK;
+					float a = std::fabs(vd) + 0.35f;
+					float a2 = a * a;
+					float f1 = vd / (a2 * a2);
+					// A soft knee, not a clamp. The curve peaks near 2.5 and the
+					// old hard limit at 0.9 was active most of the cycle, so the
+					// limit cycle was squared off — and a square wave IS harshness.
+					ff += LOOM_BOW_SAT * f1 / (LOOM_BOW_SAT + std::fabs(f1));
+				}
+				ff *= 1.f / (float)LOOM_BOW_OS;
 				// Finite bow width: the force is a spatial average over the hair
 				// in contact, which is a lowpass. Without it the string is driven
 				// broadband and screams.
 				s.bowLp += bowC * (ff - s.bowLp);
-				exc += s.bowLp * LOOM_BOW_DRIVE * (0.35f + 0.65f * s.velocity) * exw[EX_BOW];
+				exc += s.bowLp * LOOM_BOW_DRIVE * s.bowGain * exw[EX_BOW];
 			}
 			else s.bowRamp *= 0.9995f;
 
@@ -685,17 +769,15 @@ struct Loom : Module {
 				// sings on the string's upper partials, which is why it sounds
 				// like a flute rather than a bowed string. Feeding it broadband
 				// noise, as the first version did, is just noise through a comb.
-				s.gustPhase += args.sampleTime;
-				float gust = 0.55f + 0.45f
-				           * std::sin(2.f * (float)M_PI * 0.23f * s.gustPhase)
-				           * std::sin(2.f * (float)M_PI * 0.081f * s.gustPhase);
 				float n = 2.f * random::uniform() - 1.f;
-				exc += s.aeo.bandpass(n) * LOOM_WIND_DRIVE * s.velocity * gust
-				       * exw[EX_AEOLIAN];
+				// Wind swells and drops away; the square makes the lulls real
+				// lulls rather than a constant breeze at varying loudness.
+				exc += s.aeo.bandpass(n) * LOOM_WIND_DRIVE * s.velocity
+				       * (0.12f + 0.88f * s.gust * s.gust) * exw[EX_AEOLIAN];
 			}
 
 			// ── the loop ───────────────────────────────────────────────────────
-			s.lp += dampC * (v - s.lp);
+			s.lp += s.dampC * (v - s.lp);
 			float x = g * s.lp;
 			for (int k = 0; k < LOOM_AP; k++) {
 				float y = apC * x + s.apX[k] - apC * s.apY[k];
@@ -728,6 +810,7 @@ struct Loom : Module {
 			x += exc;
 
 			if (x > 1.6f) x = 1.6f; else if (x < -1.6f) x = -1.6f;
+			s.vPrev = v;
 			s.buf[s.wi] = x + 1e-20f;
 			s.wi = (s.wi + 1) & LOOM_MASK;
 
@@ -741,7 +824,7 @@ struct Loom : Module {
 			mixL += y * std::cos(th);
 			mixR += y * std::sin(th);
 
-			outputs[STRING_OUTPUT + i].setVoltage(clamp(y * LOOM_OUT_GAIN, -10.f, 10.f));
+			outputs[STRING_OUTPUT + i].setVoltage(loomSoftClip(y * LOOM_OUT_GAIN));
 
 			// display envelope: fast attack, slow release
 			float a = std::fabs(s.out);
@@ -771,8 +854,8 @@ struct Loom : Module {
 
 		float wetL = mixL + bodyOut * bodyAmt;
 		float wetR = mixR + bodyOut * bodyAmt;
-		outputs[MIX_L_OUTPUT].setVoltage(clamp(wetL * LOOM_OUT_GAIN, -10.f, 10.f));
-		outputs[MIX_R_OUTPUT].setVoltage(clamp(wetR * LOOM_OUT_GAIN, -10.f, 10.f));
+		outputs[MIX_L_OUTPUT].setVoltage(loomSoftClip(wetL * LOOM_OUT_GAIN));
+		outputs[MIX_R_OUTPUT].setVoltage(loomSoftClip(wetR * LOOM_OUT_GAIN));
 	}
 
 	float coupleBus = 0.f;
