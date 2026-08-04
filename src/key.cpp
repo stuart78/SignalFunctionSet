@@ -545,11 +545,13 @@ struct KeyDisplay : OpaqueWidget {
 		nvgRestore(args.vg);
 	}
 
-	void text(const DrawArgs& args, float x, float y, float size,
-	          NVGcolor col, const std::string& t, int align = NVG_ALIGN_CENTER) {
-		nvgFontFaceId(args.vg, font->handle);
-		nvgFontSize(args.vg, size);
-		nvgTextLetterSpacing(args.vg, 0.2f);
+	// Every string on this screen goes through here, at the plugin's one screen
+	// size — see panel-style.hpp. Sizes proportional to the display's own height
+	// are what made this module's text a different size from Note's.
+	void text(const DrawArgs& args, float x, float y, NVGcolor col,
+	          const std::string& t, float mm = sfs::TYPE_SCREEN,
+	          int align = NVG_ALIGN_CENTER) {
+		sfs::screenFont(args.vg, font, mm);
 		nvgTextAlign(args.vg, align | NVG_ALIGN_MIDDLE);
 		nvgFillColor(args.vg, col);
 		nvgText(args.vg, x, y, t.c_str(), NULL);
@@ -676,7 +678,7 @@ struct KeyDisplay : OpaqueWidget {
 		float cw = (L.w - L.subX) / (float)std::max(nd, 1);
 		for (int k = 0; k < KEY_NSUB; k++) {
 			float y = L.subY + (float)k * (L.subH + L.subGap);
-			text(args, L.subX * 0.5f, y + L.subH * 0.5f, L.subH * 0.86f,
+			text(args, L.subX * 0.5f, y + L.subH * 0.5f,
 			     used[k] ? sfs::SCREEN_TEXT : sfs::SCREEN_PMID, KEY_SUBNAME[k + 1]);
 			for (int d = 0; d < nd; d++) {
 				bool on = (masks[k] >> d) & 1;
@@ -712,7 +714,7 @@ struct KeyDisplay : OpaqueWidget {
 		    : m->scaleIsScala() ? (m->scalaLoaded ? m->scalaName : std::string("NO SCALA FILE"))
 		    : std::string(sfs::SCALES[clamp(m->scaleIndex, 0, sfs::NUM_SCALES - 1)].shortName);
 		if (sname.size() > 20) sname = sname.substr(0, 20);
-		text(args, L.w * 0.5f, L.readY, L.h * 0.075f, sfs::SCREEN_TEXT,
+		text(args, L.w * 0.5f, L.readY, sfs::SCREEN_TEXT,
 		     std::string(KEY_NOTES[m->rootNote]) + "  " + sname);
 
 		drawKeyboard(args, L, m->keyboardMask(), m->rootNote, lit, micro);
@@ -735,7 +737,7 @@ struct KeyDisplay : OpaqueWidget {
 				t = std::string(KEY_NOTES[pc]) + std::to_string(4 + (int)std::floor(s / 12.f));
 				if (sIdx > 0) t += " " + std::string(KEY_SUBNAME[sIdx]);
 			}
-			text(args, cw * ((float)c + 0.5f), L.footY, L.h * 0.062f,
+			text(args, cw * ((float)c + 0.5f), L.footY,
 			     m->shownActive[c] ? sfs::SCREEN_BLUE : sfs::SCREEN_PMID, t);
 		}
 	}
@@ -756,7 +758,7 @@ struct KeyDisplay : OpaqueWidget {
 		uint16_t pm = 0;
 		for (int i = 0; i < 7; i++)
 			pm |= (uint16_t)(1u << ((((int)std::lround(PEL[i])) % 12 + 12) % 12));
-		text(args, L.w * 0.5f, L.readY, L.h * 0.075f, sfs::SCREEN_TEXT, "C  Pelog");
+		text(args, L.w * 0.5f, L.readY, sfs::SCREEN_TEXT, "C  Pelog");
 		drawKeyboard(args, L, pm, 0, lit, true);
 		drawRegions(args, L, pel, 0, sounding, 2);
 
@@ -767,7 +769,7 @@ struct KeyDisplay : OpaqueWidget {
 		static const char* n[KEY_NCH] = {"C3 A", "F3", "–", "–"};
 		float fw = L.w / (float)KEY_NCH;
 		for (int c = 0; c < KEY_NCH; c++)
-			text(args, fw * ((float)c + 0.5f), L.footY, L.h * 0.062f,
+			text(args, fw * ((float)c + 0.5f), L.footY,
 			     c < 2 ? sfs::SCREEN_BLUE : sfs::SCREEN_PMID, n[c]);
 	}
 };

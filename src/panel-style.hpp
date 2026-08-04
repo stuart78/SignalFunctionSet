@@ -64,6 +64,27 @@ static const float TYPE_LABEL = 3.3f;   // mm
 static const float TYPE_NOTE  = 2.5f;   // mm — pot-position notes, ranges
 static const float TYPE_TITLE = 5.6f;   // mm — the module name
 
+// ── screen type ─────────────────────────────────────────────────────────────
+// One size for on-screen text, for the same reason there is one size for panel
+// labels. Note and Beat draw every string at 9 units on a 174-unit display,
+// which is exactly SCREEN below in mm — stating it here means a new display
+// cannot drift away from them by accident, which is precisely what happened
+// with Key and Loom (both invented sizes proportional to their own height, so
+// each module's text came out a different size).
+// SCREEN_SMALL is the screen's counterpart to TYPE_NOTE: dense rows only, where
+// the full size genuinely will not fit.
+// Neither carries letter spacing — Note and Beat set none, and tracking is what
+// made the same nominal size read as a different face.
+static const float TYPE_SCREEN       = 2.38f;  // mm
+static const float TYPE_SCREEN_SMALL = 1.90f;  // mm
+
+static inline void screenFont(NVGcontext* vg, const std::shared_ptr<Font>& f,
+                              float mm = TYPE_SCREEN) {
+	nvgFontFaceId(vg, f->handle);
+	nvgFontSize(vg, mm2px(mm));
+	nvgTextLetterSpacing(vg, 0.f);
+}
+
 // ── spacing ─────────────────────────────────────────────────────────────────
 // Labels sit ABOVE their control; a jack's label clears the jack by a little
 // more because the jack's own bezel reads as part of the shape.

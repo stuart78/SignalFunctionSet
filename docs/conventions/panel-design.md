@@ -128,3 +128,28 @@ See `panel-reticules.md` for the reticule rules (99%, one shape, single layer)
 and the 72dpi-vs-75dpi trap, and `figma-template.md` for laying a panel out
 before the code exists — a ¼HP grid in Rack's own units, with the component
 sizes and label gaps to scale.
+
+## Screen type
+
+On-screen text follows the same rule as panel labels: **one size**. Note and Beat
+draw every string at `9.f * s` on their 174-unit-wide display, which is
+**2.38 mm** of physical height — so that is the number, and it lives in
+`panel-style.hpp` as `sfs::TYPE_SCREEN` with a `sfs::screenFont()` helper.
+
+```cpp
+sfs::screenFont(vg, font);                          // the one size
+sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);  // dense rows only
+```
+
+Two things to avoid, both of which happened:
+
+* **Do not size text as a fraction of the display's own height.** It looks right
+  in isolation and comes out a different size on every module, because displays
+  are different heights. Key and Loom each invented their own and drifted from
+  Note.
+* **Do not set letter spacing.** Note and Beat set none; tracking makes the same
+  nominal size read as a different face.
+
+`TYPE_SCREEN_SMALL` (1.90 mm) is the screen's counterpart to `TYPE_NOTE` and is
+for rows that genuinely will not fit — check first, because eight columns across
+a 28HP display still fits the full size.

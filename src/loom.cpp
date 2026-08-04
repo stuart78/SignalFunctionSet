@@ -1146,9 +1146,7 @@ struct LoomDisplay : OpaqueWidget {
 			nvgFillColor(vg, t == sel ? sfs::SCREEN_DEEP : nvgRGB(0x24, 0x24, 0x3C));
 			nvgFill(vg);
 
-			nvgFontFaceId(vg, font->handle);
-			nvgFontSize(vg, L.tabH * 0.52f);
-			nvgTextLetterSpacing(vg, 0.4f);
+			sfs::screenFont(vg, font);
 			nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 			nvgFillColor(vg, t == sel ? sfs::SCREEN_TEXT : sfs::SCREEN_DIM);
 			nvgText(vg, x + L.tabW * 0.5f, L.tabY + L.tabH * 0.55f, LOOM_TABS[t], NULL);
@@ -1243,9 +1241,7 @@ struct LoomDisplay : OpaqueWidget {
 	void drawFoot(const DrawArgs& args, const LoomLayout& L, int i,
 	              const std::string& t, bool on) {
 		NVGcontext* vg = args.vg;
-		nvgFontFaceId(vg, font->handle);
-		nvgFontSize(vg, L.h * 0.058f);
-		nvgTextLetterSpacing(vg, 0.2f);
+		sfs::screenFont(vg, font);
 		nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 		nvgFillColor(vg, on ? sfs::SCREEN_TEXT : sfs::SCREEN_PMID);
 		nvgText(vg, L.sx(i), L.footY, t.c_str(), NULL);
@@ -1257,7 +1253,7 @@ struct LoomDisplay : OpaqueWidget {
 		NVGcontext* vg = args.vg;
 		float span = L.bridgeY - L.nutY;
 		nvgFontFaceId(vg, font->handle);
-		nvgFontSize(vg, L.h * 0.052f);
+		nvgFontSize(vg, mm2px(sfs::TYPE_SCREEN_SMALL));
 		nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 		for (int e = 0; e < EX_COUNT; e++) {
 			float y = L.bridgeY - span * (float)e / (float)(EX_COUNT - 1);
