@@ -168,6 +168,7 @@ struct Slide : Module {
 	int   voiceString[SLIDE_NCH] = {};   // poly: which string plays each note
 	int   nVoices = 0;
 	int   solveCount = 0;
+	float lastNote[SLIDE_NCH] = {};
 	float lastSolvedBar = 0.f;
 	float stereoWidth = 0.35f;
 	int   mouseMode = 0;                 // 0 = hover strums, 1 = click-drag only
@@ -349,13 +350,36 @@ struct Slide : Module {
 			// reachable and the module played everything on it. That, and not the
 			// cost function, was the "always one string" problem.
 			float home = barTarget;
+			float loT = tune[0], hiT = tune[0];
+			for (int i = 1; i < SLIDE_NCH; i++) {
+				loT = std::min(loT, tune[i]);
+				hiT = std::max(hiT, tune[i]);
+			}
 			float note[SLIDE_NCH];
-			for (int j = 0; j < nv; j++)
-				note[j] = inputs[VOCT_INPUT].getVoltage(j) * 12.f + home;
+			bool notesChanged = false;
+			for (int j = 0; j < nv; j++) {
+				float n = inputs[VOCT_INPUT].getVoltage(j) * 12.f + home;
+				// A bar only ever RAISES a string's pitch, so a note below every
+				// open string cannot be reached at all. A player takes it an
+				// octave up rather than dropping it — and the alternative here
+				// was worse than either: the old fallback picked an arbitrary
+				// string and left the bar where it was, so the note came out at
+				// some unrelated pitch with nothing to say that it had.
+				int guard = 0;
+				while (n < loT - 0.01f && guard++ < 12) n += 12.f;
+				while (n > hiT + (float)SLIDE_FRETS + 0.01f && guard++ < 24) n -= 12.f;
+				note[j] = n;
+				if (std::fabs(n - lastNote[j]) > 1e-4f) notesChanged = true;
+				lastNote[j] = n;
+			}
 
 			// Solving this every sample is pointless — the notes change at note
 			// rate — and it is the only O(strings x voices x candidates) thing here.
-			if ((solveCount++ & 63) == 0 || voicesChanged) {
+			// Solving every sample is wasteful, but solving only every 64 was a
+			// bug: a gate arriving in between was handed the PREVIOUS note's
+			// string, so the wrong string got picked and the right one stayed
+			// silent. Notes change at note rate — so solve when they change.
+			if (notesChanged || voicesChanged || (solveCount++ & 63) == 0) {
 				// A bar is ONE position serving every string at once, so a chord
 				// is not eight independent choices: it is one bar position that
 				// best fits all the notes. Candidates are the positions that put
