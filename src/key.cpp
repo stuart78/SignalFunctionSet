@@ -51,6 +51,16 @@ static const int KEY_BLACK_AFTER[5] = {0, 1, 3, 4, 5};
 
 enum KeyRound { KR_NEAREST, KR_DOWN, KR_UP, KR_COUNT };
 
+// OFFSET means scale degrees or semitones depending on a menu setting, so a
+// fixed unit string in the tooltip would be wrong half the time — and a tooltip
+// that reads "Channel 1 offset" with no unit at all leaves the reader guessing
+// (it is exactly the thing that got asked).
+struct Key;
+struct KeyOffsetQuantity : ParamQuantity {
+	std::string getUnit() override;
+	std::string getDescription() override;
+};
+
 // A scale, reduced to what the quantizer actually needs.
 struct KeyScale {
 	float iv[KEY_MAXDEG];
@@ -222,7 +232,7 @@ struct Key : Module {
 		configSwitch(SCALE_PARAM, 0.f, (float)SCALA_INDEX, 1.f, "Scale", scaleNames);
 
 		for (int c = 0; c < KEY_NCH; c++) {
-			configParam(OFFSET_PARAM + c, -12.f, 12.f, 0.f,
+			configParam<KeyOffsetQuantity>(OFFSET_PARAM + c, -12.f, 12.f, 0.f,
 			            string::f("Channel %d offset", c + 1));
 			getParamQuantity(OFFSET_PARAM + c)->snapEnabled = true;
 			configSwitch(SUB_PARAM + c, 0.f, (float)KEY_NSUB, 0.f,
@@ -902,5 +912,20 @@ struct KeyWidget : ModuleWidget {
 		}));
 	}
 };
+
+std::string KeyOffsetQuantity::getUnit() {
+	Key* m = dynamic_cast<Key*>(module);
+	return (m && m->offsetInDegrees) ? " scale degrees" : " semitones";
+}
+std::string KeyOffsetQuantity::getDescription() {
+	Key* m = dynamic_cast<Key*>(module);
+	if (m && m->offsetInDegrees)
+		return "Moves the quantized note this many steps along the channel's own "
+		       "scale, so it stays in key. On a sub-scale the steps are that "
+		       "sub-scale's degrees. Switch to semitones in the menu.";
+	return "Shifts the incoming pitch this many semitones BEFORE quantizing, so "
+	       "the scale decides where it lands — a step may not change the note at "
+	       "all. Switch to scale degrees in the menu.";
+}
 
 Model* modelKey = createModel<Key, KeyWidget>("Key");
