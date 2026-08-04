@@ -373,6 +373,17 @@
         "Sequencer"
       ],
       "hidden": true
+    },
+    {
+      "slug": "Key",
+      "name": "Key",
+      "description": "Quantizer that takes its key from the patch. Reads ROOT and SCALE CV in the Signal Function Set convention, so a key change made once travels to every module. Four polyphonic channels share one key, each with a scale-degree offset and a note-change trigger.",
+      "tags": [
+        "Quantizer",
+        "Polyphonic",
+        "Utility"
+      ],
+      "hidden": true
     }
   ]
 }

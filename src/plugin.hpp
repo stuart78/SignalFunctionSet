@@ -40,3 +40,4 @@ extern Model* modelFill;
 extern Model* modelChime;
 extern Model* modelCrystal;
 extern Model* modelLoom;
+extern Model* modelKey;

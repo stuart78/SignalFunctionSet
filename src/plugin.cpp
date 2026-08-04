@@ -38,6 +38,7 @@ void init(Plugin* p) {
 	p->addModel(modelChime);
 	p->addModel(modelCrystal);
 	p->addModel(modelLoom);
+	p->addModel(modelKey);
 
 	// Add modules here
 	// p->addModel(modelMyModule);
