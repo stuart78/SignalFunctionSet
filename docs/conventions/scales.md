@@ -76,3 +76,36 @@ accepted limitation of a 3-bit index, hence "Chromatic-ish".
 
 A standalone check of the `museSemis` derivation lives in the commit history
 (compile `scales.hpp` against the rule and assert equality for all entries).
+
+## The scale bus (SCALE CV, extended)
+
+`SCALE` CV has always been **1V per scale** — an index into the canonical list.
+That is enough for the 19 scales here and nothing else: it cannot express a
+custom note mask, a loaded Scala file, or a scale whose period is not an octave.
+
+**Key** extends it without breaking it. Its `SCALE` output is *polyphonic*:
+
+| channel | carries |
+|---|---|
+| 0 | the scale index, 1V per scale — exactly as before |
+| 1 | the period, in volts (12 semitones = 1V) |
+| 2 … n+1 | the n degrees, as 1V/oct offsets from the root; channel 2 is always 0 |
+
+`Port::getVoltage()` returns channel 0 whatever the channel count, and every
+existing consumer (Note, Fugue, MetaFugue, Muse, Chime) calls exactly that — so
+**the extra channels are invisible to them and change nothing.** A module that
+wants the real scale reads the further channels instead.
+
+Where the key cannot be named by an index — a custom mask, or Scala — channel 0
+carries the canonical scale sharing the most pitch classes with it, so an
+index-only consumer lands on a near neighbour rather than something unrelated.
+(Pelog, for instance, resolves to Phrygian, which is exactly its rounded
+pitch-class set.)
+
+Limits: 14 degrees, since 16 channels less the index and the period. That covers
+every canonical scale and most Scala files; a 31-note Scala scale is truncated.
+
+**Receiving:** validate before trusting. A 16-channel pitch cable patched into a
+SCALE input would otherwise be read as a scale. Require an ascending degree list
+starting at 0, all degrees inside the period, and a period between 1 and 48
+semitones; anything else falls back to plain index behaviour.

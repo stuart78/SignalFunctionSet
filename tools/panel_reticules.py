@@ -276,7 +276,7 @@ PLATES = {
     "fill": [(117.0, 8.0, 43.0, 116.0)],           # swing + the three output columns
     "chance": [],
     # the four channels read as one block, so they sit on one plate
-    "key": [(hp(0.8), hp(16.6), hp(10.4), hp(9.0))],
+    "key": [(hp(0.8), hp(16.6), hp(12.6), hp(9.0))],
     # the eight string columns, and the mix pair at the foot
     "loom": [(hp(6.2), hp(15.8), hp(19.0), hp(4.7)),
              (hp(23.5), hp(20.9), hp(4.2), hp(2.9))],

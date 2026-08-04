@@ -90,6 +90,32 @@ static float keySnap(float semis, const KeyScale& s, int mode) {
 	return rep * s.period + best;
 }
 
+// ── the scale bus ────────────────────────────────────────────────────────────
+// SCALE OUT is POLYPHONIC, and channel 0 is the plain 1V-per-scale index that
+// every existing module already reads: Note, Fugue, MetaFugue, Muse and Chime
+// all call getVoltage(), which returns channel 0 whatever the channel count. So
+// the extra channels are invisible to them and cost them nothing.
+//
+//   ch 0          scale index, 1V per scale — the NEAREST canonical scale when
+//                 the key is a custom mask or a Scala file, because an index
+//                 simply cannot say "Pelog", let alone "Pelog, 3 cents wide"
+//   ch 1          period, in volts (12 semitones = 1V)
+//   ch 2 .. n+1   the n degrees as 1V/oct offsets from the root; ch 2 is 0
+//
+// That is the answer to microtonal and custom scales travelling between
+// modules: the index stays as a lossy summary for whoever only wants a summary,
+// and the real scale rides right behind it for whoever can use it. Patch this
+// into another Key's SCALE input and the whole key crosses intact — Scala,
+// non-octave period and all.
+static const int KEY_BUS_MAXDEG = 14;    // 16 channels − index − period
+
+static bool keySameScale(const KeyScale& a, const KeyScale& b) {
+	if (a.n != b.n || std::fabs(a.period - b.period) > 1e-4f) return false;
+	for (int k = 0; k < a.n; k++)
+		if (std::fabs(a.iv[k] - b.iv[k]) > 1e-4f) return false;
+	return true;
+}
+
 // Move by n scale degrees, staying on the scale.
 static float keyShiftDegrees(float semis, const KeyScale& s, int n) {
 	if (n == 0 || s.n <= 0) return semis;
@@ -180,6 +206,7 @@ struct Key : Module {
 	enum OutputId {
 		ENUMS(OUT_OUTPUT, KEY_NCH),
 		ENUMS(CHG_OUTPUT, KEY_NCH),
+		ROOT_OUTPUT, SCALE_OUTPUT,
 		OUTPUTS_LEN
 	};
 	enum LightId { LIGHTS_LEN };
@@ -203,6 +230,10 @@ struct Key : Module {
 	KeyScale scala;
 	std::string scalaName, scalaPath;
 	bool  scalaLoaded = false;
+
+	// ── an incoming scale bus, when one is patched ────────────────────────────
+	KeyScale busScale;
+	bool  busActive = false;
 
 	// ── options ───────────────────────────────────────────────────────────────
 	bool  offsetInDegrees = true;
@@ -247,6 +278,9 @@ struct Key : Module {
 		configInput(ROOT_INPUT,  "Root CV (1V/oct, semitone-quantized)");
 		configInput(SCALE_INPUT, "Scale CV (1V per scale)");
 		configInput(TRIG_INPUT,  "Sample & hold trigger — when patched, notes update only on a trigger");
+		configOutput(ROOT_OUTPUT,  "Root CV (1V/oct) — drives any module's ROOT input");
+		configOutput(SCALE_OUTPUT, "Scale CV (1V per scale on channel 0; the full scale, "
+		                           "including microtonal and Scala, on the further channels)");
 
 		defaultSubs();
 		rebuild();
@@ -273,6 +307,50 @@ struct Key : Module {
 
 	bool scaleIsScala() const { return scaleIndex >= SCALA_INDEX; }
 
+	// Read an extended scale off SCALE IN. Validated rather than assumed: a
+	// sixteen-channel pitch cable patched here by accident would otherwise be
+	// read as a scale and produce nonsense, so anything that does not look like
+	// a scale falls back to plain 1V-per-scale index behaviour.
+	bool readScaleBus(KeyScale& out) {
+		Input& in = inputs[SCALE_INPUT];
+		int ch = in.getChannels();
+		if (ch < 3) return false;
+		float per = in.getVoltage(1) * 12.f;
+		if (per < 1.f || per > 48.f) return false;
+		int n = std::min(ch - 2, KEY_MAXDEG);
+		float prev = -1e9f;
+		for (int k = 0; k < n; k++) {
+			float d = in.getVoltage(2 + k) * 12.f;
+			if (d <= prev + 1e-4f) return false;          // must ascend strictly
+			if (d < -0.01f || d >= per + 0.01f) return false;
+			out.iv[k] = d;
+			prev = d;
+		}
+		if (std::fabs(out.iv[0]) > 0.01f) return false;   // degree 0 is the root
+		out.n = n;
+		out.period = per;
+		return true;
+	}
+
+	// An index cannot express a custom mask or a Scala scale, so channel 0 of
+	// the bus carries whichever canonical scale shares the most pitch classes
+	// with it. Downstream modules stay musically close instead of jumping to
+	// something unrelated.
+	int nearestCanonicalIndex() const {
+		uint16_t m = keyboardMask();
+		int best = 0, bestScore = -1000;
+		for (int i = 0; i < sfs::NUM_SCALES; i++) {
+			const sfs::Scale& sc = sfs::SCALES[i];
+			uint16_t c = 0;
+			for (int d = 0; d < sc.size; d++)
+				c |= (uint16_t)(1u << ((((int)std::lround(sc.intervals[d])) % 12 + 12) % 12));
+			int score = 2 * __builtin_popcount((unsigned)(m & c))
+			              - __builtin_popcount((unsigned)(m ^ c));
+			if (score > bestScore) { bestScore = score; best = i; }
+		}
+		return best;
+	}
+
 	// The twelve-key mask the on-screen keyboard shows. Microtonal degrees are
 	// rounded HERE and nowhere else — see the note at the top of the file.
 	uint16_t keyboardMask() const {
@@ -287,7 +365,12 @@ struct Key : Module {
 
 	void rebuild() {
 		parent = KeyScale();
-		if (customMask) {
+		if (busActive) {
+			// A patched bus is the authority: it carries a real scale, which the
+			// knob's index cannot.
+			parent = busScale;
+		}
+		else if (customMask) {
 			for (int s = 0; s < 12 && parent.n < KEY_MAXDEG; s++)
 				if (mask & (1u << s)) parent.iv[parent.n++] = (float)s;
 			parent.period = 12.f;
@@ -340,6 +423,17 @@ struct Key : Module {
 		int scaleCV = inputs[SCALE_INPUT].isConnected()
 			? (int)std::round(inputs[SCALE_INPUT].getVoltage()) : 0;
 		int newScale = clamp(scaleK + scaleCV, 0, SCALA_INDEX);
+
+		// An incoming bus overrides the index entirely — it says more than an
+		// index can, so letting the knob fight it would only be confusing.
+		KeyScale bs;
+		bool bus = readScaleBus(bs);
+		if (bus != busActive || (bus && !keySameScale(bs, busScale))) {
+			busActive = bus;
+			busScale = bs;
+			if (bus) customMask = false;
+			rebuild();
+		}
 
 		if (newRoot != rootNote) { rootNote = newRoot; keyGen++; }
 		if (newScale != scaleIndex) {
@@ -405,6 +499,22 @@ struct Key : Module {
 				if (p == 0) shownVolts[c] = held[c][p];
 			}
 		}
+
+		// ── the key, on its way out ────────────────────────────────────────────
+		outputs[ROOT_OUTPUT].setChannels(1);
+		outputs[ROOT_OUTPUT].setVoltage((float)rootNote / 12.f);
+
+		// Channel 0 is exactly what a 1V-per-scale consumer expects; a canonical
+		// scale sends its own index rather than a nearest-match, so the round
+		// trip through another module is lossless where it can be.
+		int idx = (busActive || customMask || scaleIsScala())
+		        ? nearestCanonicalIndex() : clamp(scaleIndex, 0, sfs::NUM_SCALES - 1);
+		int n = std::min(parent.n, KEY_BUS_MAXDEG);
+		outputs[SCALE_OUTPUT].setChannels(n + 2);
+		outputs[SCALE_OUTPUT].setVoltage((float)idx, 0);
+		outputs[SCALE_OUTPUT].setVoltage(parent.period / 12.f, 1);
+		for (int k = 0; k < n; k++)
+			outputs[SCALE_OUTPUT].setVoltage(parent.iv[k] / 12.f, 2 + k);
 	}
 
 	json_t* dataToJson() override {
@@ -720,7 +830,8 @@ struct KeyDisplay : OpaqueWidget {
 		for (int k = 0; k < m->parent.n; k++)
 			if (std::fabs(m->parent.iv[k] - std::round(m->parent.iv[k])) > 0.02f) micro = true;
 
-		std::string sname = m->customMask ? std::string("CUSTOM")
+		std::string sname = m->busActive ? string::f("BUS  %d", m->parent.n)
+		    : m->customMask ? std::string("CUSTOM")
 		    : m->scaleIsScala() ? (m->scalaLoaded ? m->scalaName : std::string("NO SCALA FILE"))
 		    : std::string(sfs::SCALES[clamp(m->scaleIndex, 0, sfs::NUM_SCALES - 1)].shortName);
 		if (sname.size() > 20) sname = sname.substr(0, 20);
@@ -786,7 +897,7 @@ struct KeyDisplay : OpaqueWidget {
 
 
 // =============================================================================
-// Panel — 12HP.
+// Panel — 14HP.
 // =============================================================================
 
 struct KeyWidget : ModuleWidget {
@@ -803,7 +914,7 @@ struct KeyWidget : ModuleWidget {
 		KeyDisplay* disp = new KeyDisplay();
 		disp->module = module;
 		disp->box.pos  = mm2px(Vec(hp(0.8f), hp(2.4f)));
-		disp->box.size = mm2px(Vec(hp(10.4f), hp(11.0f)));
+		disp->box.size = mm2px(Vec(hp(12.4f), hp(11.0f)));
 		addChild(disp);
 
 		// ── the key ────────────────────────────────────────────────────────────
@@ -826,6 +937,13 @@ struct KeyWidget : ModuleWidget {
 		lbl->jackOnPlate(hp(6),  hp(17.8f), "OFF");
 		lbl->jackOnPlate(hp(8),  hp(17.8f), "CHG");
 		lbl->jackOnPlate(hp(10), hp(17.8f), "OUT");
+		// The key on its way out, in a column of its own: these are not per-channel
+		// like everything to their left, and sharing a row would say they were.
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(12.5f), hp(18.8f))), module, Key::ROOT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(12.5f), hp(21.8f))), module, Key::SCALE_OUTPUT));
+		lbl->jackOnPlate(hp(12.5f), hp(18.8f), "ROOT");
+		lbl->jackOnPlate(hp(12.5f), hp(21.8f), "SCALE");
+
 		for (int c = 0; c < KEY_NCH; c++) {
 			float y = hp(17.8f + 2.f * c);
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(2), y)), module, Key::IN_INPUT + c));
