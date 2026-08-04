@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "panel-style.hpp"
 #include "scales.hpp"
+#include "waveguide.hpp"
 #include <cmath>
 #include <cstring>
 #include <atomic>
@@ -133,48 +134,15 @@ static std::string loomNoteName(float semisFromC4) {
 	return std::string(LOOM_NOTES[pc]) + std::to_string(oct);
 }
 
-// The loop's filters delay the signal as well as shaping it, and that delay is
-// part of the pitch. Estimating it at DC leaves the string measurably sharp —
-// and sharper the higher it is tuned, because the error is a fixed number of
-// samples against a shrinking period. So both are evaluated exactly, at the
-// string's own fundamental, and subtracted from the delay line.
-static inline float loomAllpassDelay(float a, float w) {
-	float cw = std::cos(w), sw = std::sin(w);
-	float argN = std::atan2(-sw, a + cw);
-	float argD = std::atan2(-a * sw, 1.f + a * cw);
-	return -(argN - argD) / w;
-}
-static inline float loomOnePoleDelay(float c, float w) {
-	float b = 1.f - c;
-	return std::atan2(b * std::sin(w), 1.f - b * std::cos(w)) / w;
-}
-
-// ── a two-pole state-variable filter, used for the body resonances ──────────
-struct LoomSVF {
-	float ic1 = 0.f, ic2 = 0.f;
-	float a1 = 0.f, a2 = 0.f, a3 = 0.f;
-	void set(float freq, float q, float sr) {
-		float g = std::tan((float)M_PI * clamp(freq, 20.f, sr * 0.45f) / sr);
-		float k = 1.f / std::max(q, 0.5f);
-		a1 = 1.f / (1.f + g * (g + k));
-		a2 = g * a1;
-		a3 = g * a2;
-	}
-	float bandpass(float v0) {
-		float v3 = v0 - ic2;
-		float v1 = a1 * ic1 + a2 * v3;
-		float v2 = ic2 + a2 * ic1 + a3 * v3;
-		ic1 = 2.f * v1 - ic1;
-		ic2 = 2.f * v2 - ic2;
-		return v1;
-	}
-	void clear() { ic1 = ic2 = 0.f; }
-};
+// The delay line, the exact phase-delay maths and the filter now live in
+// waveguide.hpp, shared with Slide. The loop BODY stays here — see that file.
+typedef sfs::SVF LoomSVF;
+static inline float loomAllpassDelay(float a, float w) { return sfs::allpassDelay(a, w); }
+static inline float loomOnePoleDelay(float c, float w) { return sfs::onePoleDelay(c, w); }
 
 // ── one string ──────────────────────────────────────────────────────────────
 struct LoomString {
-	float buf[LOOM_BUF] = {};
-	int   wi = 0;
+	sfs::DelayLine<LOOM_BUF> dl;
 
 	float lp = 0.f;                         // loop lowpass (treble loss)
 	float apX[LOOM_AP] = {}, apY[LOOM_AP] = {};
@@ -206,8 +174,8 @@ struct LoomString {
 	float wobble = 0.f;
 
 	void clear() {
-		std::memset(buf, 0, sizeof(buf));
-		wi = 0; lp = 0.f; dcX = dcY = 0.f; excLp = 0.f;
+		dl.clear();
+		lp = 0.f; dcX = dcY = 0.f; excLp = 0.f;
 		std::memset(apX, 0, sizeof(apX));
 		std::memset(apY, 0, sizeof(apY));
 		burst = 0.f; sustainTimer = 0.f; gateHeld = false;
@@ -219,13 +187,7 @@ struct LoomString {
 		aeo.clear();
 	}
 
-	float tap(float d) const {
-		float rp = (float)wi - d;
-		while (rp < 0.f) rp += (float)LOOM_BUF;
-		int i0 = (int)rp;
-		float fr = rp - (float)i0;
-		return buf[i0 & LOOM_MASK] * (1.f - fr) + buf[(i0 + 1) & LOOM_MASK] * fr;
-	}
+	float tap(float d) const { return dl.tap(d); }
 };
 
 struct Loom : Module {
@@ -811,8 +773,7 @@ struct Loom : Module {
 
 			if (x > 1.6f) x = 1.6f; else if (x < -1.6f) x = -1.6f;
 			s.vPrev = v;
-			s.buf[s.wi] = x + 1e-20f;
-			s.wi = (s.wi + 1) & LOOM_MASK;
+			s.dl.write(x);
 
 			// ── mix ────────────────────────────────────────────────────────────
 			float y = s.out * level[i];
