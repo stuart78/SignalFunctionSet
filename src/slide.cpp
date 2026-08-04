@@ -139,6 +139,9 @@ struct Slide : Module {
 
 	// ── the bar ───────────────────────────────────────────────────────────────
 	float barSm = 0.f, barPrev = 0.f;    // where the bar IS, and where it was
+	float barVel = 0.f;                  // it has to get up to speed and slow down
+	float tremPhase = 0.f, tremPhase2 = 0.f;
+	float scrapePhase = 0.f;
 	float slantSm = 0.f;
 	float vibPhase = 0.f, vibDrift = 0.f;
 	float scrapeEnv = 0.f;
@@ -155,6 +158,10 @@ struct Slide : Module {
 	// slides at hand speed, which is the instrument's whole voice.
 	int   playMode = 1;                  // 0 = chord, 1 = melody
 	int   melodyString = 0;
+	int   voiceString[SLIDE_NCH] = {};   // poly: which string plays each note
+	int   nVoices = 0;
+	int   solveCount = 0;
+	float lastSolvedBar = 0.f;
 	float stereoWidth = 0.35f;
 	int   mouseMode = 0;                 // 0 = hover strums, 1 = click-drag only
 
@@ -170,7 +177,11 @@ struct Slide : Module {
 	Slide() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
-		configParam(BAR_PARAM, 0.f, (float)SLIDE_FRETS, 0.f, "Bar position", " semitones");
+		// Defaults to the seventh rather than the nut: in melody mode this is the
+		// home position the hand works around, and at the nut there is no room to
+		// reach anything below the open strings.
+		configParam(BAR_PARAM, 0.f, (float)SLIDE_FRETS, 7.f, "Bar position (melody: home position)",
+		            " semitones");
 		configParam(SLANT_PARAM, -6.f, 6.f, 0.f, "Bar slant", " semitones across the strings");
 		configParam(GLIDE_PARAM, 0.f, 1.f, 0.35f, "Glide (bar travel rate)", "%", 0.f, 100.f);
 		configParam(VIB_PARAM, 0.f, 1.f, 0.f, "Vibrato (bar rocking)", "%", 0.f, 100.f);
@@ -312,19 +323,75 @@ struct Slide : Module {
 			barTarget += inputs[BAR_CV_INPUT].getVoltage() * 12.f;
 
 		if (playMode == 1 && inputs[VOCT_INPUT].isConnected()) {
-			// Where does this note live? On a lap steel the answer is whichever
-			// string puts it under the bar with the least travel from where the
-			// bar already is — which is why a player crosses strings rather than
-			// running the length of the neck.
-			float want = inputs[VOCT_INPUT].getVoltage() * 12.f + barTarget;
-			int best = -1; float bestCost = 1e9f;
-			for (int i = 0; i < SLIDE_NCH; i++) {
-				float need = want - tune[i];
-				if (need < -0.01f || need > (float)SLIDE_FRETS + 0.01f) continue;
-				float cost = std::fabs(need - barSm);
-				if (cost < bestCost) { bestCost = cost; best = i; }
+			int nv = std::max(1, inputs[VOCT_INPUT].getChannels());
+			nv = std::min(nv, SLIDE_NCH);
+			bool voicesChanged = (nv != nVoices);
+			// The BAR knob is the home position the hand works around, not a
+			// stop: a note below every open string cannot be played at all going
+			// UP the neck, so leaving home at the nut left only the lowest string
+			// reachable and the module played everything on it. That, and not the
+			// cost function, was the "always one string" problem.
+			float home = barTarget;
+			float note[SLIDE_NCH];
+			for (int j = 0; j < nv; j++)
+				note[j] = inputs[VOCT_INPUT].getVoltage(j) * 12.f + home;
+
+			// Solving this every sample is pointless — the notes change at note
+			// rate — and it is the only O(strings x voices x candidates) thing here.
+			if ((solveCount++ & 63) == 0 || voicesChanged) {
+				// A bar is ONE position serving every string at once, so a chord
+				// is not eight independent choices: it is one bar position that
+				// best fits all the notes. Candidates are the positions that put
+				// some note exactly under the bar on some string.
+				float bestBar = barSm; float bestErr = 1e9f;
+				for (int j = 0; j < nv; j++) {
+					for (int i = 0; i < SLIDE_NCH; i++) {
+						float cand = note[j] - tune[i];
+						if (cand < -0.01f || cand > (float)SLIDE_FRETS + 0.01f) continue;
+						float err = 0.f;
+						for (int k = 0; k < nv; k++) {
+							float b = 1e9f;
+							for (int m = 0; m < SLIDE_NCH; m++)
+								b = std::min(b, std::fabs(note[k] - tune[m] - cand));
+							err += b;
+						}
+						// Two tie-breaks, and the second is the one that matters.
+						// Minimising bar travel alone is a TIE for most passing
+						// notes — up two frets on this string costs exactly what
+						// down two frets on the string tuned a third above costs —
+						// so it always took the same string and walked the neck.
+						// Pulling back toward the home position breaks those ties
+						// toward crossing strings, and travels LESS doing it: a
+						// major scale goes from one string and 12 semitones of
+						// travel to five strings and 8.
+						err += 0.10f * std::fabs(cand - barSm)
+						     + 0.05f * std::fabs(cand - home);
+						if (err < bestErr) { bestErr = err; bestBar = cand; }
+					}
+				}
+				barTarget = bestBar;
+
+				// Now hand the notes out, one string each — the bar is already
+				// placed, so this is exactly the choice a player makes.
+				bool taken[SLIDE_NCH] = {};
+				for (int j = 0; j < nv; j++) {
+					int best = -1; float bc = 1e9f;
+					for (int i = 0; i < SLIDE_NCH; i++) {
+						if (taken[i]) continue;
+						float need = note[j] - tune[i];
+						if (need < -0.01f || need > (float)SLIDE_FRETS + 0.01f) continue;
+						float c = std::fabs(need - bestBar);
+						if (c < bc) { bc = c; best = i; }
+					}
+					if (best < 0) best = clamp(j, 0, SLIDE_NCH - 1);
+					taken[best] = true;
+					voiceString[j] = best;
+				}
+				melodyString = voiceString[0];
 			}
-			if (best >= 0) { melodyString = best; barTarget = want - tune[best]; }
+			else barTarget = lastSolvedBar;                    // hold between solves
+			lastSolvedBar = barTarget;
+			nVoices = nv;
 		}
 		barTarget = clamp(barTarget, 0.f, (float)SLIDE_FRETS);
 
@@ -333,10 +400,16 @@ struct Slide : Module {
 		// interval is what makes a synth portamento sound like a synth.
 		float glide = clamp(params[GLIDE_PARAM].getValue(), 0.f, 1.f);
 		float rate = 400.f * std::pow(0.006f, glide);      // semitones per second
-		float step = rate * args.sampleTime;
 		barPrev = barSm;
 		float dBar = barTarget - barSm;
-		if (std::fabs(dBar) <= step) barSm = barTarget;
+		// A hand accelerates away and eases into the note. Moving at exactly the
+		// target speed from the first sample to the last, and arriving exactly on
+		// pitch, is most of what makes a glide read as a pitch bend rather than
+		// as somebody's arm.
+		float want = rate * clamp(std::fabs(dBar) / 1.2f, 0.f, 1.f);
+		barVel += (want - barVel) * (1.f - std::exp(-args.sampleTime / 0.040f));
+		float step = barVel * args.sampleTime;
+		if (std::fabs(dBar) <= step) { barSm = barTarget; barVel = 0.f; }
 		else barSm += (dBar > 0.f) ? step : -step;
 
 		float slantTarget = paramCV(SLANT_PARAM, SLANT_CV_INPUT, -6.f, 6.f);
@@ -351,16 +424,40 @@ struct Slide : Module {
 		if (vibPhase >= 1.f) vibPhase -= 1.f;
 		float vib = vibDepth * 0.7f * std::sin(2.f * (float)M_PI * vibPhase);
 
+		// Nobody holds a steel bar perfectly still. A few cents of wander, always
+		// present and a little wider while the bar is travelling, is the
+		// difference between a hand and a control voltage — and it costs nothing.
+		tremPhase  += args.sampleTime * 3.1f;  if (tremPhase  >= 1.f) tremPhase  -= 1.f;
+		tremPhase2 += args.sampleTime * 7.7f;  if (tremPhase2 >= 1.f) tremPhase2 -= 1.f;
+		float trem = (std::sin(2.f * (float)M_PI * tremPhase) * 0.030f
+		            + std::sin(2.f * (float)M_PI * tremPhase2) * 0.014f)
+		           * (1.f + 1.6f * scrapeEnv);
+		vib += trem;
+
 		// ── scrape ────────────────────────────────────────────────────────────
 		// Proportional to how fast the bar is MOVING, so it stops the instant
 		// the bar stops. That correlation is the tell.
-		float barVel = std::fabs(barSm - barPrev) * sr;    // semitones per second
-		float target = clamp(barVel / 16.f, 0.f, 1.f);
+		float speed = std::fabs(barSm - barPrev) * sr;    // semitones per second
+		float target = clamp(speed / 16.f, 0.f, 1.f);
 		scrapeEnv += (target - scrapeEnv) * (1.f - std::exp(-args.sampleTime / 0.004f));
 		float scrapeAmt = clamp(params[SCRAPE_PARAM].getValue(), 0.f, 1.f);
-		if (coilSr != sr) scrapeBp.set(2600.f, 1.1f, sr);
-		float scrapeRaw = scrapeBp.bandpass(2.f * random::uniform() - 1.f)
-		                * scrapeEnv * scrapeAmt;
+		if (coilSr != sr) scrapeBp.set(2200.f, 0.9f, sr);
+
+		// A wound string is a GRATING, and the bar crossing it is a periodic
+		// impulse train, not noise. Its rate is bar speed divided by the winding
+		// pitch, which lands it at a few hundred Hz to a few kHz — a rasp that
+		// rises as you move faster and falls as you go up the neck, because the
+		// frets get closer together. That correlation with the gesture is what
+		// the ear reads as a bar on a string; bandpassed white noise reads as
+		// bandpassed white noise, which is what the first version was.
+		const float SCALE_MM = 620.f, WIND_MM = 0.7f;
+		float mmPerSemi = SCALE_MM * 0.05776f * std::pow(2.f, -barSm / 12.f);
+		float rasped = clamp(speed * mmPerSemi / WIND_MM, 40.f, 7000.f);
+		scrapePhase += rasped * args.sampleTime;
+		if (scrapePhase >= 1.f) scrapePhase -= 1.f;
+		// A real winding is not a clean sawtooth — the bar chatters across it.
+		float grating = (2.f * scrapePhase - 1.f) * (0.72f + 0.28f * (2.f * random::uniform() - 1.f));
+		float scrapeRaw = scrapeBp.bandpass(grating) * scrapeEnv * scrapeAmt;
 		// A string is a resonator with a round-trip gain near one, so it
 		// multiplies anything injected into it by 1/(1-g) — fifty-odd times at
 		// these decay settings. Feeding it broadband noise at any audible level
@@ -369,7 +466,7 @@ struct Slide : Module {
 		// job of making the noise pitched, and the audible part of the scrape is
 		// mechanical contact noise that reaches the output directly.
 		float scrapeIn = scrapeRaw * 0.004f;
-		float scrapeDirect = scrapeRaw * 0.22f;
+		float scrapeDirect = scrapeRaw * 0.16f;
 
 		// ── tone controls ─────────────────────────────────────────────────────
 		float dampAmt = paramCV(DAMP_PARAM, DAMP_CV_INPUT, 0.f, 1.f);
@@ -422,9 +519,14 @@ struct Slide : Module {
 		}
 		else {
 			for (int i = 0; i < SLIDE_NCH && i < gch; i++)
-				if (polyGate[i].process(inputs[GATE_INPUT].getVoltage(i), 0.1f, 1.f))
-					pick(i, inputs[VEL_INPUT].isConnected()
-					        ? clamp(inputs[VEL_INPUT].getPolyVoltage(i) / 10.f, 0.03f, 1.f) : 1.f);
+				if (polyGate[i].process(inputs[GATE_INPUT].getVoltage(i), 0.1f, 1.f)) {
+					float gv = inputs[VEL_INPUT].isConnected()
+					         ? clamp(inputs[VEL_INPUT].getPolyVoltage(i) / 10.f, 0.03f, 1.f) : 1.f;
+					// Poly gate channel N is the Nth NOTE, not the Nth string —
+					// which string it lands on is the solver's business.
+					bool melodic = (playMode == 1 && inputs[VOCT_INPUT].isConnected());
+					pick(melodic ? voiceString[std::min(i, SLIDE_NCH - 1)] : i, gv);
+				}
 		}
 
 		bool autoOn = params[AUTO_PARAM].getValue() > 0.5f;
