@@ -98,6 +98,8 @@ struct SlideString {
 	float dampC = 0.f;
 	float pending = -1.f, pendVel = 1.f;
 
+	float live = 0.f;                 // 1 just after picking, decaying — a string
+	                                  // the hand is not on is a damped string
 	float out = 0.f;                  // what the pickup sees from this string
 	float amp = 0.f, flash = 0.f;     // display only
 
@@ -108,7 +110,7 @@ struct SlideString {
 		std::memset(apY, 0, sizeof(apY));
 		burst = 0.f; pending = -1.f;
 		dTarget = dSm = 0.f; dampC = 0.f;
-		out = amp = flash = 0.f;
+		out = amp = flash = live = 0.f;
 	}
 };
 
@@ -116,7 +118,7 @@ struct Slide : Module {
 	enum ParamId {
 		BAR_PARAM, SLANT_PARAM, GLIDE_PARAM, VIB_PARAM, SCRAPE_PARAM,
 		DECAY_PARAM, DAMP_PARAM, PICK_PARAM,
-		PICKUP_PARAM, TONE_PARAM, DRIVE_PARAM,
+		PICKUP_PARAM, TONE_PARAM, DRIVE_PARAM, BLOCK_PARAM,
 		ROOT_PARAM, OCT_PARAM,
 		PATTERN_PARAM, DENSITY_PARAM,
 		AUTO_PARAM, RESET_PARAM,
@@ -146,6 +148,13 @@ struct Slide : Module {
 	sfs::SVF coil;
 	float coilSr = 0.f, coilHz = 0.f;
 
+	// CHORD: V/OCT transposes the whole instrument and the BAR knob stops it —
+	// good for pads and rolls. MELODY: V/OCT is the note you want, and the module
+	// does what a player does — picks the string that needs the least bar travel
+	// and slides the bar to it. A melodic line then comes out as a series of
+	// slides at hand speed, which is the instrument's whole voice.
+	int   playMode = 1;                  // 0 = chord, 1 = melody
+	int   melodyString = 0;
 	float stereoWidth = 0.35f;
 	int   mouseMode = 0;                 // 0 = hover strums, 1 = click-drag only
 
@@ -175,6 +184,11 @@ struct Slide : Module {
 		            "%", 0.f, 100.f);
 		configParam(TONE_PARAM, 0.f, 1.f, 0.5f, "Tone (coil resonance)", "%", 0.f, 100.f);
 		configParam(DRIVE_PARAM, 0.f, 1.f, 0.2f, "Amp drive", "%", 0.f, 100.f);
+		// Lap steel is not strummed: the picking hand damps every string it is
+		// not sounding, constantly. Without that an eight-string open tuning is
+		// a wash — so this is the technique, not a refinement, and it defaults on.
+		configParam(BLOCK_PARAM, 0.f, 1.f, 0.75f, "Blocking (hand damping the strings you are not playing)",
+		            "%", 0.f, 100.f);
 
 		configParam(ROOT_PARAM, -12.f, 12.f, 0.f, "Root", " semitones");
 		getParamQuantity(ROOT_PARAM)->snapEnabled = true;
@@ -255,6 +269,7 @@ struct Slide : Module {
 		s.burstAmp = s.velocity * 0.7f;
 		s.excLp = 0.f;
 		s.flash = 1.f;
+		s.live = 1.f;
 	}
 
 	void strum(float vel) {
@@ -295,6 +310,22 @@ struct Slide : Module {
 		float barTarget = params[BAR_PARAM].getValue();
 		if (inputs[BAR_CV_INPUT].isConnected())
 			barTarget += inputs[BAR_CV_INPUT].getVoltage() * 12.f;
+
+		if (playMode == 1 && inputs[VOCT_INPUT].isConnected()) {
+			// Where does this note live? On a lap steel the answer is whichever
+			// string puts it under the bar with the least travel from where the
+			// bar already is — which is why a player crosses strings rather than
+			// running the length of the neck.
+			float want = inputs[VOCT_INPUT].getVoltage() * 12.f + barTarget;
+			int best = -1; float bestCost = 1e9f;
+			for (int i = 0; i < SLIDE_NCH; i++) {
+				float need = want - tune[i];
+				if (need < -0.01f || need > (float)SLIDE_FRETS + 0.01f) continue;
+				float cost = std::fabs(need - barSm);
+				if (cost < bestCost) { bestCost = cost; best = i; }
+			}
+			if (best >= 0) { melodyString = best; barTarget = want - tune[best]; }
+		}
 		barTarget = clamp(barTarget, 0.f, (float)SLIDE_FRETS);
 
 		// Rate-based, not time-based: the hand travels the neck at a roughly
@@ -328,8 +359,17 @@ struct Slide : Module {
 		scrapeEnv += (target - scrapeEnv) * (1.f - std::exp(-args.sampleTime / 0.004f));
 		float scrapeAmt = clamp(params[SCRAPE_PARAM].getValue(), 0.f, 1.f);
 		if (coilSr != sr) scrapeBp.set(2600.f, 1.1f, sr);
-		float scrape = scrapeBp.bandpass(2.f * random::uniform() - 1.f)
-		             * scrapeEnv * scrapeAmt * 0.10f;
+		float scrapeRaw = scrapeBp.bandpass(2.f * random::uniform() - 1.f)
+		                * scrapeEnv * scrapeAmt;
+		// A string is a resonator with a round-trip gain near one, so it
+		// multiplies anything injected into it by 1/(1-g) — fifty-odd times at
+		// these decay settings. Feeding it broadband noise at any audible level
+		// does not sound like a scrape, it sounds like the string being bowed by
+		// static. So only a trace goes INTO the string, where it does the useful
+		// job of making the noise pitched, and the audible part of the scrape is
+		// mechanical contact noise that reaches the output directly.
+		float scrapeIn = scrapeRaw * 0.004f;
+		float scrapeDirect = scrapeRaw * 0.22f;
 
 		// ── tone controls ─────────────────────────────────────────────────────
 		float dampAmt = paramCV(DAMP_PARAM, DAMP_CV_INPUT, 0.f, 1.f);
@@ -342,6 +382,8 @@ struct Slide : Module {
 			decaySec *= std::pow(2.f, inputs[DECAY_CV_INPUT].getVoltage() / 5.f);
 		decaySec = clamp(decaySec, 0.05f, 40.f);
 
+		float blockAmt = clamp(params[BLOCK_PARAM].getValue(), 0.f, 1.f);
+		float liveDecay = std::exp(-args.sampleTime / 2.5f);
 		float dampHz = 500.f * std::pow(12000.f / 500.f, dampAmt);
 		float excHz = 900.f * std::pow(11000.f / 900.f, pickHard);
 		float excC = clamp(1.f - std::exp(-2.f * (float)M_PI * excHz / sr), 0.01f, 1.f);
@@ -358,8 +400,11 @@ struct Slide : Module {
 
 		// ── pitch ─────────────────────────────────────────────────────────────
 		float basePitch = params[OCT_PARAM].getValue()
-		                + params[ROOT_PARAM].getValue() / 12.f
-		                + inputs[VOCT_INPUT].getVoltage();
+		                + params[ROOT_PARAM].getValue() / 12.f;
+		// In melody mode V/OCT has already been spent placing the bar; adding it
+		// here as well would transpose the note a second time.
+		if (!(playMode == 1 && inputs[VOCT_INPUT].isConnected()))
+			basePitch += inputs[VOCT_INPUT].getVoltage();
 
 		// ── triggers ──────────────────────────────────────────────────────────
 		if (resetTrig.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f)
@@ -368,7 +413,12 @@ struct Slide : Module {
 
 		int gch = inputs[GATE_INPUT].getChannels();
 		if (gch <= 1) {
-			if (gateTrig.process(inputs[GATE_INPUT].getVoltage(), 0.1f, 1.f)) strum(1.f);
+			if (gateTrig.process(inputs[GATE_INPUT].getVoltage(), 0.1f, 1.f)) {
+				float gv = inputs[VEL_INPUT].isConnected()
+				         ? clamp(inputs[VEL_INPUT].getVoltage() / 10.f, 0.03f, 1.f) : 1.f;
+				if (playMode == 1 && inputs[VOCT_INPUT].isConnected()) pick(melodyString, gv);
+				else strum(gv);
+			}
 		}
 		else {
 			for (int i = 0; i < SLIDE_NCH && i < gch; i++)
@@ -437,10 +487,15 @@ struct Slide : Module {
 			s.dSm += (s.dTarget - s.dSm) * 0.25f;
 			float d = s.dSm;
 
-			float g = std::min(std::exp(-6.907755f / (freq * std::max(decaySec, 0.02f))),
-			                   0.99995f);
+			// A blocked string still sounds when picked — it just stops ringing
+			// almost at once, which is what a palm on the strings does.
+			s.live *= liveDecay;
+			float openness = 1.f - blockAmt * (1.f - s.live);
+			float t60 = std::max(decaySec * (0.03f + 0.97f * openness), 0.02f);
+			float g = std::min(std::exp(-6.907755f / (freq * t60)), 0.99995f);
 
-			float v = s.dl.tap(d);
+			// Cubic, because this delay is MOVING — see waveguide.hpp.
+			float v = s.dl.tapCubic(d);
 
 			// The pickup sits at a FIXED distance from the bridge while the
 			// speaking length changes, so its position as a FRACTION of the
@@ -448,7 +503,7 @@ struct Slide : Module {
 			// the harmonic series with it. This is the up-the-neck tone change.
 			float puFrac = clamp(pickupPos * std::pow(2.f, stop / 12.f), 0.02f, 0.48f);
 			float combD = std::min(d * (1.f + puFrac), (float)SLIDE_BUF - 4.f);
-			s.out = v - s.dl.tap(combD);
+			s.out = v - s.dl.tapCubic(combD);
 
 			float exc = 0.f;
 			if (s.burst > 0.f) {
@@ -458,7 +513,9 @@ struct Slide : Module {
 				exc = s.excLp * s.burstAmp;
 				s.burst -= 1.f;
 			}
-			exc += scrape;                     // the bar is on every string at once
+			// The bar is on every string, but a damped string neither rings nor
+			// passes the scrape on.
+			exc += scrapeIn * (0.15f + 0.85f * s.live);
 
 			s.lp += s.dampC * (v - s.lp);
 			float x = g * s.lp;
@@ -492,8 +549,8 @@ struct Slide : Module {
 		// that only differs by panning; running a second instance would drift.
 		loR = loL + (mixR - mixL) * 0.5f;
 		bpR = bpL;
-		float yL = loL + 1.3f * bpL;
-		float yR = loR + 1.3f * bpR;
+		float yL = loL + 1.3f * bpL + scrapeDirect;
+		float yR = loR + 1.3f * bpR + scrapeDirect;
 
 		float dr = 1.f + drive * 8.f;
 		yL = std::tanh(yL * dr) / std::sqrt(dr);
@@ -517,6 +574,7 @@ struct Slide : Module {
 
 	json_t* dataToJson() override {
 		json_t* r = json_object();
+		json_object_set_new(r, "playMode", json_integer(playMode));
 		json_object_set_new(r, "stereoWidth", json_real(stereoWidth));
 		json_object_set_new(r, "mouseMode", json_integer(mouseMode));
 		json_object_set_new(r, "internalHz", json_real(internalHz));
@@ -526,6 +584,7 @@ struct Slide : Module {
 		return r;
 	}
 	void dataFromJson(json_t* r) override {
+		if (json_t* j = json_object_get(r, "playMode")) playMode = (int)json_integer_value(j);
 		if (json_t* j = json_object_get(r, "stereoWidth")) stereoWidth = json_number_value(j);
 		if (json_t* j = json_object_get(r, "mouseMode")) mouseMode = (int)json_integer_value(j);
 		if (json_t* j = json_object_get(r, "internalHz")) internalHz = json_number_value(j);
@@ -779,12 +838,14 @@ struct SlideWidget : ModuleWidget {
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(16), hp(14.4f))), module, Slide::SCRAPE_PARAM));
 		lbl->trim(hp(16), hp(14.4f), "SCRAPE");
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(19), hp(14.4f))), module, Slide::ROOT_PARAM));
-		lbl->trim(hp(19), hp(14.4f), "ROOT");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(21), hp(14.4f))), module, Slide::OCT_PARAM));
-		lbl->trim(hp(21), hp(14.4f), "OCT");
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(23.4f), hp(14.4f))), module, Slide::VOCT_INPUT));
-		lbl->jack(hp(23.4f), hp(14.4f), "V/OCT");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(18), hp(14.4f))), module, Slide::BLOCK_PARAM));
+		lbl->trim(hp(18), hp(14.4f), "BLOCK");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(20), hp(14.4f))), module, Slide::ROOT_PARAM));
+		lbl->trim(hp(20), hp(14.4f), "ROOT");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(22), hp(14.4f))), module, Slide::OCT_PARAM));
+		lbl->trim(hp(22), hp(14.4f), "OCT");
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(24.2f), hp(14.4f))), module, Slide::VOCT_INPUT));
+		lbl->jack(hp(24.2f), hp(14.4f), "V/OCT");
 
 		// ── the string and the pickup ──────────────────────────────────────────
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(2), hp(17.6f))), module, Slide::DECAY_PARAM));
@@ -845,6 +906,9 @@ struct SlideWidget : ModuleWidget {
 				sub->addChild(createMenuItem(SLIDE_TUNINGS[t].name, "",
 					[=]() { m->applyTuning(t); }));
 		}));
+		menu->addChild(createIndexPtrSubmenuItem("V/oct",
+			{"Transposes the whole instrument", "Places the bar and picks the string"},
+			&m->playMode));
 		menu->addChild(createIndexPtrSubmenuItem("Mouse",
 			{"Hover strums the strings", "Click and drag only"}, &m->mouseMode));
 	}

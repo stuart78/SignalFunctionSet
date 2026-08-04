@@ -29,10 +29,10 @@ core rather than each growing their own.
 
 ## Known gaps in shipped work
 
-- **Slide** — built 2026-08-03 and not yet played in anger. The bar, glide law,
-  scrape, slant and pickup comb are verified numerically but the *sound* has had
-  no listening pass; expect the scrape level, drive amount and pickup default to
-  need tuning by ear.
+- **Slide** — first listening pass found the scrape saturating the strings and
+  the open tuning washing out; both fixed (see the commit). Still unproven by
+  ear: whether the remaining scrape level is right, and whether melody mode's
+  string choice crosses strings where a player would.
 
 - **Loom** — strings tuned near the very top of the range (+36 semitones,
   ~523 Hz) bow much quieter than the rest; the pluck-position comb's null lands

@@ -94,6 +94,26 @@ struct DelayLine {
 		return buf[i0 & MASK] * (1.f - fr) + buf[(i0 + 1) & MASK] * fr;
 	}
 
+	// For a delay that MOVES. Linear interpolation's gain ripples once per whole
+	// sample of travel, and on a slide that lands squarely in the audio band —
+	// at a hand-speed bar it measured 1.9 kHz, which is heard as a buzz or a
+	// click and no amount of smoothing removes it, because it is the
+	// interpolator and not the smoothing. Four-point Lagrange is flat enough
+	// across the sweep that the artefact goes away. Loom keeps tap(): its delay
+	// barely moves, and this would change a tuning that is verified bit-exact.
+	float tapCubic(float d) const {
+		float rp = (float)wi - d;
+		while (rp < 1.f) rp += (float)BUF;
+		int i1 = (int)rp;
+		float t = rp - (float)i1;
+		float y0 = buf[(i1 - 1) & MASK], y1 = buf[i1 & MASK];
+		float y2 = buf[(i1 + 1) & MASK], y3 = buf[(i1 + 2) & MASK];
+		float c1 = 0.5f * (y2 - y0);
+		float c2 = y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3;
+		float c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+		return ((c3 * t + c2) * t + c1) * t + y1;
+	}
+
 	// The 1e-20 is the anti-denormal: a loop this quiet costs real CPU on x86
 	// once the samples go subnormal.
 	void write(float x) { buf[wi] = x + 1e-20f; wi = (wi + 1) & MASK; }
