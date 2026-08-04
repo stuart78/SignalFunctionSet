@@ -29,6 +29,11 @@ core rather than each growing their own.
 
 ## Known gaps in shipped work
 
+- **Slide** — built 2026-08-03 and not yet played in anger. The bar, glide law,
+  scrape, slant and pickup comb are verified numerically but the *sound* has had
+  no listening pass; expect the scrape level, drive amount and pickup default to
+  need tuning by ear.
+
 - **Loom** — strings tuned near the very top of the range (+36 semitones,
   ~523 Hz) bow much quieter than the rest; the pluck-position comb's null lands
   on what little the loop leaves them. Separately, below about 24 Hz every

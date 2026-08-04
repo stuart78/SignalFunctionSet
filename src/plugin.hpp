@@ -41,3 +41,4 @@ extern Model* modelChime;
 extern Model* modelCrystal;
 extern Model* modelLoom;
 extern Model* modelKey;
+extern Model* modelSlide;

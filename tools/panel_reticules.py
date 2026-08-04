@@ -277,6 +277,7 @@ PLATES = {
     "chance": [],
     # the four channels read as one block, so they sit on one plate
     "key": [(hp(0.8), hp(16.6), hp(12.6), hp(9.0))],
+    "slide": [(hp(18.2), hp(22.6), hp(7.0), hp(2.9))],
     # the eight string columns, and the mix pair at the foot
     "loom": [(hp(6.2), hp(15.8), hp(19.0), hp(4.7)),
              (hp(23.5), hp(20.9), hp(4.2), hp(2.9))],
@@ -288,6 +289,7 @@ MODULES = {
     "fill":    ("Fill",    "src/fill.cpp",    "res/fill.svg",    {"FILL_NCH": 8}),
     "chance":  ("Chance",  "src/chance.cpp",  "res/chance.svg",  {"NUM_NODES": 8}),
     "key":     ("Key",     "src/key.cpp",     "res/key.svg",     {"KEY_NCH": 4}),
+    "slide":   ("Slide",   "src/slide.cpp",   "res/slide.svg",   {"SLIDE_NCH": 8}),
     "loom":    ("Loom",    "src/loom.cpp",    "res/loom.svg",    {"LOOM_N": 8}),
 }
 

@@ -384,6 +384,17 @@
         "Utility"
       ],
       "hidden": true
+    },
+    {
+      "slug": "Slide",
+      "name": "Slide",
+      "description": "Electric lap steel. Eight waveguide strings stopped by a steel bar rather than frets: rate-based glide, bar scrape, slant across the strings for different voicings out of one tuning, and a magnetic pickup whose fixed position hollows the tone as the bar moves up the neck.",
+      "tags": [
+        "Physical modeling",
+        "Synth voice",
+        "Polyphonic"
+      ],
+      "hidden": true
     }
   ]
 }

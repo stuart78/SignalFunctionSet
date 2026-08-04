@@ -39,6 +39,7 @@ void init(Plugin* p) {
 	p->addModel(modelCrystal);
 	p->addModel(modelLoom);
 	p->addModel(modelKey);
+	p->addModel(modelSlide);
 
 	// Add modules here
 	// p->addModel(modelMyModule);
