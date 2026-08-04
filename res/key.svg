@@ -1,28 +1,32 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="50.8000mm" height="128.5mm" viewBox="0 0 150.0000 379.4291">
-  <g id="Background"><rect width="150.0000" height="379.4291" fill="#f0f0f0"/></g>
+<svg xmlns="http://www.w3.org/2000/svg" width="60.9600mm" height="128.5mm" viewBox="0 0 180.0000 379.4291">
+  <g id="Background"><rect width="180.0000" height="379.4291" fill="#f0f0f0"/></g>
   <g id="Reticules">
-    <rect x="12.00" y="192.00" width="126.00" height="135.00" rx="6.00" fill="#1a1a1a"/>
-    <rect x="12.00" y="36.00" width="126.00" height="93.00" rx="3.00" fill="#1a1a32"/>
-    <circle cx="30.00" cy="165.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="60.00" cy="165.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="90.00" cy="165.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="120.00" cy="165.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="30.00" cy="219.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="30.00" cy="249.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="30.00" cy="279.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="30.00" cy="309.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="60.00" cy="219.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="60.00" cy="249.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="60.00" cy="279.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="60.00" cy="309.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="90.00" cy="219.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="90.00" cy="249.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="90.00" cy="279.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="90.00" cy="309.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="120.00" cy="219.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="120.00" cy="249.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="120.00" cy="279.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="120.00" cy="309.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="30.00" cy="348.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <rect x="12.00" y="249.00" width="156.00" height="135.00" rx="6.00" fill="#1a1a1a"/>
+    <rect x="12.00" y="36.00" width="156.00" height="165.00" rx="3.00" fill="#1a1a32"/>
+    <circle cx="30.00" cy="225.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="60.00" cy="225.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="90.00" cy="225.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="120.00" cy="225.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="150.00" cy="225.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="30.00" cy="267.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="30.00" cy="297.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="30.00" cy="327.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="30.00" cy="357.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="60.00" cy="267.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="60.00" cy="297.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="60.00" cy="327.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="60.00" cy="357.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="90.00" cy="267.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="90.00" cy="297.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="90.00" cy="327.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="90.00" cy="357.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="120.00" cy="267.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="120.00" cy="297.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="120.00" cy="327.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="120.00" cy="357.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="150.00" cy="267.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="150.00" cy="297.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="150.00" cy="327.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="150.00" cy="357.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
   </g>
 </svg>
