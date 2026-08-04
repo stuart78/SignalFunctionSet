@@ -32,8 +32,10 @@ core rather than each growing their own.
 - **Slide** — two listening passes in. Still unproven by ear: whether the rasp
   scrape reads as a bar on a wound string, whether the hand tremor is the right
   size, and whether the poly bar-solver picks positions a player would. The
-  bar's approach curve is eased but does not overshoot-and-settle the way a
-  player arriving at a note does.
+  bar's approach curve is an S-curve but does not overshoot-and-settle the way a
+  player arriving at a note does. The behind-the-bar string segment is still not
+  modelled — deliberately, since players damp it, but it is the Dobro ring if
+  ever wanted.
 
 - **Loom** — strings tuned near the very top of the range (+36 semitones,
   ~523 Hz) bow much quieter than the rest; the pluck-position comb's null lands

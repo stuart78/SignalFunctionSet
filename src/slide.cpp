@@ -96,8 +96,10 @@ struct SlideString {
 	float velocity = 1.f;
 	float dTarget = 0.f, dSm = 0.f;
 	float dampC = 0.f;
+	float brLp = 0.f;                 // what this string sends to the bridge
 	float pending = -1.f, pendVel = 1.f;
 
+	float swell = 1.f;                // the pedal, per note: 0 at the pick
 	float live = 0.f;                 // 1 just after picking, decaying — a string
 	                                  // the hand is not on is a damped string
 	float out = 0.f;                  // what the pickup sees from this string
@@ -109,8 +111,8 @@ struct SlideString {
 		std::memset(apX, 0, sizeof(apX));
 		std::memset(apY, 0, sizeof(apY));
 		burst = 0.f; pending = -1.f;
-		dTarget = dSm = 0.f; dampC = 0.f;
-		out = amp = flash = live = 0.f;
+		dTarget = dSm = 0.f; dampC = 0.f; brLp = 0.f;
+		out = amp = flash = live = 0.f; swell = 1.f;
 	}
 };
 
@@ -119,6 +121,7 @@ struct Slide : Module {
 		BAR_PARAM, SLANT_PARAM, GLIDE_PARAM, VIB_PARAM, SCRAPE_PARAM,
 		DECAY_PARAM, DAMP_PARAM, PICK_PARAM,
 		PICKUP_PARAM, TONE_PARAM, DRIVE_PARAM, BLOCK_PARAM,
+		SWELL_PARAM, COUPLE_PARAM,
 		ROOT_PARAM, OCT_PARAM,
 		PATTERN_PARAM, DENSITY_PARAM,
 		AUTO_PARAM, RESET_PARAM,
@@ -129,6 +132,7 @@ struct Slide : Module {
 		DECAY_CV_INPUT, DAMP_CV_INPUT, PICK_CV_INPUT, TONE_CV_INPUT,
 		VOCT_INPUT, GATE_INPUT, VEL_INPUT,
 		CLOCK_INPUT, RESET_INPUT, PATTERN_CV_INPUT, DENSITY_CV_INPUT,
+		VOL_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId { MIX_L_OUTPUT, MIX_R_OUTPUT, POLY_OUTPUT, OUTPUTS_LEN };
@@ -140,6 +144,7 @@ struct Slide : Module {
 	// ── the bar ───────────────────────────────────────────────────────────────
 	float barSm = 0.f, barPrev = 0.f;    // where the bar IS, and where it was
 	float barVel = 0.f;                  // it has to get up to speed and slow down
+	float moveDist = 0.f;
 	float tremPhase = 0.f, tremPhase2 = 0.f;
 	float scrapePhase = 0.f;
 	float slantSm = 0.f;
@@ -148,8 +153,10 @@ struct Slide : Module {
 	sfs::SVF scrapeBp;
 
 	// ── the pickup ────────────────────────────────────────────────────────────
-	sfs::SVF coil;
+	sfs::SVF coil, honk;
 	float coilSr = 0.f, coilHz = 0.f;
+	int   pickupType = 0;             // 0 = modern single coil, 1 = horseshoe
+	float coupleBus = 0.f, coupleDcX = 0.f, coupleDcY = 0.f;
 
 	// CHORD: V/OCT transposes the whole instrument and the BAR knob stops it —
 	// good for pads and rolls. MELODY: V/OCT is the note you want, and the module
@@ -200,6 +207,14 @@ struct Slide : Module {
 		// a wash — so this is the technique, not a refinement, and it defaults on.
 		configParam(BLOCK_PARAM, 0.f, 1.f, 0.75f, "Blocking (hand damping the strings you are not playing)",
 		            "%", 0.f, 100.f);
+		// A steel player's foot is on a volume pedal the whole time: pick with it
+		// down, then swell in PAST the attack so the pick is never heard. That
+		// missing transient is what makes the instrument cry, and it is the one
+		// thing a slide model can get right that a portamento cannot fake.
+		configParam(SWELL_PARAM, 0.f, 1.f, 0.f, "Swell (volume pedal past the pick attack)",
+		            "%", 0.f, 100.f);
+		configParam(COUPLE_PARAM, 0.f, 1.f, 0.3f, "Sympathetic coupling through the bridge",
+		            "%", 0.f, 100.f);
 
 		configParam(ROOT_PARAM, -12.f, 12.f, 0.f, "Root", " semitones");
 		getParamQuantity(ROOT_PARAM)->snapEnabled = true;
@@ -226,6 +241,7 @@ struct Slide : Module {
 		configInput(RESET_INPUT,    "Reset the roll");
 		configInput(PATTERN_CV_INPUT, "Roll CV (1V per pattern)");
 		configInput(DENSITY_CV_INPUT, "Roll density CV (±5V)");
+		configInput(VOL_INPUT, "Volume pedal (0–10V) — the real answer to swells; overrides SWELL");
 
 		configOutput(MIX_L_OUTPUT, "Mix left");
 		configOutput(MIX_R_OUTPUT, "Mix right");
@@ -281,6 +297,7 @@ struct Slide : Module {
 		s.excLp = 0.f;
 		s.flash = 1.f;
 		s.live = 1.f;
+		s.swell = 1.f - clamp(params[SWELL_PARAM].getValue(), 0.f, 1.f);
 	}
 
 	void strum(float vel) {
@@ -406,10 +423,26 @@ struct Slide : Module {
 		// target speed from the first sample to the last, and arriving exactly on
 		// pitch, is most of what makes a glide read as a pitch bend rather than
 		// as somebody's arm.
-		float want = rate * clamp(std::fabs(dBar) / 1.2f, 0.f, 1.f);
-		barVel += (want - barVel) * (1.f - std::exp(-args.sampleTime / 0.040f));
+		// An S-curve, and the shape has to scale with the DISTANCE or it is not
+		// one: a fixed deceleration window makes a short move all ease and a long
+		// move a hard ramp with a nub on the end. Ease over a fixed FRACTION of
+		// the move instead, so a semitone and a twelfth feel like the same hand.
+		// The move's full length, so the ease can be a fraction of it. It only
+		// ever grows during a move, because |dBar| shrinks as the bar arrives.
+		if (std::fabs(dBar) > moveDist) moveDist = std::fabs(dBar);
+		if (std::fabs(dBar) < 1e-4f) moveDist = 0.f;
+		float prog = (moveDist > 1e-4f)
+		           ? clamp(1.f - std::fabs(dBar) / moveDist, 0.f, 1.f) : 1.f;
+		// smoothstep up over the first 18% and down over the last 18%, with a
+		// floor so the bar always arrives.
+		float upR = clamp(prog / 0.18f, 0.f, 1.f);
+		float dnR = clamp((1.f - prog) / 0.18f, 0.f, 1.f);
+		float ease = std::min(upR * upR * (3.f - 2.f * upR),
+		                      dnR * dnR * (3.f - 2.f * dnR));
+		float want = rate * (0.10f + 0.90f * ease);
+		barVel += (want - barVel) * (1.f - std::exp(-args.sampleTime / 0.018f));
 		float step = barVel * args.sampleTime;
-		if (std::fabs(dBar) <= step) { barSm = barTarget; barVel = 0.f; }
+		if (std::fabs(dBar) <= step) { barSm = barTarget; barVel = 0.f; moveDist = 0.f; }
 		else barSm += (dBar > 0.f) ? step : -step;
 
 		float slantTarget = paramCV(SLANT_PARAM, SLANT_CV_INPUT, -6.f, 6.f);
@@ -479,6 +512,18 @@ struct Slide : Module {
 			decaySec *= std::pow(2.f, inputs[DECAY_CV_INPUT].getVoltage() / 5.f);
 		decaySec = clamp(decaySec, 0.05f, 40.f);
 
+		// Ported from Loom, where it is measured and stable: a string gives up the
+		// low end a real bridge transmits and keeps its brightness, the in-phase
+		// mode has gain 1, and the ceiling is low because past it the ring stops
+		// growing and only the sustain suffers. Slide had NO coupling at all,
+		// which is why it had no halo.
+		float coupAmt = clamp(params[COUPLE_PARAM].getValue(), 0.f, 1.f);
+		float brC = clamp(1.f - std::exp(-2.f * (float)M_PI * 1200.f / sr), 0.01f, 1.f);
+		float couplePrev = coupleBus;
+		float motion = 0.f;
+		float swellAmt = clamp(params[SWELL_PARAM].getValue(), 0.f, 1.f);
+		float swellRate = 1.f - std::exp(-args.sampleTime / (0.035f + 0.42f * swellAmt));
+
 		float blockAmt = clamp(params[BLOCK_PARAM].getValue(), 0.f, 1.f);
 		float liveDecay = std::exp(-args.sampleTime / 2.5f);
 		float dampHz = 500.f * std::pow(12000.f / 500.f, dampAmt);
@@ -491,7 +536,12 @@ struct Slide : Module {
 		float wantHz = 1600.f * std::pow(6200.f / 1600.f, tone);
 		if (coilSr != sr || std::fabs(wantHz - coilHz) > 1.f) {
 			coil.set(wantHz, 1.4f, sr);
-			if (coilSr != sr) scrapeBp.set(2600.f, 1.1f, sr);
+			// A horseshoe's character is not a brighter peak, it is a broad
+			// midrange lift — bark and honk. A single resonant lowpass cannot
+			// make that however far you move its corner, so it takes a second,
+			// much wider band underneath.
+			honk.set(1150.f, 0.75f, sr);
+			if (coilSr != sr) scrapeBp.set(2200.f, 0.9f, sr);
 			coilHz = wantHz; coilSr = sr;
 		}
 
@@ -627,9 +677,16 @@ struct Slide : Module {
 			}
 			float dy = x - s.dcX + 0.99985f * s.dcY;
 			s.dcX = x; s.dcY = dy; x = dy;
-			x += exc;
+			s.brLp += brC * (v - s.brLp);
+			x += exc + coupAmt * coupAmt * 0.06f * (couplePrev - s.brLp);
 			if (x > 1.6f) x = 1.6f; else if (x < -1.6f) x = -1.6f;
 			s.dl.write(x);
+			motion += s.brLp;
+
+			// The pedal is already down when the note is picked and comes up
+			// after it, so the attack simply never reaches the amp.
+			s.swell += (1.f - s.swell) * swellRate;
+			s.out *= s.swell;
 
 			bus += s.out;
 			float p = ((float)i / (float)(SLIDE_NCH - 1) * 2.f - 1.f) * stereoWidth;
@@ -643,6 +700,12 @@ struct Slide : Module {
 			s.flash *= 0.9994f;
 		}
 		(void)bus;
+		{
+			float cin = motion / (float)SLIDE_NCH;
+			float cdy = cin - coupleDcX + 0.9993f * coupleDcY;
+			coupleDcX = cin; coupleDcY = cdy;
+			coupleBus = clamp(cdy, -3.f, 3.f);
+		}
 
 		// ── the pickup and the amp ────────────────────────────────────────────
 		float loL, bpL, loR, bpR;
@@ -651,8 +714,16 @@ struct Slide : Module {
 		// that only differs by panning; running a second instance would drift.
 		loR = loL + (mixR - mixL) * 0.5f;
 		bpR = bpL;
-		float yL = loL + 1.3f * bpL + scrapeDirect;
-		float yR = loR + 1.3f * bpR + scrapeDirect;
+		float hk = (pickupType == 1) ? honk.bandpass(mixL) * 0.55f : 0.f;
+		float yL = loL + 1.3f * bpL + hk + scrapeDirect;
+		float yR = loR + 1.3f * bpR + hk + scrapeDirect;
+
+		// The pedal itself, when one is patched: this is what a player's foot is
+		// actually doing, and it beats any envelope baked into the module.
+		if (inputs[VOL_INPUT].isConnected()) {
+			float vg = clamp(inputs[VOL_INPUT].getVoltage() / 10.f, 0.f, 1.f);
+			yL *= vg; yR *= vg;
+		}
 
 		float dr = 1.f + drive * 8.f;
 		yL = std::tanh(yL * dr) / std::sqrt(dr);
@@ -677,6 +748,7 @@ struct Slide : Module {
 	json_t* dataToJson() override {
 		json_t* r = json_object();
 		json_object_set_new(r, "playMode", json_integer(playMode));
+		json_object_set_new(r, "pickupType", json_integer(pickupType));
 		json_object_set_new(r, "stereoWidth", json_real(stereoWidth));
 		json_object_set_new(r, "mouseMode", json_integer(mouseMode));
 		json_object_set_new(r, "internalHz", json_real(internalHz));
@@ -687,6 +759,7 @@ struct Slide : Module {
 	}
 	void dataFromJson(json_t* r) override {
 		if (json_t* j = json_object_get(r, "playMode")) playMode = (int)json_integer_value(j);
+		if (json_t* j = json_object_get(r, "pickupType")) pickupType = (int)json_integer_value(j);
 		if (json_t* j = json_object_get(r, "stereoWidth")) stereoWidth = json_number_value(j);
 		if (json_t* j = json_object_get(r, "mouseMode")) mouseMode = (int)json_integer_value(j);
 		if (json_t* j = json_object_get(r, "internalHz")) internalHz = json_number_value(j);
@@ -935,19 +1008,17 @@ struct SlideWidget : ModuleWidget {
 
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(12), hp(14.4f))), module, Slide::GLIDE_PARAM));
 		lbl->trim(hp(12), hp(14.4f), "GLIDE");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(14), hp(14.4f))), module, Slide::VIB_PARAM));
-		lbl->trim(hp(14), hp(14.4f), "VIB");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(16), hp(14.4f))), module, Slide::SCRAPE_PARAM));
-		lbl->trim(hp(16), hp(14.4f), "SCRAPE");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(14.5f), hp(14.4f))), module, Slide::VIB_PARAM));
+		lbl->trim(hp(14.5f), hp(14.4f), "VIB");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(17.5f), hp(14.4f))), module, Slide::SCRAPE_PARAM));
+		lbl->trim(hp(17.5f), hp(14.4f), "SCRAPE");
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(18), hp(14.4f))), module, Slide::BLOCK_PARAM));
-		lbl->trim(hp(18), hp(14.4f), "BLOCK");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(20), hp(14.4f))), module, Slide::ROOT_PARAM));
-		lbl->trim(hp(20), hp(14.4f), "ROOT");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(22), hp(14.4f))), module, Slide::OCT_PARAM));
-		lbl->trim(hp(22), hp(14.4f), "OCT");
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(24.2f), hp(14.4f))), module, Slide::VOCT_INPUT));
-		lbl->jack(hp(24.2f), hp(14.4f), "V/OCT");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(20.5f), hp(14.4f))), module, Slide::ROOT_PARAM));
+		lbl->trim(hp(20.5f), hp(14.4f), "ROOT");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(22.5f), hp(14.4f))), module, Slide::OCT_PARAM));
+		lbl->trim(hp(22.5f), hp(14.4f), "OCT");
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(24.5f), hp(14.4f))), module, Slide::VOCT_INPUT));
+		lbl->jack(hp(24.5f), hp(14.4f), "V/OCT");
 
 		// ── the string and the pickup ──────────────────────────────────────────
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(2), hp(17.6f))), module, Slide::DECAY_PARAM));
@@ -992,6 +1063,14 @@ struct SlideWidget : ModuleWidget {
 		lbl->pair(hp(19.5f), rowY, "DENS");
 
 		const float outY = hp(24.f);
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(2), outY)), module, Slide::SWELL_PARAM));
+		lbl->trim(hp(2), outY, "SWELL");
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(4), outY)), module, Slide::VOL_INPUT));
+		lbl->jack(hp(4), outY, "VOL");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(7), outY)), module, Slide::COUPLE_PARAM));
+		lbl->trim(hp(7), outY, "COUPLE");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(9.5f), outY)), module, Slide::BLOCK_PARAM));
+		lbl->trim(hp(9.5f), outY, "BLOCK");
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(19.5f), outY)), module, Slide::POLY_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(21.8f), outY)), module, Slide::MIX_L_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(23.8f), outY)), module, Slide::MIX_R_OUTPUT));
@@ -1011,6 +1090,8 @@ struct SlideWidget : ModuleWidget {
 		menu->addChild(createIndexPtrSubmenuItem("V/oct",
 			{"Transposes the whole instrument", "Places the bar and picks the string"},
 			&m->playMode));
+		menu->addChild(createIndexPtrSubmenuItem("Pickup",
+			{"Modern single coil", "Horseshoe (bark and midrange honk)"}, &m->pickupType));
 		menu->addChild(createIndexPtrSubmenuItem("Mouse",
 			{"Hover strums the strings", "Click and drag only"}, &m->mouseMode));
 	}
