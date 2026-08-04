@@ -791,8 +791,22 @@ struct KeyDisplay : OpaqueWidget {
 		}
 	}
 
+	// Which degree of a scale a sounding note is. The output is always snapped
+	// to a degree, so the tolerance only has to survive float error.
+	static int degreeIndexOf(const KeyScale& sc, float semisFromRoot) {
+		if (sc.n <= 0 || sc.period <= 0.01f) return -1;
+		float within = semisFromRoot - sc.period * std::floor(semisFromRoot / sc.period);
+		int best = -1; float bd = 1e9f;
+		for (int k = 0; k < sc.n; k++) {
+			float d = std::fabs(within - sc.iv[k]);
+			if (d < bd) { bd = d; best = k; }
+		}
+		return (bd < 0.05f) ? best : -1;
+	}
+
+	// `lit` is KEY_NSUB × KEY_EDITDEG, flat.
 	void drawSubRows(const DrawArgs& args, const Lay& L, int nDeg,
-	                 const uint32_t* masks, const bool* used) {
+	                 const uint32_t* masks, const bool* used, const bool* lit) {
 		NVGcontext* vg = args.vg;
 		int nd = std::min(nDeg, KEY_EDITDEG);
 		float cw = (L.w - L.subX) / (float)std::max(nd, 1);
@@ -802,11 +816,13 @@ struct KeyDisplay : OpaqueWidget {
 			     used[k] ? sfs::SCREEN_TEXT : sfs::SCREEN_PMID, KEY_SUBNAME[k + 1]);
 			for (int d = 0; d < nd; d++) {
 				bool on = (masks[k] >> d) & 1;
+				bool hot = lit && lit[k * KEY_EDITDEG + d];
 				nvgBeginPath(vg);
 				nvgRoundedRect(vg, L.subX + (float)d * cw + 0.7f, y,
 				               std::max(cw - 1.4f, 1.f), L.subH, 1.2f);
-				nvgFillColor(vg, on ? (used[k] ? sfs::SCREEN_BLUE : sfs::SCREEN_DEEP)
-				                    : nvgRGB(0x23, 0x23, 0x38));
+				nvgFillColor(vg, hot ? sfs::SCREEN_HOT
+				               : on  ? (used[k] ? sfs::SCREEN_BLUE : sfs::SCREEN_DEEP)
+				                     : nvgRGB(0x23, 0x23, 0x38));
 				nvgFill(vg);
 			}
 		}
@@ -841,12 +857,22 @@ struct KeyDisplay : OpaqueWidget {
 		drawKeyboard(args, L, m->keyboardMask(), m->rootNote, lit, micro);
 		drawRegions(args, L, m->parent, m->rootNote, sounding, nSound);
 
+		// A sub-scale row lights the degree its own channels are sounding, the
+		// same way the keyboard lights the note — the rows showed structure but
+		// no activity, which made them the one part of the screen you could not
+		// read at a glance while playing.
 		bool used[KEY_NSUB] = {};
+		bool litCell[KEY_NSUB * KEY_EDITDEG] = {};
 		for (int c = 0; c < KEY_NCH; c++) {
 			int s = (int)std::round(m->params[Key::SUB_PARAM + c].getValue());
-			if (s >= 1 && s <= KEY_NSUB) used[s - 1] = true;
+			if (s < 1 || s > KEY_NSUB) continue;
+			used[s - 1] = true;
+			if (!m->shownActive[c]) continue;
+			int d = degreeIndexOf(m->parent,
+			                      m->shownVolts[c] * 12.f - (float)m->rootNote);
+			if (d >= 0 && d < KEY_EDITDEG) litCell[(s - 1) * KEY_EDITDEG + d] = true;
 		}
-		drawSubRows(args, L, m->parent.n, m->subMask, used);
+		drawSubRows(args, L, m->parent.n, m->subMask, used, litCell);
 
 		float cw = L.w / (float)KEY_NCH;
 		for (int c = 0; c < KEY_NCH; c++) {
@@ -885,7 +911,9 @@ struct KeyDisplay : OpaqueWidget {
 
 		static const uint32_t sm[KEY_NSUB] = {0b0010101, 0b0011001, 0b1010101};
 		static const bool used[KEY_NSUB] = {true, false, false};
-		drawSubRows(args, L, 7, sm, used);
+		bool litCell[KEY_NSUB * KEY_EDITDEG] = {};
+		litCell[0 * KEY_EDITDEG + 0] = true;          // sub A sounding its root
+		drawSubRows(args, L, 7, sm, used, litCell);
 
 		static const char* n[KEY_NCH] = {"C3 A", "F3", "–", "–"};
 		float fw = L.w / (float)KEY_NCH;
