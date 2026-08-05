@@ -35,7 +35,10 @@ core rather than each growing their own.
   bar's approach curve is an S-curve but does not overshoot-and-settle the way a
   player arriving at a note does. The behind-the-bar string segment is still not
   modelled — deliberately, since players damp it, but it is the Dobro ring if
-  ever wanted.
+  ever wanted. **Slide is not decided, it is emergent**: the bar always glides to
+  wherever the solver puts it, so a note landing on a string at the current
+  position does not slide and one needing a new position does. There is no
+  legato/staccato distinction, which is the obvious next control.
 
 - **Loom** — strings tuned near the very top of the range (+36 semitones,
   ~523 Hz) bow much quieter than the rest; the pluck-position comb's null lands

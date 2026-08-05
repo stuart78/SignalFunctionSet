@@ -121,7 +121,7 @@ struct Slide : Module {
 		BAR_PARAM, SLANT_PARAM, GLIDE_PARAM, VIB_PARAM, SCRAPE_PARAM,
 		DECAY_PARAM, DAMP_PARAM, PICK_PARAM,
 		PICKUP_PARAM, TONE_PARAM, DRIVE_PARAM, BLOCK_PARAM,
-		SWELL_PARAM, COUPLE_PARAM,
+		SWELL_PARAM, COUPLE_PARAM, VIBRATE_PARAM,
 		ROOT_PARAM, OCT_PARAM,
 		PATTERN_PARAM, DENSITY_PARAM,
 		AUTO_PARAM, RESET_PARAM,
@@ -192,7 +192,11 @@ struct Slide : Module {
 		            " semitones");
 		configParam(SLANT_PARAM, -6.f, 6.f, 0.f, "Bar slant", " semitones across the strings");
 		configParam(GLIDE_PARAM, 0.f, 1.f, 0.35f, "Glide (bar travel rate)", "%", 0.f, 100.f);
-		configParam(VIB_PARAM, 0.f, 1.f, 0.f, "Vibrato (bar rocking)", "%", 0.f, 100.f);
+		configParam(VIB_PARAM, 0.f, 1.f, 0.f, "Vibrato depth (bar rocking)", "%", 0.f, 100.f);
+		// Steel vibrato is a rocking wrist, and players differ as much in how
+		// fast they rock as in how far — a slow wide rock and a fast narrow one
+		// are different expressions, not the same one louder.
+		configParam(VIBRATE_PARAM, 2.f, 9.f, 5.2f, "Vibrato speed", " Hz");
 		configParam(SCRAPE_PARAM, 0.f, 1.f, 0.4f, "Scrape (bar on wound strings)", "%", 0.f, 100.f);
 
 		configParam(DECAY_PARAM, 0.2f, 20.f, 4.f, "Decay", " s");
@@ -358,7 +362,13 @@ struct Slide : Module {
 			float note[SLIDE_NCH];
 			bool notesChanged = false;
 			for (int j = 0; j < nv; j++) {
-				float n = inputs[VOCT_INPUT].getVoltage(j) * 12.f + home;
+				// home is where the hand LIKES to sit, and it belongs in the cost
+				// function only. Adding it to the note made the BAR knob a
+				// transpose, which also ate the top of the instrument's range:
+				// with a scale as wide as the harmonic series the highest note
+				// pushed past what the neck can reach and folded an octave DOWN,
+				// so a rising line ended lower than it started.
+				float n = inputs[VOCT_INPUT].getVoltage(j) * 12.f;
 				// A bar only ever RAISES a string's pitch, so a note below every
 				// open string cannot be reached at all. A player takes it an
 				// octave up rather than dropping it — and the alternative here
@@ -477,7 +487,7 @@ struct Slide : Module {
 		float vibDepth = clamp(params[VIB_PARAM].getValue(), 0.f, 1.f);
 		vibDrift += (2.f * random::uniform() - 1.f) * 0.0002f;
 		vibDrift = clamp(vibDrift, -0.15f, 0.15f);
-		vibPhase += args.sampleTime * (5.2f + vibDrift * 6.f);
+		vibPhase += args.sampleTime * (params[VIBRATE_PARAM].getValue() + vibDrift * 6.f);
 		if (vibPhase >= 1.f) vibPhase -= 1.f;
 		float vib = vibDepth * 0.7f * std::sin(2.f * (float)M_PI * vibPhase);
 
@@ -498,7 +508,7 @@ struct Slide : Module {
 		float target = clamp(speed / 16.f, 0.f, 1.f);
 		scrapeEnv += (target - scrapeEnv) * (1.f - std::exp(-args.sampleTime / 0.004f));
 		float scrapeAmt = clamp(params[SCRAPE_PARAM].getValue(), 0.f, 1.f);
-		if (coilSr != sr) scrapeBp.set(2200.f, 0.9f, sr);
+		if (coilSr != sr) scrapeBp.set(2200.f, 0.65f, sr);
 
 		// A wound string is a GRATING, and the bar crossing it is a periodic
 		// impulse train, not noise. Its rate is bar speed divided by the winding
@@ -510,11 +520,19 @@ struct Slide : Module {
 		const float SCALE_MM = 620.f, WIND_MM = 0.7f;
 		float mmPerSemi = SCALE_MM * 0.05776f * std::pow(2.f, -barSm / 12.f);
 		float rasped = clamp(speed * mmPerSemi / WIND_MM, 40.f, 7000.f);
-		scrapePhase += rasped * args.sampleTime;
-		if (scrapePhase >= 1.f) scrapePhase -= 1.f;
-		// A real winding is not a clean sawtooth — the bar chatters across it.
-		float grating = (2.f * scrapePhase - 1.f) * (0.72f + 0.28f * (2.f * random::uniform() - 1.f));
-		float scrapeRaw = scrapeBp.bandpass(grating) * scrapeEnv * scrapeAmt;
+		// Each winding the bar crosses is an IMPACT, not a cycle of a waveform.
+		// A sawtooth at the crossing rate is a clean tone, which is why it
+		// squealed once there was enough of it to hear; a train of impulses with
+		// random size and jittered spacing is a rasp at every speed, because real
+		// windings are not evenly spaced and the bar chatters rather than
+		// tracking. The bandpass gives each impact its metallic ring.
+		scrapePhase += rasped * args.sampleTime * (0.68f + 0.64f * random::uniform());
+		float impact = 0.f;
+		if (scrapePhase >= 1.f) {
+			scrapePhase -= 1.f;
+			impact = (2.f * random::uniform() - 1.f) * (0.45f + 0.55f * random::uniform());
+		}
+		float scrapeRaw = scrapeBp.bandpass(impact) * 14.f * scrapeEnv * scrapeAmt;
 		// A string is a resonator with a round-trip gain near one, so it
 		// multiplies anything injected into it by 1/(1-g) — fifty-odd times at
 		// these decay settings. Feeding it broadband noise at any audible level
@@ -1032,17 +1050,19 @@ struct SlideWidget : ModuleWidget {
 
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(12), hp(14.4f))), module, Slide::GLIDE_PARAM));
 		lbl->trim(hp(12), hp(14.4f), "GLIDE");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(14.5f), hp(14.4f))), module, Slide::VIB_PARAM));
-		lbl->trim(hp(14.5f), hp(14.4f), "VIB");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(17.5f), hp(14.4f))), module, Slide::SCRAPE_PARAM));
-		lbl->trim(hp(17.5f), hp(14.4f), "SCRAPE");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(14), hp(14.4f))), module, Slide::VIB_PARAM));
+		lbl->trim(hp(14), hp(14.4f), "VIB");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(16), hp(14.4f))), module, Slide::VIBRATE_PARAM));
+		lbl->trim(hp(16), hp(14.4f), "SPEED");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(18.5f), hp(14.4f))), module, Slide::SCRAPE_PARAM));
+		lbl->trim(hp(18.5f), hp(14.4f), "SCRAPE");
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(20.5f), hp(14.4f))), module, Slide::ROOT_PARAM));
-		lbl->trim(hp(20.5f), hp(14.4f), "ROOT");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(22.5f), hp(14.4f))), module, Slide::OCT_PARAM));
-		lbl->trim(hp(22.5f), hp(14.4f), "OCT");
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(24.5f), hp(14.4f))), module, Slide::VOCT_INPUT));
-		lbl->jack(hp(24.5f), hp(14.4f), "V/OCT");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(21), hp(14.4f))), module, Slide::ROOT_PARAM));
+		lbl->trim(hp(21), hp(14.4f), "ROOT");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(23), hp(14.4f))), module, Slide::OCT_PARAM));
+		lbl->trim(hp(23), hp(14.4f), "OCT");
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(25), hp(14.4f))), module, Slide::VOCT_INPUT));
+		lbl->jack(hp(25), hp(14.4f), "V/OCT");
 
 		// ── the string and the pickup ──────────────────────────────────────────
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(2), hp(17.6f))), module, Slide::DECAY_PARAM));
