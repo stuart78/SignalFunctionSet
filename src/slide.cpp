@@ -21,9 +21,9 @@
 //      roughly constant speed, so a twelfth takes twice as long as a fifth.
 //      Nearly every synth portamento is constant-time-per-interval, and that is
 //      most of why synth glides do not sound like slides.
-//   2. SCRAPE — the bar crossing wound strings. Broadband, proportional to bar
-//      VELOCITY, and it stops dead the instant the bar stops. This is what the
-//      ear actually uses to tell a slide from a bend.
+//   2. (Was SCRAPE, and it is gone. Two models — bandpassed noise, then an
+//      impulse train at the winding-crossing rate — and neither sounded like a
+//      bar on a string. The physics was right and the result was still wrong.)
 //   3. The pickup is at a FIXED point in space while the speaking length
 //      changes, so its position as a fraction of the string grows as the bar
 //      goes up the neck and the tone hollows out. Loom's comb is a fixed
@@ -145,7 +145,8 @@ struct Slide : Module {
 	// along. Everything below the line stays where it is; new params go at the
 	// bottom, however untidy that looks.
 	enum ParamId {
-		BAR_PARAM, SLANT_PARAM, GLIDE_PARAM, VIB_PARAM, SCRAPE_PARAM,
+		BAR_PARAM, SLANT_PARAM, GLIDE_PARAM, VIB_PARAM,
+		SCRAPE_PARAM,          // RETIRED — see below; kept so indices do not move
 		DECAY_PARAM, DAMP_PARAM, PICK_PARAM,
 		PICKUP_PARAM, TONE_PARAM, DRIVE_PARAM,
 		ROOT_PARAM, OCT_PARAM,
@@ -174,11 +175,10 @@ struct Slide : Module {
 	float barVel = 0.f;                  // it has to get up to speed and slow down
 	float moveDist = 0.f;
 	float tremPhase = 0.f, tremPhase2 = 0.f;
-	float scrapePhase = 0.f;
+
 	float slantSm = 0.f;
 	float vibPhase = 0.f, vibDrift = 0.f;
-	float scrapeEnv = 0.f;
-	sfs::SVF scrapeBp;
+	float barMotion = 0.f;               // 0 at rest, 1 while the bar is moving
 
 	// ── the pickup ────────────────────────────────────────────────────────────
 	sfs::SVF coil, honk;
@@ -225,7 +225,14 @@ struct Slide : Module {
 		// fast they rock as in how far — a slow wide rock and a fast narrow one
 		// are different expressions, not the same one louder.
 		configParam(VIBRATE_PARAM, 2.f, 9.f, 5.2f, "Vibrato speed", " Hz");
-		configParam(SCRAPE_PARAM, 0.f, 1.f, 0.4f, "Scrape (bar on wound strings)", "%", 0.f, 100.f);
+		// Retired. Two models were tried — bandpassed noise, then an impulse
+		// train at the winding-crossing rate — and neither sounded like a bar on
+		// a string: the first was hiss, the second a record scratch. The physics
+		// is right (a wound string IS a grating, and the rate really does track
+		// bar speed) and it still did not work, which is worth remembering
+		// before anyone reaches for it again. It stays in the enum because
+		// deleting a param renumbers every one after it and breaks saved patches.
+		configParam(SCRAPE_PARAM, 0.f, 1.f, 0.f, "Scrape (retired)", "%", 0.f, 100.f);
 
 		configParam(DECAY_PARAM, 0.2f, 20.f, 4.f, "Decay", " s");
 		configParam(DAMP_PARAM, 0.f, 1.f, 0.6f, "Damping (treble loss)", "%", 0.f, 100.f);
@@ -545,50 +552,15 @@ struct Slide : Module {
 		tremPhase2 += args.sampleTime * 7.7f;  if (tremPhase2 >= 1.f) tremPhase2 -= 1.f;
 		float trem = (std::sin(2.f * (float)M_PI * tremPhase) * 0.030f
 		            + std::sin(2.f * (float)M_PI * tremPhase2) * 0.014f)
-		           * (1.f + 1.6f * scrapeEnv);
+		           * (1.f + 1.6f * barMotion);
 		vib += trem;
 
-		// ── scrape ────────────────────────────────────────────────────────────
-		// Proportional to how fast the bar is MOVING, so it stops the instant
-		// the bar stops. That correlation is the tell.
+		// ── how fast the bar is travelling ────────────────────────────────────
+		// All that survives of SCRAPE. It still widens the hand tremor while the
+		// bar is on the move, which is worth having on its own.
 		float speed = std::fabs(barSm - barPrev) * sr;    // semitones per second
 		float target = clamp(speed / 16.f, 0.f, 1.f);
-		scrapeEnv += (target - scrapeEnv) * (1.f - std::exp(-args.sampleTime / 0.004f));
-		float scrapeAmt = clamp(params[SCRAPE_PARAM].getValue(), 0.f, 1.f);
-		if (coilSr != sr) scrapeBp.set(2200.f, 0.65f, sr);
-
-		// A wound string is a GRATING, and the bar crossing it is a periodic
-		// impulse train, not noise. Its rate is bar speed divided by the winding
-		// pitch, which lands it at a few hundred Hz to a few kHz — a rasp that
-		// rises as you move faster and falls as you go up the neck, because the
-		// frets get closer together. That correlation with the gesture is what
-		// the ear reads as a bar on a string; bandpassed white noise reads as
-		// bandpassed white noise, which is what the first version was.
-		const float SCALE_MM = 620.f, WIND_MM = 0.7f;
-		float mmPerSemi = SCALE_MM * 0.05776f * std::pow(2.f, -barSm / 12.f);
-		float rasped = clamp(speed * mmPerSemi / WIND_MM, 40.f, 7000.f);
-		// Each winding the bar crosses is an IMPACT, not a cycle of a waveform.
-		// A sawtooth at the crossing rate is a clean tone, which is why it
-		// squealed once there was enough of it to hear; a train of impulses with
-		// random size and jittered spacing is a rasp at every speed, because real
-		// windings are not evenly spaced and the bar chatters rather than
-		// tracking. The bandpass gives each impact its metallic ring.
-		scrapePhase += rasped * args.sampleTime * (0.68f + 0.64f * random::uniform());
-		float impact = 0.f;
-		if (scrapePhase >= 1.f) {
-			scrapePhase -= 1.f;
-			impact = (2.f * random::uniform() - 1.f) * (0.45f + 0.55f * random::uniform());
-		}
-		float scrapeRaw = scrapeBp.bandpass(impact) * 14.f * scrapeEnv * scrapeAmt;
-		// A string is a resonator with a round-trip gain near one, so it
-		// multiplies anything injected into it by 1/(1-g) — fifty-odd times at
-		// these decay settings. Feeding it broadband noise at any audible level
-		// does not sound like a scrape, it sounds like the string being bowed by
-		// static. So only a trace goes INTO the string, where it does the useful
-		// job of making the noise pitched, and the audible part of the scrape is
-		// mechanical contact noise that reaches the output directly.
-		float scrapeIn = scrapeRaw * 0.004f;
-		float scrapeDirect = scrapeRaw * 0.16f;
+		barMotion += (target - barMotion) * (1.f - std::exp(-args.sampleTime / 0.004f));
 
 		// ── tone controls ─────────────────────────────────────────────────────
 		float dampAmt = paramCV(DAMP_PARAM, DAMP_CV_INPUT, 0.f, 1.f);
@@ -630,7 +602,6 @@ struct Slide : Module {
 			// make that however far you move its corner, so it takes a second,
 			// much wider band underneath.
 			honk.set(1150.f, 0.75f, sr);
-			if (coilSr != sr) scrapeBp.set(2200.f, 0.9f, sr);
 			coilHz = wantHz; coilSr = sr;
 		}
 
@@ -754,9 +725,7 @@ struct Slide : Module {
 				exc = s.excLp * s.burstAmp;
 				s.burst -= 1.f;
 			}
-			// The bar is on every string, but a damped string neither rings nor
-			// passes the scrape on.
-			exc += scrapeIn * (0.15f + 0.85f * s.live);
+
 
 			s.lp += s.dampC * (v - s.lp);
 			float x = g * s.lp;
@@ -804,8 +773,8 @@ struct Slide : Module {
 		loR = loL + (mixR - mixL) * 0.5f;
 		bpR = bpL;
 		float hk = (pickupType == 1) ? honk.bandpass(mixL) * 0.55f : 0.f;
-		float yL = loL + 1.3f * bpL + hk + scrapeDirect;
-		float yR = loR + 1.3f * bpR + hk + scrapeDirect;
+		float yL = loL + 1.3f * bpL + hk;
+		float yR = loR + 1.3f * bpR + hk;
 
 		// The pedal itself, when one is patched: this is what a player's foot is
 		// actually doing, and it beats any envelope baked into the module.
@@ -1101,15 +1070,13 @@ struct SlideWidget : ModuleWidget {
 		lbl->trim(hp(14), hp(14.4f), "VIB");
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(16), hp(14.4f))), module, Slide::VIBRATE_PARAM));
 		lbl->trim(hp(16), hp(14.4f), "SPEED");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(18.5f), hp(14.4f))), module, Slide::SCRAPE_PARAM));
-		lbl->trim(hp(18.5f), hp(14.4f), "SCRAPE");
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(21), hp(14.4f))), module, Slide::ROOT_PARAM));
-		lbl->trim(hp(21), hp(14.4f), "ROOT");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(23), hp(14.4f))), module, Slide::OCT_PARAM));
-		lbl->trim(hp(23), hp(14.4f), "OCT");
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(25), hp(14.4f))), module, Slide::VOCT_INPUT));
-		lbl->jack(hp(25), hp(14.4f), "V/OCT");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(19), hp(14.4f))), module, Slide::ROOT_PARAM));
+		lbl->trim(hp(19), hp(14.4f), "ROOT");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(21), hp(14.4f))), module, Slide::OCT_PARAM));
+		lbl->trim(hp(21), hp(14.4f), "OCT");
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(23.2f), hp(14.4f))), module, Slide::VOCT_INPUT));
+		lbl->jack(hp(23.2f), hp(14.4f), "V/OCT");
 
 		// ── the string and the pickup ──────────────────────────────────────────
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(2), hp(17.6f))), module, Slide::DECAY_PARAM));

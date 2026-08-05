@@ -29,9 +29,16 @@ core rather than each growing their own.
 
 ## Known gaps in shipped work
 
-- **Slide** — two listening passes in. Still unproven by ear: whether the rasp
-  scrape reads as a bar on a wound string, whether the hand tremor is the right
-  size, and whether the poly bar-solver picks positions a player would. The
+- **Slide** — SCRAPE was tried twice and dropped: bandpassed noise sounded like
+  hiss, an impulse train at the winding-crossing rate sounded like a record
+  scratch. The physics was right both times (a wound string is a grating, and
+  the crossing rate really does track bar speed), which is the interesting part —
+  a correct model of the mechanism is not the same as a convincing sound, and
+  what a bar on a string sounds like in a recording is mostly the room and the
+  body, neither of which this has. Worth another attempt only with a different
+  idea, not a third tuning of the same one. Still unproven by ear: whether the
+  hand tremor is the right size, and whether the poly bar-solver picks positions
+  a player would. The
   bar's approach curve is an S-curve but does not overshoot-and-settle the way a
   player arriving at a note does. The behind-the-bar string segment is still not
   modelled — deliberately, since players damp it, but it is the Dobro ring if
