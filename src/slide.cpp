@@ -63,19 +63,38 @@ static const int SLIDE_NTUNINGS = (int)(sizeof(SLIDE_TUNINGS) / sizeof(SLIDE_TUN
 
 // Fingerpicking rolls, as string orders. A roll is a repeating finger pattern,
 // not a scale run — which is why these are short and lopsided.
-struct SlideRoll { const char* name; int n; int s[12]; };
+// Each step carries its own weight, because fingerpicking dynamics are not
+// random — the thumb is a heavier finger than the index or the middle, and the
+// stroke that starts the roll lands hardest. Jitter alone humanises the timing
+// of the accents but not their SHAPE, and the shape is what makes a roll sound
+// picked rather than sequenced.
+struct SlideRoll { const char* name; int n; int s[12]; float v[12]; };
 static const SlideRoll SLIDE_ROLLS[] = {
-	{"Forward roll",   6, {0, 4, 7, 1, 4, 7}},
-	{"Backward roll",  6, {7, 4, 0, 7, 4, 1}},
-	{"Alternating",    8, {0, 5, 1, 6, 2, 7, 3, 6}},
-	{"Thumb & index",  8, {0, 6, 1, 6, 2, 7, 3, 7}},
-	{"Inside out",     8, {3, 4, 2, 5, 1, 6, 0, 7}},
-	{"Climb",          8, {0, 1, 2, 3, 4, 5, 6, 7}},
-	{"Fall",           8, {7, 6, 5, 4, 3, 2, 1, 0}},
-	{"Pinch",          4, {0, 7, 0, 7}},
-	{"Random",         1, {0}},
-	{"Strum",          1, {0}},
+	{"Forward roll",   6, {0, 4, 7, 1, 4, 7},
+	                      {1.00f, .68f, .74f, .86f, .66f, .72f}},
+	{"Backward roll",  6, {7, 4, 0, 7, 4, 1},
+	                      {.80f, .70f, 1.00f, .74f, .68f, .90f}},
+	{"Alternating",    8, {0, 5, 1, 6, 2, 7, 3, 6},
+	                      {1.00f, .66f, .92f, .68f, .88f, .64f, .86f, .66f}},
+	{"Thumb & index",  8, {0, 6, 1, 6, 2, 7, 3, 7},
+	                      {1.00f, .64f, .92f, .62f, .88f, .66f, .84f, .62f}},
+	{"Inside out",     8, {3, 4, 2, 5, 1, 6, 0, 7},
+	                      {.90f, .70f, .85f, .68f, .90f, .66f, 1.00f, .64f}},
+	{"Climb",          8, {0, 1, 2, 3, 4, 5, 6, 7},
+	                      {1.00f, .78f, .74f, .76f, .72f, .74f, .70f, .76f}},
+	{"Fall",           8, {7, 6, 5, 4, 3, 2, 1, 0},
+	                      {.72f, .70f, .74f, .72f, .78f, .80f, .86f, 1.00f}},
+	{"Pinch",          4, {0, 7, 0, 7}, {1.00f, .80f, .95f, .76f}},
+	{"Random",         1, {0}, {1.00f}},
+	{"Strum",          1, {0}, {1.00f}},
 };
+
+// The thumb is heavier than the fingers, so the bass strings come out louder
+// whatever the pattern — this is what Random and Strum use, having no shape of
+// their own to follow.
+static inline float slideThumbAccent(int stringIdx) {
+	return 1.f - 0.34f * ((float)stringIdx / (float)(SLIDE_NCH - 1));
+}
 static const int SLIDE_NROLLS = (int)(sizeof(SLIDE_ROLLS) / sizeof(SLIDE_ROLLS[0]));
 
 // Where a fret sits along the neck. Real frets are spaced by 2^(-n/12), and
@@ -121,7 +140,7 @@ struct Slide : Module {
 		BAR_PARAM, SLANT_PARAM, GLIDE_PARAM, VIB_PARAM, SCRAPE_PARAM,
 		DECAY_PARAM, DAMP_PARAM, PICK_PARAM,
 		PICKUP_PARAM, TONE_PARAM, DRIVE_PARAM, BLOCK_PARAM,
-		SWELL_PARAM, COUPLE_PARAM, VIBRATE_PARAM,
+		SWELL_PARAM, COUPLE_PARAM, VIBRATE_PARAM, DYN_PARAM,
 		ROOT_PARAM, OCT_PARAM,
 		PATTERN_PARAM, DENSITY_PARAM,
 		AUTO_PARAM, RESET_PARAM,
@@ -230,6 +249,11 @@ struct Slide : Module {
 		for (int i = 0; i < SLIDE_NROLLS; i++) rollNames.push_back(SLIDE_ROLLS[i].name);
 		configSwitch(PATTERN_PARAM, 0.f, (float)(SLIDE_NROLLS - 1), 0.f, "Roll", rollNames);
 		configParam(DENSITY_PARAM, 0.f, 1.f, 1.f, "Roll density", "%", 0.f, 100.f);
+		// At zero every stroke is the same, which is what a sequencer sounds
+		// like. Turning it up brings in the pattern's own accents first and the
+		// note-to-note wobble second.
+		configParam(DYN_PARAM, 0.f, 1.f, 0.6f, "Dynamics (pick accent and variation)",
+		            "%", 0.f, 100.f);
 		configSwitch(AUTO_PARAM, 0.f, 1.f, 0.f, "Auto roll", {"Off", "On"});
 		configButton(RESET_PARAM, "Reset the roll");
 
@@ -306,10 +330,14 @@ struct Slide : Module {
 	}
 
 	void strum(float vel) {
-		// A strum across eight strings is a roll of the hand, not a chord stab.
+		// A strum across eight strings is a roll of the hand, not a chord stab —
+		// and the hand lightens as it crosses, so the eight notes are not equal.
+		float dyn = clamp(params[DYN_PARAM].getValue(), 0.f, 1.f);
 		for (int i = 0; i < SLIDE_NCH; i++) {
 			str[i].pending = 0.012f * (float)i;
-			str[i].pendVel = vel;
+			float a = slideThumbAccent(i);
+			float h = 1.f + dyn * 0.16f * (2.f * random::uniform() - 1.f);
+			str[i].pendVel = clamp(vel * (1.f + dyn * (a - 1.f)) * h, 0.05f, 1.f);
 		}
 	}
 
@@ -317,23 +345,33 @@ struct Slide : Module {
 		int pat = clamp((int)std::round(params[PATTERN_PARAM].getValue()
 		                + inputs[PATTERN_CV_INPUT].getVoltage()), 0, SLIDE_NROLLS - 1);
 		float density = paramCV(DENSITY_PARAM, DENSITY_CV_INPUT, 0.f, 1.f);
-		float vel = clamp(0.8f + 0.16f * (2.f * random::uniform() - 1.f), 0.1f, 1.f);
+		float dyn = clamp(params[DYN_PARAM].getValue(), 0.f, 1.f);
 
 		if (std::string(SLIDE_ROLLS[pat].name) == "Strum") {
-			if (random::uniform() <= density) strum(vel);
+			if (random::uniform() <= density) strum(0.92f);
 			rollIdx++;
 			return;
 		}
-		int sel;
+		int sel; float accent;
 		if (std::string(SLIDE_ROLLS[pat].name) == "Random") {
 			sel = (int)(random::uniform() * SLIDE_NCH);
+			accent = slideThumbAccent(clamp(sel, 0, SLIDE_NCH - 1));
 		}
 		else {
 			const SlideRoll& r = SLIDE_ROLLS[pat];
-			sel = r.s[rollIdx % r.n];
+			int step = rollIdx % r.n;
+			sel = r.s[step];
+			accent = r.v[step];
 		}
+		// Two layers, and the order matters: the pattern's own accent is the
+		// SHAPE and the jitter is only the wobble on top of it. Jitter alone
+		// makes every stroke a different random size, which is not how a hand
+		// plays — it is how a random number generator plays.
+		float vel = 0.92f * (1.f + dyn * (accent - 1.f))
+		          * (1.f + dyn * 0.15f * (2.f * random::uniform() - 1.f));
 		rollIdx = (rollIdx + 1) & 0xFFFFF;
-		if (random::uniform() <= density) pick(clamp(sel, 0, SLIDE_NCH - 1), vel);
+		if (random::uniform() <= density)
+			pick(clamp(sel, 0, SLIDE_NCH - 1), clamp(vel, 0.05f, 1.f));
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -1115,6 +1153,8 @@ struct SlideWidget : ModuleWidget {
 		lbl->trim(hp(7), outY, "COUPLE");
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(9.5f), outY)), module, Slide::BLOCK_PARAM));
 		lbl->trim(hp(9.5f), outY, "BLOCK");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(12), outY)), module, Slide::DYN_PARAM));
+		lbl->trim(hp(12), outY, "DYN");
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(19.5f), outY)), module, Slide::POLY_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(21.8f), outY)), module, Slide::MIX_L_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(23.8f), outY)), module, Slide::MIX_R_OUTPUT));
