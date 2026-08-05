@@ -136,14 +136,23 @@ struct SlideString {
 };
 
 struct Slide : Module {
+	// APPEND ONLY. Rack serialises params by INDEX, so inserting one into the
+	// middle silently renumbers every param after it and a saved patch loads its
+	// values into the wrong controls. BLOCK, SWELL, COUPLE, VIBRATE and DYN were
+	// each added mid-enum, which between them shifted ROOT through RESET by five
+	// places: a patch's AUTO landed on DYN, AUTO itself fell back to its default
+	// of off, and the pitch controls read whatever happened to be five slots
+	// along. Everything below the line stays where it is; new params go at the
+	// bottom, however untidy that looks.
 	enum ParamId {
 		BAR_PARAM, SLANT_PARAM, GLIDE_PARAM, VIB_PARAM, SCRAPE_PARAM,
 		DECAY_PARAM, DAMP_PARAM, PICK_PARAM,
-		PICKUP_PARAM, TONE_PARAM, DRIVE_PARAM, BLOCK_PARAM,
-		SWELL_PARAM, COUPLE_PARAM, VIBRATE_PARAM, DYN_PARAM,
+		PICKUP_PARAM, TONE_PARAM, DRIVE_PARAM,
 		ROOT_PARAM, OCT_PARAM,
 		PATTERN_PARAM, DENSITY_PARAM,
 		AUTO_PARAM, RESET_PARAM,
+		// ── appended after the first release; do not reorder ────────────────
+		BLOCK_PARAM, SWELL_PARAM, COUPLE_PARAM, VIBRATE_PARAM, DYN_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
