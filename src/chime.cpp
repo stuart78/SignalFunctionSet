@@ -57,6 +57,8 @@ struct Chime : Module {
 		CLOCK_INPUT,
 		ENUMS(ENABLE_INPUT, CHIME_NCH),          // retired — slot kept
 		EXCITE_INPUT, OCT_INPUT,
+		// ── appended for the 2026-08 panel; do not reorder ──────────────────
+		RELATE_INPUT, SHAPE_INPUT, DECAY_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId {
@@ -129,7 +131,9 @@ struct Chime : Module {
 			configParam(DEGREE_PARAM + c, 0.f, (float)(CHIME_NDEG - 1), (float)c, string::f("Note %d scale degree", c + 1));
 			getParamQuantity(DEGREE_PARAM + c)->snapEnabled = true;
 			configParam(WEIGHT_PARAM + c, 0.f, 1.f, 1.f, string::f("Note %d weight (strike likelihood / bow level)", c + 1), "%", 0.f, 100.f);
-			configParam(ATTEN_PARAM + c, 0.1f, 1.f, 1.f, string::f("Note %d swing (smaller arc → more frequent strikes)", c + 1), "%", 0.f, 100.f);
+			// Panel-labelled FREQ. NOTE THE POLARITY: this is the arc WIDTH, and a
+			// narrower arc is crossed sooner, so turning it DOWN strikes more often.
+			configParam(ATTEN_PARAM + c, 0.1f, 1.f, 1.f, string::f("Note %d arc width (narrower → strikes more often)", c + 1), "%", 0.f, 100.f);
 			configOutput(LFO_OUTPUT + c, string::f("Note %d tube LFO (±5V)", c + 1));
 			configOutput(AUDIO_OUTPUT + c, string::f("Note %d audio", c + 1));
 		}
@@ -142,6 +146,9 @@ struct Chime : Module {
 		configInput(CLOCK_INPUT, "Clock (syncs rotations; RATE knob picks 32/16/8/4/2/1 clocks per rotation)");
 		configInput(EXCITE_INPUT, "Excitation CV (0–10V, bow → strike)");
 		configInput(OCT_INPUT, "Octave CV (1V per octave)");
+		configInput(RELATE_INPUT, "Relate CV (0–10V across the four modes)");
+		configInput(SHAPE_INPUT, "Rotation curve CV (±5V)");
+		configInput(DECAY_INPUT, "Ring / bloom time CV (1 s/V)");
 		configOutput(MIX_L_OUTPUT, "Mix left");
 		configOutput(MIX_R_OUTPUT, "Mix right");
 		configOutput(VOCT_OUTPUT, "V/oct (polyphonic, 8 channels)");
@@ -190,8 +197,9 @@ struct Chime : Module {
 			reseed();
 
 		float exciteX = clamp(params[EXCITE_PARAM].getValue() + inputs[EXCITE_INPUT].getVoltage() / 10.f, 0.f, 1.f);   // 0 bow → 1 strike
-		float shapeP = std::exp2(params[SHAPE_PARAM].getValue() * 2.f);   // 0.25 exp ‥ 1 linear ‥ 4 log
-		float decayK = params[DECAY_PARAM].getValue();
+		float shapeC = clamp(params[SHAPE_PARAM].getValue() + inputs[SHAPE_INPUT].getVoltage() / 5.f, -1.f, 1.f);
+		float shapeP = std::exp2(shapeC * 2.f);                           // 0.25 exp ‥ 1 linear ‥ 4 log
+		float decayK = clamp(params[DECAY_PARAM].getValue() + inputs[DECAY_INPUT].getVoltage(), 0.3f, 8.f);
 
 		// clock measurement
 		clkSince += args.sampleTime;
@@ -218,7 +226,8 @@ struct Chime : Module {
 			}
 			float spread = clamp(params[SPREAD_PARAM].getValue() + inputs[SPREAD_INPUT].getVoltage() / 10.f, 0.f, 1.f);
 			float drift = clamp(params[DRIFT_PARAM].getValue() + inputs[DRIFT_INPUT].getVoltage() / 10.f, 0.f, 1.f);
-			int relate = (int)std::round(params[RELATE_PARAM].getValue());
+			int relate = clamp((int)std::round(params[RELATE_PARAM].getValue()
+			                                  + inputs[RELATE_INPUT].getVoltage() * 0.3f), 0, 3);
 			curRelate = relate;
 			rippleCoupling = spread;
 			float maxR = 1.f + spread * 7.f;
@@ -575,26 +584,34 @@ struct ChimeKeyReadout : Widget {
 };
 
 // Horizontal bow↔strike blend slider (the SDK only ships vertical sliders).
+// Track and pointer are the designer's artwork rather than drawn shapes: both
+// carry shadows, and nanosvg implements no SVG filters, so they arrive as PNG
+// at 8× Rack's own pixel scale. Sizes below are that artwork divided back down.
 struct ChimeExciteSlider : app::SliderKnob {
 	ChimeExciteSlider() {
 		horizontal = true;
-		box.size = mm2px(Vec(30.f, 7.f));
+		box.size = mm2px(Vec(45.72f, 5.08f));       // hp(9) x hp(1)
+	}
+	// Loaded per frame and deliberately NOT held as a member: Rack destroys the
+	// Window before the Scene, so an Image kept alive in a widget deletes its
+	// texture through a dead GL context on quit. Its own header says so.
+	static void blit(NVGcontext* vg, const char* path, float x, float y, float w, float h) {
+		std::shared_ptr<Image> img = APP->window->loadImage(asset::plugin(pluginInstance, path));
+		if (!img || img->handle < 0) return;
+		NVGpaint paint = nvgImagePattern(vg, x, y, w, h, 0.f, img->handle, 1.f);
+		nvgBeginPath(vg);
+		nvgRect(vg, x, y, w, h);
+		nvgFillPaint(vg, paint);
+		nvgFill(vg);
 	}
 	void draw(const DrawArgs& args) override {
 		NVGcontext* vg = args.vg;
 		float w = box.size.x, h = box.size.y;
 		float v = 0.f;
-		if (ParamQuantity* pq = getParamQuantity()) v = pq->getScaledValue();
-		nvgBeginPath(vg); nvgRoundedRect(vg, 0, h * 0.3f, w, h * 0.4f, h * 0.2f);
-		nvgFillColor(vg, CHPURPLE); nvgFill(vg);
-		NVGcolor col = nvgLerpRGBA(CHBLUE, CHORANGE, v);              // bow=blue → strike=orange
-		if (v > 0.01f) {
-			nvgBeginPath(vg); nvgRoundedRect(vg, 0, h * 0.3f, w * v, h * 0.4f, h * 0.2f);
-			nvgFillColor(vg, col); nvgFill(vg);
-		}
-		float hx = clamp(w * v, 3.f, w - 3.f);
-		nvgBeginPath(vg); nvgRoundedRect(vg, hx - 2.f, 0, 4.f, h, 1.5f);
-		nvgFillColor(vg, CHTEXT); nvgFill(vg);
+		if (ParamQuantity* pq = getParamQuantity()) v = clamp(pq->getScaledValue(), 0.f, 1.f);
+		blit(vg, "res/chime-slider.png", 0.f, 0.f, w, h);
+		float pw = 85.f / 8.f, ph = 116.f / 8.f;     // the pointer PNG, back at 1×
+		blit(vg, "res/chime-slider-knob.png", (w - pw) * v, (h - ph) * 0.5f, pw, ph);
 	}
 };
 
@@ -604,10 +621,14 @@ struct ChimeWidget : ModuleWidget {
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/chime.svg")));
 		using sfs::hp;
 
-		// Everything sits on the 1HP grid, in both axes. A pot and the jack that
-		// modulates it share a row, two cells apart, joined by a hairline -- so the
-		// jack needs no label of its own.
-		const float potX = hp(2), cvX = hp(4);
+		// Everything sits on the quarter-HP grid, in both axes. The control pairs
+		// run DOWN their column rather than across a row: label, pot, then the
+		// jack that modulates it, joined by a pipe -- so the jack needs no label.
+		const float colA = hp(2), colB = hp(4.5f), colC = hp(7);
+		// The eight notes, and the three rows they own.
+		const float note0 = hp(8.5f), noteStep = hp(2.5f);
+		const float freqY = hp(12.5f), lfoY = hp(15.5f), audioY = hp(18);
+		const float botY = hp(23.5f);
 
 		// Added before any component so the connecting hairlines draw underneath
 		// them rather than across their faces.
@@ -618,79 +639,103 @@ struct ChimeWidget : ModuleWidget {
 
 		ChimeDisplay* disp = new ChimeDisplay();
 		disp->module = module;
-		// 16 cells wide starting at hp(7) puts the display's eight internal columns
-		// exactly over the eight control columns at hp(8), hp(10) ... hp(22).
-		disp->box.pos  = mm2px(Vec(hp(7), hp(2)));
-		disp->box.size = mm2px(Vec(hp(16), hp(9)));
+		// 20 cells wide starting at hp(7.25) puts the display's eight internal
+		// columns over the eight control columns at hp(8.5) .. hp(26).
+		disp->box.pos  = mm2px(Vec(hp(7.25f), hp(2)));
+		disp->box.size = mm2px(Vec(hp(20), hp(9)));
 		addChild(disp);
 
 		ChimeKeyReadout* key = new ChimeKeyReadout();
 		key->module = module;
-		key->box.pos  = mm2px(Vec(hp(7), hp(1.1f)));
+		key->box.pos  = mm2px(Vec(hp(7.25f), hp(1.1f)));
 		key->box.size = mm2px(Vec(hp(12), hp(1.2f)));
 		addChild(key);
 
-		// ── left column: pot + its CV, one pair per row ─────────────────────────
-		struct Row { float row; int param; int input; const char* name; };
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(4))), module, Chime::RATE_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(4))), module, Chime::RATE_INPUT));
-		lbl->pair(potX, hp(4), "RATE");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(6))), module, Chime::SPREAD_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(6))), module, Chime::SPREAD_INPUT));
-		lbl->pair(potX, hp(6), "SPREAD");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(8))), module, Chime::DRIFT_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(8))), module, Chime::DRIFT_INPUT));
-		lbl->pair(potX, hp(8), "DRIFT");
+		// ── left: three rows of two pot-over-jack pairs ─────────────────────────
+		// Written out rather than looped over a table: tools/panel_reticules.py
+		// reads these positions straight out of the source to place the panel
+		// art, and it can evaluate an expression but not a struct member.
+		const float rowA = hp(4), rowAj = hp(6);
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, rowA)), module, Chime::RATE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, rowAj)), module, Chime::RATE_INPUT));
+		lbl->pairDown(colA, rowA, rowAj, "RATE");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowA)), module, Chime::SPREAD_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowAj)), module, Chime::SPREAD_INPUT));
+		lbl->pairDown(colB, rowA, rowAj, "SPREAD");
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(10))), module, Chime::RELATE_PARAM));
-		lbl->trim(potX, hp(10), "RELATE");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(12))), module, Chime::SHAPE_PARAM));
-		lbl->trim(potX, hp(12), "CURVE");
-		addParam(createParamCentered<VCVButton>(mm2px(Vec(cvX, hp(10))), module, Chime::RESEED_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(12))), module, Chime::RESEED_INPUT));
-		lbl->add(cvX, hp(10) - sfs::LABEL_GAP_TRIM, "SEED");
-		lbl->link(cvX, hp(10), cvX, hp(12));
+		const float rowB = hp(9), rowBj = hp(11);
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, rowB)), module, Chime::RELATE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, rowBj)), module, Chime::RELATE_INPUT));
+		lbl->pairDown(colA, rowB, rowBj, "RELATE");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowB)), module, Chime::SHAPE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowBj)), module, Chime::SHAPE_INPUT));
+		lbl->pairDown(colB, rowB, rowBj, "CURVE");
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(15))), module, Chime::OCT_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(15))), module, Chime::OCT_INPUT));
-		lbl->pair(potX, hp(15), "OCT");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(17))), module, Chime::ROOT_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(17))), module, Chime::ROOT_INPUT));
-		lbl->pair(potX, hp(17), "ROOT");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(19))), module, Chime::SCALE_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(19))), module, Chime::SCALE_INPUT));
-		lbl->pair(potX, hp(19), "SCALE");
+		const float rowC = hp(14), rowCj = hp(16);
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, rowC)), module, Chime::DECAY_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, rowCj)), module, Chime::DECAY_INPUT));
+		lbl->pairDown(colA, rowC, rowCj, "DECAY");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowC)), module, Chime::DRIFT_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowCj)), module, Chime::DRIFT_INPUT));
+		lbl->pairDown(colB, rowC, rowCj, "DRIFT");
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(22))), module, Chime::DECAY_PARAM));
-		lbl->trim(potX, hp(22), "DECAY");
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(22))), module, Chime::CLOCK_INPUT));
-		lbl->jack(cvX, hp(22), "CLOCK");
+		// Octave takes CV only, and the reseed button stands alone -- neither has a
+		// partner, so neither gets a pipe.
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, hp(19.5f))), module, Chime::OCT_INPUT));
+		lbl->jack(colA, hp(19.5f), "OCT");
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(colB, hp(19.5f))), module, Chime::RESEED_PARAM));
+		lbl->trim(colB, hp(19.5f), "SEED");
 
-		// ── the eight notes: swing, then the two output rows, on the plate ──────
+		// ── the eight notes: FREQ on the faceplate, the two out rows on the plate ─
 		for (int c = 0; c < CHIME_NCH; c++) {
-			float x = hp(8 + 2 * c);
-			addParam(createParamCentered<Trimpot>(mm2px(Vec(x, hp(13))), module, Chime::ATTEN_PARAM + c));
-			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, hp(15))), module, Chime::LFO_OUTPUT + c));
-			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, hp(17))), module, Chime::AUDIO_OUTPUT + c));
+			float x = note0 + noteStep * c;
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(x, freqY)), module, Chime::ATTEN_PARAM + c));
+			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, lfoY)), module, Chime::LFO_OUTPUT + c));
+			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, audioY)), module, Chime::AUDIO_OUTPUT + c));
 		}
-		lbl->add(hp(7.1f), hp(13), "SWING", sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
-		lbl->add(hp(7.1f), hp(15), "LFO",   sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
-		lbl->add(hp(7.1f), hp(17), "AUDIO", sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
+		// One label for a row of eight, centred between columns 4 and 5, with a
+		// tick over each column. FREQ threads a rail through its ticks; the two
+		// rows on the plate leave the rail out, so their ticks read as pointers
+		// into the plate rather than as a bus running across it.
+		auto rowLabel = [&](float y, const char* text, bool rail, bool onPlate) {
+			const float mid = note0 + noteStep * 3.5f;
+			if (rail) {
+				lbl->link(note0, y, mid - hp(0.75f), y, onPlate);
+				lbl->link(mid + hp(0.75f), y, note0 + noteStep * 7.f, y, onPlate);
+			}
+			for (int c = 0; c < CHIME_NCH; c++) {
+				float x = note0 + noteStep * c;
+				lbl->link(x, y - hp(0.25f), x, y + hp(0.25f), onPlate);
+			}
+			lbl->add(mid, y, text, onPlate ? sfs::PanelLabels::ON_PLATE
+			                               : sfs::PanelLabels::LABEL);
+		};
+		rowLabel(hp(11.5f),  "FREQ",    true,  false);
+		rowLabel(hp(14),     "LFO OUT", false, true);
+		rowLabel(hp(16.75f), "AUDIO",   false, true);
 
-		// ── bottom: excitation on the faceplate, outs on their own plate ────────
-		addParam(createParamCentered<ChimeExciteSlider>(mm2px(Vec(hp(10), hp(21))), module, Chime::EXCITE_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(14), hp(21))), module, Chime::EXCITE_INPUT));
-		lbl->note(hp(10), hp(21) - 3.4f, "BOW  \u2190\u2192  STRIKE");
-		lbl->jack(hp(14), hp(21), "EXC");
+		// ── bottom: one row, so every label on it shares a baseline ─────────────
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, botY)), module, Chime::CLOCK_INPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(colB, botY)), module, Chime::GATE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(colC, botY)), module, Chime::VOCT_OUTPUT));
+		lbl->jack(colA, botY, "CLOCK");
+		lbl->jack(colB, botY, "GATE");
+		lbl->jack(colC, botY, "V/OCT");
 
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(18), hp(21))), module, Chime::VOCT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(20), hp(21))), module, Chime::GATE_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(23), hp(21))), module, Chime::MIX_L_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(25), hp(21))), module, Chime::MIX_R_OUTPUT));
-		lbl->jackOnPlate(hp(18), hp(21), "V/OCT");
-		lbl->jackOnPlate(hp(20), hp(21), "GATE");
-		lbl->add(hp(24), hp(21) - sfs::LABEL_GAP_JACK, "MIX L / R", sfs::PanelLabels::ON_PLATE);
+		// The slider spans hp(10)..hp(19); its labels sit at the ends of the track,
+		// on the same baseline as the rest of the row, which is why they are placed
+		// by hand rather than through note().
+		addParam(createParamCentered<ChimeExciteSlider>(mm2px(Vec(hp(14.5f), botY)), module, Chime::EXCITE_PARAM));
+		lbl->add(hp(10), botY - sfs::LABEL_GAP_JACK, "BOW", sfs::PanelLabels::LABEL, NVG_ALIGN_LEFT);
+		lbl->add(hp(19), botY - sfs::LABEL_GAP_JACK, "STRIKE", sfs::PanelLabels::LABEL, NVG_ALIGN_RIGHT);
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(21), botY)), module, Chime::EXCITE_INPUT));
+		lbl->jack(hp(21), botY, "EXCITER");
+		lbl->link(hp(19), botY, hp(21), botY);          // slider → its CV jack
 
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(23.5f), botY)), module, Chime::MIX_L_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(26), botY)), module, Chime::MIX_R_OUTPUT));
+		lbl->jackOnPlate(hp(23.5f), botY, "L");
+		lbl->jackOnPlate(hp(26), botY, "R");
 	}
 };
 

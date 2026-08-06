@@ -132,6 +132,15 @@ struct PanelLabels : Widget {
 		add(x, y - LABEL_GAP_TRIM, t, onPlate ? ON_PLATE : LABEL);
 		links.push_back({Vec(x, y), Vec(x + hp(PAIR_SPAN), y), onPlate});
 	}
+	// The same pairing turned through 90°: the jack sits BELOW its pot rather
+	// than beside it, for panels that run their controls down a column. The
+	// caller gives both centres, because the vertical gap is the row pitch and
+	// that is a layout decision rather than a constant.
+	void pairDown(float x, float y, float yJack, const std::string& t,
+	              bool onPlate = false) {
+		add(x, y - LABEL_GAP_TRIM, t, onPlate ? ON_PLATE : LABEL);
+		links.push_back({Vec(x, y), Vec(x, yJack), onPlate});
+	}
 	void link(float x1, float y1, float x2, float y2, bool onPlate = false) {
 		links.push_back({Vec(x1, y1), Vec(x2, y2), onPlate});
 	}

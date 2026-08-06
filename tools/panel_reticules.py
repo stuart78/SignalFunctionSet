@@ -281,8 +281,8 @@ def splice(path, old, elems, plates=(), upmm=MM):
 PLATES = {
     # A plate bleeds about a cell past its outermost control -- enough to read as
     # a region rather than a box, without running the width of the panel.
-    "chime": [(hp(5.2), hp(11.7), hp(18.4), hp(6.6)),    # the eight note columns
-              (hp(16.8), hp(19.7), hp(9.4), hp(2.7))],   # the output cluster
+    "chime": [(hp(7.25), hp(13.5), hp(20.0), hp(6.0)),   # the eight note out rows
+              (hp(22.25), hp(21.5), hp(5.0), hp(3.25))], # the stereo mix pair
     "crystal": [],
     "fill": [(117.0, 8.0, 43.0, 116.0)],           # swing + the three output columns
     "chance": [],

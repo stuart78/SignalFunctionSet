@@ -4,88 +4,82 @@
     <rect x="0" y="0" width="1680" height="1517.7166" fill="#f0f0f0"/>
   </g>
   <g id="Plates" data-name="Plates">
-    <rect x="312" y="702" width="1104" height="396" rx="24" fill="#1a1a1a"/>
-    <rect x="1008" y="1182" width="564" height="162" rx="24" fill="#1a1a1a"/>
+    <rect x="435" y="810" width="1200" height="360" rx="24" fill="#1a1a1a"/>
+    <rect x="1335" y="1290" width="300" height="195" rx="24" fill="#1a1a1a"/>
   </g>
   <g id="Reticules" data-name="Reticules">
-    <rect x="420" y="120" width="960" height="540" rx="12" fill="#1a1a32"/>
+    <rect x="435" y="120" width="1200" height="540" rx="12" fill="#1a1a32"/>
     <circle cx="120" cy="240" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="240" cy="240" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="120" cy="360" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="240" cy="360" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="120" cy="480" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="240" cy="480" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="120" cy="600" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="120" cy="720" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="240" cy="600" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="240" cy="720" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="120" cy="900" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="240" cy="900" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="120" cy="1020" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="240" cy="1020" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="120" cy="1140" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="240" cy="1140" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="120" cy="1320" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="240" cy="1320" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="480" cy="780" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="600" cy="780" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="720" cy="780" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="840" cy="780" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="960" cy="780" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1080" cy="780" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1200" cy="780" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1320" cy="780" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="480" cy="900" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="600" cy="900" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="720" cy="900" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="840" cy="900" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="960" cy="900" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1080" cy="900" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1200" cy="900" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1320" cy="900" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="480" cy="1020" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="600" cy="1020" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="720" cy="1020" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="840" cy="1020" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="960" cy="1020" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1080" cy="1020" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1200" cy="1020" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1320" cy="1020" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <rect x="420" y="1215" width="360" height="90" rx="7.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="840" cy="1260" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1080" cy="1260" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1200" cy="1260" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1380" cy="1260" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1500" cy="1260" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="120" cy="360" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="270" cy="240" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="270" cy="360" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="120" cy="540" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="120" cy="660" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="270" cy="540" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="270" cy="660" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="120" cy="840" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="120" cy="960" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="270" cy="840" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="270" cy="960" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="120" cy="1170" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="270" cy="1170" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="510" cy="750" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="660" cy="750" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="810" cy="750" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="960" cy="750" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1110" cy="750" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1260" cy="750" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1410" cy="750" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1560" cy="750" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="510" cy="930" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="660" cy="930" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="810" cy="930" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="960" cy="930" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1110" cy="930" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1260" cy="930" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1410" cy="930" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1560" cy="930" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="510" cy="1080" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="660" cy="1080" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="810" cy="1080" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="960" cy="1080" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1110" cy="1080" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1260" cy="1080" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1410" cy="1080" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1560" cy="1080" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="120" cy="1410" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="270" cy="1410" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="420" cy="1410" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <rect x="690" y="1365" width="360" height="90" rx="7.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1260" cy="1410" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1410" cy="1410" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1560" cy="1410" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
   </g>
   <g id="Labels (mock)" data-name="Labels (mock)">
-    <line x1="120" y1="240" x2="240" y2="240" stroke="#9a9aa6" stroke-width="4.1339"/>
-    <line x1="120" y1="360" x2="240" y2="360" stroke="#9a9aa6" stroke-width="4.1339"/>
-    <line x1="120" y1="480" x2="240" y2="480" stroke="#9a9aa6" stroke-width="4.1339"/>
-    <line x1="240" y1="600" x2="240" y2="720" stroke="#9a9aa6" stroke-width="4.1339"/>
-    <line x1="120" y1="900" x2="240" y2="900" stroke="#9a9aa6" stroke-width="4.1339"/>
-    <line x1="120" y1="1020" x2="240" y2="1020" stroke="#9a9aa6" stroke-width="4.1339"/>
-    <line x1="120" y1="1140" x2="240" y2="1140" stroke="#9a9aa6" stroke-width="4.1339"/>
+    <line x1="120" y1="240" x2="120" y2="360" stroke="#9a9aa6" stroke-width="4.1339"/>
+    <line x1="270" y1="240" x2="270" y2="360" stroke="#9a9aa6" stroke-width="4.1339"/>
+    <line x1="120" y1="540" x2="120" y2="660" stroke="#9a9aa6" stroke-width="4.1339"/>
+    <line x1="270" y1="540" x2="270" y2="660" stroke="#9a9aa6" stroke-width="4.1339"/>
+    <line x1="120" y1="840" x2="120" y2="960" stroke="#9a9aa6" stroke-width="4.1339"/>
+    <line x1="270" y1="840" x2="270" y2="960" stroke="#9a9aa6" stroke-width="4.1339"/>
+    <line x1="1140" y1="1410" x2="1260" y2="1410" stroke="#9a9aa6" stroke-width="4.1339"/>
     <text x="60" y="96" font-family="Figtree" font-size="66.1417" font-weight="600" letter-spacing="1.1811" fill="#231f20" text-anchor="start" dominant-baseline="middle">CHIME</text>
     <text x="120" y="187.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">RATE</text>
-    <text x="120" y="307.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">SPREAD</text>
-    <text x="120" y="427.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">DRIFT</text>
-    <text x="120" y="547.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">RELATE</text>
-    <text x="120" y="667.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">CURVE</text>
-    <text x="240" y="548.0315" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">SEED</text>
-    <text x="120" y="847.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">OCT</text>
-    <text x="120" y="967.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">ROOT</text>
-    <text x="120" y="1087.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">SCALE</text>
-    <text x="120" y="1267.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">DECAY</text>
-    <text x="240" y="1252.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">CLOCK</text>
-    <text x="426" y="780" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#e8e8f0" text-anchor="end" dominant-baseline="middle">SWING</text>
-    <text x="426" y="900" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#e8e8f0" text-anchor="end" dominant-baseline="middle">LFO</text>
-    <text x="426" y="1020" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#e8e8f0" text-anchor="end" dominant-baseline="middle">AUDIO</text>
-    <text x="600" y="1219.8426" font-family="Figtree" font-size="29.5276" font-weight="400" letter-spacing="0.4724" fill="#6a6a78" text-anchor="middle" dominant-baseline="middle">BOW  ←→  STRIKE</text>
-    <text x="840" y="1192.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">EXC</text>
-    <text x="1080" y="1192.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#e8e8f0" text-anchor="middle" dominant-baseline="middle">V/OCT</text>
-    <text x="1200" y="1192.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#e8e8f0" text-anchor="middle" dominant-baseline="middle">GATE</text>
-    <text x="1440" y="1196.2205" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#e8e8f0" text-anchor="middle" dominant-baseline="middle">MIX L / R</text>
+    <text x="270" y="187.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">SPREAD</text>
+    <text x="120" y="487.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">RELATE</text>
+    <text x="270" y="487.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">CURVE</text>
+    <text x="120" y="787.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">DECAY</text>
+    <text x="270" y="787.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">DRIFT</text>
+    <text x="120" y="1102.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">OCT</text>
+    <text x="270" y="1117.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">SEED</text>
+    <text x="120" y="1342.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">CLOCK</text>
+    <text x="270" y="1342.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">GATE</text>
+    <text x="420" y="1342.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">V/OCT</text>
+    <text x="600" y="1346.2205" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="start" dominant-baseline="middle">BOW</text>
+    <text x="1140" y="1346.2205" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="end" dominant-baseline="middle">STRIKE</text>
+    <text x="1260" y="1342.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">EXCITER</text>
+    <text x="1410" y="1342.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#e8e8f0" text-anchor="middle" dominant-baseline="middle">L</text>
+    <text x="1560" y="1342.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#e8e8f0" text-anchor="middle" dominant-baseline="middle">R</text>
   </g>
   <g id="GUIDES" data-name="GUIDES">
     <line x1="7.5" y1="0" x2="7.5" y2="1517.7166" stroke="#eeeef2" stroke-width="0.8" stroke-opacity="0.5"/>

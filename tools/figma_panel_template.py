@@ -418,8 +418,13 @@ KIND_SIZE = {"LABEL": T_LABEL, "ON_PLATE": T_LABEL, "NOTE": T_NOTE, "TITLE": T_T
 
 
 def labels(body, ev):
-    """Every PanelLabels call, resolved to where nanovg will actually draw it."""
-    texts, links = [], []
+    """Every PanelLabels call, resolved to where nanovg will actually draw it.
+
+    Also returns the ones it could NOT resolve. A call whose coordinates come
+    from a lambda parameter or a loop variable is unreachable to a regex, and a
+    label that quietly fails to appear reads as a label that is not there --
+    which is the one thing this file must never say."""
+    texts, links, skipped = [], [], []
     for m in re.finditer(r"lbl->(\w+)\(", body):
         depth, j = 1, m.end()
         while j < len(body) and depth:
@@ -432,8 +437,18 @@ def labels(body, ev):
                 onplate = len(a) > 4 and "true" in a[4]
                 links.append((ev(a[0]), ev(a[1]), ev(a[2]), ev(a[3]), onplate))
                 continue
+            # pairDown puts the jack's y where the others put the text, so it has
+            # to be unpacked before the common (x, y, text) read below.
+            if fn == "pairDown":
+                x, y, y2 = ev(a[0]), ev(a[1]), ev(a[2])
+                onplate = len(a) > 4 and "true" in a[4]
+                links.append((x, y, x, y2, onplate))
+                texts.append((x, y - gap_for(SZ_TRIM, GAP_TRIM), cstring(a[3]),
+                              "ON_PLATE" if onplate else "LABEL", "middle"))
+                continue
             x, y, t = ev(a[0]), ev(a[1]), cstring(a[2]) if len(a) > 2 else None
             if t is None:
+                skipped.append(fn)
                 continue
             kind, align = "LABEL", "middle"
             if fn == "knob":
@@ -464,8 +479,9 @@ def labels(body, ev):
                 continue
             texts.append((x, y, t, kind, align))
         except Exception:
+            skipped.append(fn)
             continue
-    return texts, links
+    return texts, links, skipped
 
 
 def module_svg(key):
@@ -494,7 +510,7 @@ def module_svg(key):
     # CrystalLabels -- Share Tech Mono, size in px, no gaps -- so drawing its
     # calls in Figtree at TYPE_LABEL would misrepresent the panel.
     shared = "sfs::PanelLabels" in src
-    texts, links = labels(body, ev) if shared else ([], [])
+    texts, links, skipped = labels(body, ev) if shared else ([], [], [])
     plates = [(x * MM, y * MM, w * MM, h * MM) for (x, y, w, h) in pr.PLATES.get(key, [])]
 
     wmm = float(re.search(r'width="([0-9.]+)mm"', open(os.path.join(root, svg)).read()).group(1))
@@ -554,6 +570,11 @@ def module_svg(key):
     ]
     if not shared:
         audit.insert(0, "labels not mocked: this widget does not use sfs::PanelLabels")
+    elif skipped:
+        c = ", ".join(f"{k}x{skipped.count(k)}" if skipped.count(k) > 1 else k
+                      for k in sorted(set(skipped)))
+        audit.insert(0, f"{len(skipped)} label call(s) NOT mocked -- coordinates come "
+                        f"from a loop or lambda this cannot evaluate: {c}")
     return (svg_open(w, PANEL_H, f"{name}: {hp_units}HP at {raw(S)}x, geometry read "
                                  f"from {cpp}. Design layer only.")
             + "\n".join(layers) + "\n</svg>\n"), hp_units, len(ret), len(texts), audit
