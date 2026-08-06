@@ -585,15 +585,14 @@ struct ChimeKeyReadout : Widget {
 
 // Horizontal bow↔strike blend slider (the SDK only ships vertical sliders).
 //
-// The TRACK is not drawn here. It is in res/chime.svg, exactly as the designer
-// set it, and this widget sits on top of it -- so only the pointer moves, and
-// the track keeps its own corner radius and inner shadow at any width. Drawing
-// it here from a bitmap meant stretching a 9:1 image into a 6:1 box the moment
-// the panel changed, which rounds the ends wrong.
+// Track and pointer are both the designer's PNGs: each carries a shadow, and
+// nanosvg implements no SVG filters, so neither can be SVG. They are exported at
+// 8× Rack's own pixel scale, hence the divides.
 //
-// The pointer does come from the designer's PNG, because it carries a drop
-// shadow and nanosvg implements no SVG filters. It is exported at 8× Rack's own
-// pixel scale, hence the divide.
+// The pointer does not run flush to the ends. The design nests it inside the
+// track with a margin, and travelling the full width instead puts it over the
+// track's rounded end at zero, where it stops reading as a thing sitting IN a
+// groove and starts reading as a thing sitting next to one.
 struct ChimeExciteSlider : app::SliderKnob {
 	ChimeExciteSlider() {
 		horizontal = true;
@@ -616,8 +615,11 @@ struct ChimeExciteSlider : app::SliderKnob {
 		float w = box.size.x, h = box.size.y;
 		float v = 0.f;
 		if (ParamQuantity* pq = getParamQuantity()) v = clamp(pq->getScaledValue(), 0.f, 1.f);
-		float pw = 85.f / 8.f, ph = 116.f / 8.f;     // the pointer PNG, back at 1×
-		blit(vg, "res/chime-slider-knob.png", (w - pw) * v, (h - ph) * 0.5f, pw, ph);
+		blit(vg, "res/chime-slider.png", 0.f, 0.f, w, h);
+		float pw = 85.f / 8.f, ph = 116.f / 8.f;     // the PNGs, back at 1×
+		float inset = mm2px(0.36f);                  // the margin the design leaves
+		blit(vg, "res/chime-slider-knob.png", inset + (w - pw - 2.f * inset) * v,
+		     (h - ph) * 0.5f, pw, ph);
 	}
 };
 
@@ -640,7 +642,7 @@ struct ChimeWidget : ModuleWidget {
 		const float colA = hp(2), colB = hp(4.5f), colC = hp(7);
 		const float note0 = hp(8.5f), noteStep = hp(2.5f);
 		const float freqY = hp(12.5f), lfoY = hp(15.5f), audioY = hp(18);
-		const float botY = hp(23.5f);
+		const float botY = hp(24);
 
 		ChimeDisplay* disp = new ChimeDisplay();
 		disp->module = module;
@@ -676,11 +678,11 @@ struct ChimeWidget : ModuleWidget {
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowC)), module, Chime::DRIFT_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowCj)), module, Chime::DRIFT_INPUT));
 
-		// The key arrives by CV only -- the panel gives ROOT and SCALE jacks and no
-		// pots, so Chime follows whatever key the patch is in and the context menu
-		// is where you set one by hand.
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, hp(19.5f))), module, Chime::ROOT_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, hp(19.5f))), module, Chime::SCALE_INPUT));
+		const float rowD = hp(19), rowDj = hp(21);
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, rowD)), module, Chime::ROOT_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, rowDj)), module, Chime::ROOT_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowD)), module, Chime::SCALE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowDj)), module, Chime::SCALE_INPUT));
 
 		// ── the eight notes ─────────────────────────────────────────────────────
 		for (int c = 0; c < CHIME_NCH; c++) {
@@ -702,31 +704,14 @@ struct ChimeWidget : ModuleWidget {
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(26), botY)), module, Chime::MIX_R_OUTPUT));
 	}
 
-	// Three params the panel has no control for. ROOT and SCALE are CV-only by
-	// design, which is right for a patch driven by Key or Arrange but leaves an
-	// unpatched Chime stuck in C chromatic; and RESEED lost both its button and
-	// its jack, which would strand the RANDOM relate mode on whatever ratios it
-	// happened to start with. The menu is the conventional home for a control
-	// that does not earn panel space, and it costs none.
+	// RESEED lost both its button and its jack in the panel redesign, and without
+	// it the RANDOM relate mode is stranded on whichever ratios the instance
+	// happened to start with -- the one mode where drawing again is the point.
+	// The menu is the conventional home for a control that does not earn panel
+	// space, and it costs none.
 	void appendContextMenu(Menu* menu) override {
 		Chime* m = dynamic_cast<Chime*>(module);
 		if (!m) return;
-		menu->addChild(new MenuSeparator);
-		menu->addChild(createMenuLabel("Key — overridden while ROOT / SCALE are patched"));
-
-		std::vector<std::string> roots;
-		for (const char* nn : {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"})
-			roots.push_back(nn);
-		menu->addChild(createIndexSubmenuItem("Root", roots,
-			[=]() { return (int)std::round(m->params[Chime::ROOT_PARAM].getValue()); },
-			[=](int i) { m->params[Chime::ROOT_PARAM].setValue((float)i); }));
-
-		std::vector<std::string> scales;
-		for (int i = 0; i < sfs::NUM_SCALES; i++) scales.push_back(sfs::SCALES[i].longName);
-		menu->addChild(createIndexSubmenuItem("Scale", scales,
-			[=]() { return (int)std::round(m->params[Chime::SCALE_PARAM].getValue()); },
-			[=](int i) { m->params[Chime::SCALE_PARAM].setValue((float)i); }));
-
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuItem("Reseed random rates", "", [=]() { m->reseed(); }));
 	}
