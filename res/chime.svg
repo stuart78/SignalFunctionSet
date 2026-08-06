@@ -24,11 +24,7 @@
     <circle cx="67.50" cy="210.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="67.50" cy="240.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="30.00" cy="292.50" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="67.50" cy="292.50" r="8.91" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="127.50" cy="315.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="165.00" cy="315.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="202.50" cy="315.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="240.00" cy="315.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="67.50" cy="292.50" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="127.50" cy="187.50" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="165.00" cy="187.50" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="202.50" cy="187.50" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
@@ -56,7 +52,9 @@
     <circle cx="30.00" cy="352.50" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="67.50" cy="352.50" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="105.00" cy="352.50" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <rect x="173.65" y="342.27" width="87.70" height="20.46" rx="10.63" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="142.50" cy="352.50" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="176.25" cy="352.50" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <rect x="196.15" y="342.27" width="87.70" height="20.46" rx="10.63" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="315.00" cy="352.50" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="352.50" cy="352.50" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="390.00" cy="352.50" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>

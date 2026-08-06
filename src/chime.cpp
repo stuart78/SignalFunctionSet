@@ -16,7 +16,7 @@
 // LFO relationships (RELATE + SPREAD):
 //   RAMP    — rates fan smoothly slow→fast across channels
 //   STEPPED — integer rate ratios (periodic realignment, phasing patterns)
-//   RANDOM  — seeded random ratios (RESEED button / trigger)
+//   RANDOM  — seeded random ratios (reseed from the context menu)
 // DRIFT adds a slow per-channel random rate wobble so nothing locks perfectly.
 //
 // Notes: ROOT + SCALE (canonical sfs::SCALES — Note/Arrange CV convention) with
@@ -590,7 +590,7 @@ struct ChimeKeyReadout : Widget {
 struct ChimeExciteSlider : app::SliderKnob {
 	ChimeExciteSlider() {
 		horizontal = true;
-		box.size = mm2px(Vec(45.72f, 5.08f));       // hp(9) x hp(1)
+		box.size = mm2px(Vec(30.48f, 5.08f));       // hp(6) x hp(1)
 	}
 	// Loaded per frame and deliberately NOT held as a member: Rack destroys the
 	// Window before the Scene, so an Image kept alive in a widget deletes its
@@ -679,28 +679,14 @@ struct ChimeWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowCj)), module, Chime::DRIFT_INPUT));
 		lbl->pairDown(colB, rowC, rowCj, "DRIFT");
 
-		// Octave takes CV only, and the reseed button stands alone -- neither has a
-		// partner, so neither gets a pipe.
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, hp(19.5f))), module, Chime::OCT_INPUT));
-		lbl->jack(colA, hp(19.5f), "OCT");
-		addParam(createParamCentered<VCVButton>(mm2px(Vec(colB, hp(19.5f))), module, Chime::RESEED_PARAM));
-		lbl->trim(colB, hp(19.5f), "SEED");
-
-		// ── the key ─────────────────────────────────────────────────────────────
-		// ROOT and SCALE sit in the band under the note plate rather than in the
-		// left column, because the left column has no room left for a pair. It
-		// reads: they are what names the pitches on the screen directly above,
-		// and they take the note columns' own x positions so the two line up.
-		// Pairs run ACROSS here -- the band is one row tall.
-		const float keyY = hp(21);
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(note0, keyY)), module, Chime::ROOT_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(note0 + noteStep, keyY)), module, Chime::ROOT_INPUT));
-		lbl->trim(note0, keyY, "ROOT");
-		lbl->link(note0, keyY, note0 + noteStep, keyY);
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(note0 + noteStep * 2.f, keyY)), module, Chime::SCALE_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(note0 + noteStep * 3.f, keyY)), module, Chime::SCALE_INPUT));
-		lbl->trim(note0 + noteStep * 2.f, keyY, "SCALE");
-		lbl->link(note0 + noteStep * 2.f, keyY, note0 + noteStep * 3.f, keyY);
+		// The key arrives by CV only: the design gives ROOT and SCALE jacks and no
+		// pots, so Chime follows whatever key the patch is in (Key, Arrange) and
+		// the context menu is where you set one by hand. Neither has a partner
+		// control, so neither gets a pipe.
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, hp(19.5f))), module, Chime::ROOT_INPUT));
+		lbl->jack(colA, hp(19.5f), "ROOT");
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, hp(19.5f))), module, Chime::SCALE_INPUT));
+		lbl->jack(colB, hp(19.5f), "SCALE");
 
 		// ── the eight notes: FREQ on the faceplate, the two out rows on the plate ─
 		for (int c = 0; c < CHIME_NCH; c++) {
@@ -738,11 +724,17 @@ struct ChimeWidget : ModuleWidget {
 		lbl->jack(colB, botY, "GATE");
 		lbl->jack(colC, botY, "V/OCT");
 
-		// The slider spans hp(10)..hp(19); its labels sit at the ends of the track,
+		// Octave is the one pot on this row, so its pipe runs across to its jack.
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(9.5f), botY)), module, Chime::OCT_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(11.75f), botY)), module, Chime::OCT_INPUT));
+		lbl->jack(hp(9.5f), botY, "OCTAVE");
+		lbl->link(hp(9.5f), botY, hp(11.75f), botY);
+
+		// The slider spans hp(13)..hp(19); its labels sit at the ends of the track,
 		// on the same baseline as the rest of the row, which is why they are placed
 		// by hand rather than through note().
-		addParam(createParamCentered<ChimeExciteSlider>(mm2px(Vec(hp(14.5f), botY)), module, Chime::EXCITE_PARAM));
-		lbl->add(hp(10), botY - sfs::LABEL_GAP_JACK, "BOW", sfs::PanelLabels::LABEL, NVG_ALIGN_LEFT);
+		addParam(createParamCentered<ChimeExciteSlider>(mm2px(Vec(hp(16), botY)), module, Chime::EXCITE_PARAM));
+		lbl->add(hp(13), botY - sfs::LABEL_GAP_JACK, "BOW", sfs::PanelLabels::LABEL, NVG_ALIGN_LEFT);
 		lbl->add(hp(19), botY - sfs::LABEL_GAP_JACK, "STRIKE", sfs::PanelLabels::LABEL, NVG_ALIGN_RIGHT);
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(21), botY)), module, Chime::EXCITE_INPUT));
 		lbl->jack(hp(21), botY, "EXCITER");
@@ -752,6 +744,35 @@ struct ChimeWidget : ModuleWidget {
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(26), botY)), module, Chime::MIX_R_OUTPUT));
 		lbl->jackOnPlate(hp(23.5f), botY, "L");
 		lbl->jackOnPlate(hp(26), botY, "R");
+	}
+
+	// Three params the panel has no control for. ROOT and SCALE are CV-only by
+	// design, which is right for a patch driven by Key or Arrange but leaves an
+	// unpatched Chime stuck in C chromatic; and RESEED lost both its button and
+	// its jack, which would strand the RANDOM relate mode on whatever ratios it
+	// happened to start with. The menu is the conventional home for a control
+	// that does not earn panel space, and it costs none.
+	void appendContextMenu(Menu* menu) override {
+		Chime* m = dynamic_cast<Chime*>(module);
+		if (!m) return;
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuLabel("Key — overridden while ROOT / SCALE are patched"));
+
+		std::vector<std::string> roots;
+		for (const char* nn : {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"})
+			roots.push_back(nn);
+		menu->addChild(createIndexSubmenuItem("Root", roots,
+			[=]() { return (int)std::round(m->params[Chime::ROOT_PARAM].getValue()); },
+			[=](int i) { m->params[Chime::ROOT_PARAM].setValue((float)i); }));
+
+		std::vector<std::string> scales;
+		for (int i = 0; i < sfs::NUM_SCALES; i++) scales.push_back(sfs::SCALES[i].longName);
+		menu->addChild(createIndexSubmenuItem("Scale", scales,
+			[=]() { return (int)std::round(m->params[Chime::SCALE_PARAM].getValue()); },
+			[=](int i) { m->params[Chime::SCALE_PARAM].setValue((float)i); }));
+
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuItem("Reseed random rates", "", [=]() { m->reseed(); }));
 	}
 };
 
