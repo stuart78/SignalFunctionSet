@@ -109,26 +109,18 @@ tool run put it back.
 
 ## Exporting a panel for design
 
+Not this tool — **`tools/figma_panel_template.py`**, documented in
+[figma-template.md](figma-template.md):
+
 ```bash
-python3 tools/panel_reticules.py --design key slide loom
+python3 tools/figma_panel_template.py --from key slide loom
 ```
 
-Writes `design/guides/<module>-guide.svg` and does **not** touch the shipped
-panel. The guide carries everything a designer needs and the shipped file
-cannot:
-
-* the **quarter-HP grid** the layout is actually stated on
-* the **plates and screens**, as they will appear
-* the **reticules, visible** — every control at 99%, to draw around
-* the **runtime labels**, in position and at the right size
-
-That last one matters most. Labels are drawn in Figtree at load time from
-`panel-style.hpp` and appear nowhere in the SVG, so without them a designer has
-no way to see where the text lands or how much room it needs. Labels that sit on
-a dark plate are shown in plate ink, as they will be drawn.
-
-Modules that do not use `sfs::PanelLabels` (Fill, Chance) export with no labels —
-that is correct, not a parse failure.
+It writes `design/figma/<module>-panel.svg` and never touches the shipped panel.
+Use it rather than adding an export mode here: it already emits at the **4×
+scale** the grid requires (1HP = 60u so a quarter is 15u and not 3.75u, which
+Figma's integer-only grid rounds to 4 — a 6.7% error), snaps the reticules,
+numbers the HP rulers, and audits the layout against the grid on the way out.
 
 **Coming back the other way:** export the artwork flat from the design tool, and
 keep any guides in a layer named `Reticules` — the tool hides that group in the
