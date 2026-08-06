@@ -67,6 +67,7 @@ def evaluate(expr, env):
     # strip C++ float suffixes: 76.31f, 4.f and .5f all appear in these widgets
     e = re.sub(r"(?<=[\d.])f\b", "", expr)
     e = e.replace("M_PI", "3.141592653589793")
+    e = e.replace("sfs::", "")          # panel-style constants are namespaced
     ns = dict(env)
     ns.setdefault("hp", hp)
     return float(eval(e, {"__builtins__": {}}, ns))
@@ -274,6 +275,125 @@ def splice(path, old, elems, plates=(), upmm=MM):
     return sum(1 for e in elems if e[0] != "screen"), sum(1 for e in elems if e[0] == "screen")
 
 
+
+# ── design export ───────────────────────────────────────────────────────────
+# The shipped panel hides its guides; a designer needs the opposite. This writes
+# a separate file with everything visible AND the things that exist only in
+# code — the 1HP grid the layout is stated on, and the runtime labels, which are
+# drawn in Figtree at load time and appear nowhere in the SVG. Without them a
+# designer has no way to know where the text lands or how much room it needs.
+LABEL_GAP = {"knob": 5.6, "jack": 5.4, "jackOnPlate": 5.4, "trim": 4.4,
+             "pair": 4.4, "add": 0.0, "note": 0.0, "title": 0.0}
+# The same numbers, for the labels whose y is written as `row - LABEL_GAP_JACK`
+# rather than by calling jack(). Without these those labels evaluate to nothing
+# and vanish from the guide without a word.
+STYLE_CONSTS = {"LABEL_GAP_KNOB": 5.6, "LABEL_GAP_JACK": 5.4, "LABEL_GAP_TRIM": 4.4,
+                "PLATE_PAD": 2.6, "TYPE_LABEL": 3.3, "TYPE_NOTE": 2.5, "TYPE_TITLE": 5.6}
+TYPE_MM = {"title": 5.6, "note": 2.5}          # everything else is TYPE_LABEL
+TYPE_LABEL_MM = 3.3
+
+
+def labels(body, env, extra_defs):
+    """Every runtime label as (x_mm, y_mm, text, size_mm, anchor)."""
+    out = []
+    env = dict(env); env.update(extra_defs); env.update(STYLE_CONSTS)
+    loops = loop_ranges(body, env, extra_defs)
+    pat = re.compile(r"lbl->(\w+)\(([^;]*?)\);", re.S)
+    for m in pat.finditer(body):
+        meth, args = m.group(1), m.group(2)
+        if meth == "link":
+            continue
+        sm = re.search(r'"((?:[^"\\]|\\.)*)"', args)
+        if not sm:
+            continue
+        text = sm.group(1).encode().decode("unicode_escape")
+        nums = args[:sm.start()].rstrip().rstrip(",")
+        # split the two leading coordinates on the top-level comma
+        depth, cut = 0, -1
+        for i, ch in enumerate(nums):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            elif ch == "," and depth == 0:
+                cut = i
+        if cut < 0:
+            continue
+        xs, ys = nums[:cut], nums[cut + 1:]
+        var, count, locals_src = None, 1, ""
+        for lv, lc, ls, le in loops:
+            if ls <= m.start() <= le:
+                var, count, locals_src = lv, lc, body[ls:le]
+        decls = re.findall(r"float\s+(\w+)\s*=\s*([^;]+);", locals_src) if var else []
+        for i in range(count):
+            e = dict(env)
+            if var:
+                e[var] = i
+                for name, expr in decls:
+                    try:
+                        e[name] = evaluate(expr, e)
+                    except Exception:
+                        pass
+            try:
+                x, y = evaluate(xs, e), evaluate(ys, e)
+            except Exception:
+                break
+            size = TYPE_MM.get(meth, TYPE_LABEL_MM)
+            # Labels on a dark plate are drawn in plate ink at runtime, so the
+            # guide has to show them light too or they read as invisible.
+            on_plate = (meth == "jackOnPlate") or ("ON_PLATE" in args)
+            anchor = "start" if meth == "title" else "middle"
+            if "NVG_ALIGN_RIGHT" in args:
+                anchor = "end"
+            elif "NVG_ALIGN_LEFT" in args:
+                anchor = "start"
+            out.append((x, y - LABEL_GAP.get(meth, 0.0), text, size, anchor, on_plate))
+    return out
+
+
+def design_svg(path, wmm, hmm, elems, plates, lbls, upmm):
+    """A guide file to design against: grid, plates, screens, guides, labels."""
+    W, H = wmm * upmm, hmm * upmm
+    o = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{wmm:.4f}mm" '
+         f'height="{hmm:.1f}mm" viewBox="0 0 {W:.4f} {H:.4f}">',
+         f'  <g id="Background"><rect width="{W:.4f}" height="{H:.4f}" fill="{PANEL}"/></g>',
+         '  <g id="Grid">']
+    q = HPMM / 4.0
+    n = 0
+    while n * q <= wmm + 1e-6:
+        x = n * q * upmm
+        major = abs((n * q) % HPMM) < 1e-6
+        o.append(f'    <line x1="{x:.2f}" y1="0" x2="{x:.2f}" y2="{H:.2f}" '
+                 f'stroke="#D8D8E0" stroke-width="{(0.6 if major else 0.3):.2f}" '
+                 f'stroke-opacity="{(0.9 if major else 0.5):.2f}"/>')
+        n += 1
+    n = 0
+    while n * q <= hmm + 1e-6:
+        y = n * q * upmm
+        major = abs((n * q) % HPMM) < 1e-6
+        o.append(f'    <line x1="0" y1="{y:.2f}" x2="{W:.2f}" y2="{y:.2f}" '
+                 f'stroke="#D8D8E0" stroke-width="{(0.6 if major else 0.3):.2f}" '
+                 f'stroke-opacity="{(0.9 if major else 0.5):.2f}"/>')
+        n += 1
+    o.append("  </g>")
+    o.append('  <g id="PanelArt">')
+    o += art_shapes(elems, "    ", plates, upmm)
+    o.append("  </g>")
+    o.append('  <g id="Reticules">')
+    o += guide_shapes(elems, "    ", upmm)
+    o.append("  </g>")
+    o.append('  <g id="Labels">')
+    for (x, y, t, sz, anchor, on_plate) in lbls:
+        esc = t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        ink = "#E8E8F0" if on_plate else "#231F20"
+        o.append(f'    <text x="{x*upmm:.2f}" y="{y*upmm:.2f}" font-family="Figtree" '
+                 f'font-size="{sz*upmm:.2f}" text-anchor="{anchor}" '
+                 f'dominant-baseline="middle" fill="{ink}">{esc}</text>')
+    o.append("  </g>")
+    o.append("</svg>")
+    open(path, "w").write("\n".join(o) + "\n")
+
+
 # Dark plates: the inset slabs that group a section. Rack draws components on
 # top of their own footprint, so a plate is one of the few things in the SVG the
 # player actually sees. Stated in mm as (x, y, w, h) — design intent, so it lives
@@ -312,9 +432,13 @@ FINISHED = {"crystal"}
 
 if __name__ == "__main__":
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    explicit = bool(sys.argv[1:])
-    for key in (sys.argv[1:] or MODULES.keys()):
-        if key in FINISHED and not explicit:
+    args = [a for a in sys.argv[1:] if a != "--design"]
+    # --design writes a separate guide file instead of touching the shipped panel:
+    # everything visible, plus the grid and the code-drawn labels.
+    DESIGN = "--design" in sys.argv[1:]
+    explicit = bool(args)
+    for key in (args or MODULES.keys()):
+        if key in FINISHED and not explicit and not DESIGN:
             print(f"{key}: skipped — finished artwork, layout comes FROM the panel")
             continue
         mod, cpp, svg, defs = MODULES[key]
@@ -338,5 +462,16 @@ if __name__ == "__main__":
         elems = [(k, x / MM * upmm, y / MM * upmm, w / MM * upmm, h / MM * upmm)
                  for (k, x, y, w, h) in collect(body, env, defs)]
         pl = [(x * upmm, y * upmm, w * upmm, h * upmm) for (x, y, w, h) in PLATES.get(key, [])]
+
+        if DESIGN:
+            hmm = float(vb.group(2)) / upmm
+            lbls = labels(body, env, defs)
+            os.makedirs(os.path.join(root, "design", "guides"), exist_ok=True)
+            gp = os.path.join(root, "design", "guides", f"{key}-guide.svg")
+            design_svg(gp, wmm, hmm, elems, pl, lbls, upmm)
+            print(f"{key:8} {len(elems):3} controls, {len(lbls):3} labels "
+                  f"-> design/guides/{key}-guide.svg")
+            continue
+
         nc, ns = splice(p, old, elems, pl, upmm)
         print(f"{key:8} {nc:3} controls, {ns} screen(s) -> {svg}  ({upmm:.4f} units/mm)")

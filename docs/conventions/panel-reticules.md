@@ -106,3 +106,31 @@ They used to be one group, which meant the guides could not be hidden without
 losing the plates and screens with them. To work on a panel's artwork, delete
 the `style` attribute (or toggle the layer in the editor), draw, and let the next
 tool run put it back.
+
+## Exporting a panel for design
+
+```bash
+python3 tools/panel_reticules.py --design key slide loom
+```
+
+Writes `design/guides/<module>-guide.svg` and does **not** touch the shipped
+panel. The guide carries everything a designer needs and the shipped file
+cannot:
+
+* the **quarter-HP grid** the layout is actually stated on
+* the **plates and screens**, as they will appear
+* the **reticules, visible** — every control at 99%, to draw around
+* the **runtime labels**, in position and at the right size
+
+That last one matters most. Labels are drawn in Figtree at load time from
+`panel-style.hpp` and appear nowhere in the SVG, so without them a designer has
+no way to see where the text lands or how much room it needs. Labels that sit on
+a dark plate are shown in plate ink, as they will be drawn.
+
+Modules that do not use `sfs::PanelLabels` (Fill, Chance) export with no labels —
+that is correct, not a parse failure.
+
+**Coming back the other way:** export the artwork flat from the design tool, and
+keep any guides in a layer named `Reticules` — the tool hides that group in the
+shipped panel automatically. A flat export with the guides baked in has to be
+stripped by hand, which is exactly what Crystal needed.
