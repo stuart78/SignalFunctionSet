@@ -122,6 +122,45 @@ scale** the grid requires (1HP = 60u so a quarter is 15u and not 3.75u, which
 Figma's integer-only grid rounds to 4 — a 6.7% error), snaps the reticules,
 numbers the HP rulers, and audits the layout against the grid on the way out.
 
+## When the design comes back finished
+
+At that point the direction reverses, and this tool must stop running on the
+module. It **generates** a panel from the widget source, which means it emits
+the plates and the screen and *nothing else* — no logo, no artwork — and leaves
+the labels and connector lines to be redrawn at runtime by `sfs::PanelLabels` in
+Figtree at `panel-style.hpp`'s own size and weight. That is right while a layout
+is being worked out in code. It is wrong the moment a designer hands over a
+finished face, because every line they set is then replaced by one this repo
+chose.
+
+Publish instead:
+
+```bash
+python3 tools/figma_panel_template.py --publish chime
+```
+
+`design/<key>.svg` becomes `res/<key>.svg` exactly as drawn — their type, their
+weights, their logo — with only the header rewritten for Rack. Then:
+
+* add the key to `FINISHED` in this tool, so the bare sweep skips it
+* **delete the `sfs::PanelLabels` from its widget.** Leaving it in draws a second
+  set of labels over the first. The constructor should place components and
+  nothing else.
+
+Two things `--publish` hides, since a flat export has no layer to hide:
+
+* the **reticule circles**, identified by sitting on a control the widget
+  actually declares — position *and* size, so nothing else at that spot is
+  caught. It reports any declared control whose guide it cannot find, which is
+  how the panel and the code tell you they have drifted apart.
+* the **moving part of a control drawn in full** — a slider's track is artwork
+  and stays, but the pointer is drawn at one value and Rack has to draw that
+  live. Anything wholly inside a flat control and under 60% of its width.
+
+The widget then draws only the moving part over the artwork. Do not bitmap the
+static part as well: it has to be stretched to whatever the box is now, and a
+9:1 track in a 6:1 box gets its rounded ends wrong.
+
 **Coming back the other way:** export the artwork flat from the design tool, and
 keep any guides in a layer named `Reticules` — the tool hides that group in the
 shipped panel automatically. A flat export with the guides baked in has to be

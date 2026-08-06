@@ -619,6 +619,134 @@ def fixup(path):
     print(f"{path}: {wmm:.2f} × {PANEL_MM}mm = {hp_units:.3f}HP at {scale:.4g}x{warn}")
 
 
+def publish(key):
+    """design/<key>.svg IS the panel. Copy it to res/, with the header rewritten
+    for Rack and the placement guides hidden.
+
+    This is the direction the tools did not have. panel_reticules.py GENERATES a
+    panel from the widget source, which means it emits the plates and the screen
+    and nothing else -- no logo, no artwork -- and leaves the labels and the
+    connector lines to be redrawn at runtime in Figtree at panel-style.hpp's own
+    size and weight. That is right while a layout is being worked out in code.
+    It is wrong the moment a designer hands over a finished face, because every
+    line they set is then replaced by one this repo chose. Publishing keeps the
+    file exactly as drawn: their type, their weights, their logo.
+
+    Two things are removed. The reticule circles, which are guides to draw
+    against and not part of the face. A flat export has no layer to hide, so
+    each is identified by sitting on a control the widget actually declares --
+    position and size both, so nothing else at that spot is caught.
+
+    And the MOVING part of any control the designer drew in full: a slider's
+    track is artwork and stays, but the pointer drawn on it is at one value,
+    and Rack has to draw that live. Anything sitting wholly inside a flat
+    control and under 60% of its width is taken to be that part."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import panel_reticules as pr
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    name, cpp, out, defs = pr.MODULES[key]
+    src_svg = os.path.join(root, "design", f"{key}.svg")
+    if not os.path.exists(src_svg):
+        print(f"{key}: no design/{key}.svg"); return
+    svg = open(src_svg).read()
+
+    vb = re.search(r'viewBox="0 0 ([0-9.]+) ([0-9.]+)"', svg)
+    if not vb:
+        print(f"{key}: design file has no viewBox"); return
+    w, h = float(vb.group(1)), float(vb.group(2))
+    # The scale comes from the 3U height, then snaps: a designer's file may carry
+    # a rounded height (1518 where 4x is 1517.7166), and carrying that 0.02%
+    # through is the difference between 28.000HP and 27.995HP.
+    scale = h / PANEL_H
+    if abs(scale - round(scale)) < 0.01:
+        scale = float(round(scale))
+    upmm = MM * scale                         # file units per mm
+
+    body = pr.widget_source(open(os.path.join(root, cpp)).read(), name)
+    env = pr.constants(defs, body, open(os.path.join(root, cpp)).read())
+    spots = [(k, cx / MM * upmm, cy / MM * upmm, ew / MM * upmm, eh / MM * upmm)
+             for (k, cx, cy, ew, eh) in pr.collect(body, env, defs) if k != "screen"]
+
+    def bbox(el, d):
+        """A shape's real extent. Figma writes a rotated rect as an unrotated one
+        plus rotate(a cx cy), so the raw x/y are not where it ends up -- the
+        slider's own pointer lands a whole control away from its attributes."""
+        if d is not None:
+            nums = [float(v) for v in re.findall(r"-?\d+\.?\d*(?:e-?\d+)?", d)]
+            pts = list(zip(nums[0::2], nums[1::2]))
+        else:
+            def f(a, dv=0.0):
+                m = re.search(r'%s="(-?[\d.]+)"' % a, el)
+                return float(m.group(1)) if m else dv
+            x, y, ew, eh = f("x"), f("y"), f("width"), f("height")
+            pts = [(x, y), (x + ew, y), (x + ew, y + eh), (x, y + eh)]
+        if not pts:
+            return None
+        t = re.search(r'transform="rotate\(\s*(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]+(-?[\d.]+)\s*\)"', el)
+        if t:
+            a = math.radians(float(t.group(1)))
+            px, py = float(t.group(2)), float(t.group(3))
+            ca, sa = math.cos(a), math.sin(a)
+            pts = [(px + (x - px) * ca - (y - py) * sa,
+                    py + (x - px) * sa + (y - py) * ca) for (x, y) in pts]
+        xs = [q[0] for q in pts]; ys = [q[1] for q in pts]
+        return (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2, \
+               max(xs) - min(xs), max(ys) - min(ys)
+
+    def is_guide(el, d):
+        b = bbox(el, d)
+        if not b:
+            return False
+        cx, cy, bw, bh = b
+        for i, (kind, sx, sy, sw, sh) in enumerate(spots):
+            near = abs(cx - sx) < sw * 0.5 and abs(cy - sy) < sh * 0.5
+            if not near:
+                continue
+            if pr.RETICULE in el.lower() \
+               and abs(bw - sw) < sw * 0.35 and abs(bh - sh) < sh * 0.35:
+                hit[i] = True
+                return True
+            if kind == "flat" and bw < sw * 0.6:      # the pointer, not the track
+                movers.append(1)
+                return True
+        return False
+
+    guides, kept, n, hit, movers = [], [], 0, [False] * len(spots), []
+    pos = 0
+    for m in re.finditer(r'<(path|circle|rect)\b[^>]*?/>', svg):
+        el = m.group(0)
+        dm = re.search(r'd="([^"]*)"', el)
+        if is_guide(el, dm.group(1) if dm else None):
+            guides.append(el)
+            kept.append(svg[pos:m.start()])
+            pos = m.end()
+            n += 1
+    kept.append(svg[pos:])
+    svg = "".join(kept)
+
+    svg = re.sub(r'width="[^"]+"', f'width="{w / upmm:.4f}mm"', svg, count=1)
+    svg = re.sub(r'height="[^"]+"', f'height="{PANEL_MM:.4f}mm"', svg, count=1)
+    svg = svg.replace("</svg>", '<g id="Reticules" style="display:none">\n'
+                      + "\n".join("  " + gd for gd in guides) + "\n</g>\n</svg>")
+
+    open(os.path.join(root, out), "w").write(svg)
+    hp_units = (w / upmm) / 5.08
+    warn = "" if abs(hp_units - round(hp_units)) < 1e-4 else "  ** not a whole HP **"
+    print(f"{key}: design/{key}.svg -> {out}   {w / upmm:.2f}mm = {hp_units:.3f}HP "
+          f"at {upmm / MM:.4g}x, {n - len(movers)}/{len(spots)} guides + "
+          f"{len(movers)} live part(s) hidden{warn}")
+    # A control with no guide is usually fine -- a slider's real artwork is in
+    # the file, so there is nothing to hide -- but a knob or jack missing one
+    # means the code and the design have drifted apart, so name the positions.
+    missing = [f"({sx / upmm:.2f}, {sy / upmm:.2f})mm"
+               for i, (kind, sx, sy, sw, sh) in enumerate(spots)
+               if not hit[i] and kind != "flat"]
+    if missing:
+        print(f"    no guide in the design at {', '.join(missing)} -- expected for a "
+              f"control drawn in full (the slider), otherwise the two have drifted")
+
+
 DEFAULT_WIDTHS = [4, 6, 8, 10, 12, 16, 20, 26, 32]
 
 if __name__ == "__main__":
@@ -637,6 +765,10 @@ if __name__ == "__main__":
             i = args.index(flag)
             globals()[name] = args[i + 1]
             del args[i:i + 2]
+    if args and args[0] == "--publish":
+        for k in args[1:]:
+            publish(k)
+        sys.exit(0)
     if args and args[0] == "--fixup":
         for p in args[1:]:
             fixup(p)

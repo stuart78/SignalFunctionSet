@@ -584,9 +584,16 @@ struct ChimeKeyReadout : Widget {
 };
 
 // Horizontal bow↔strike blend slider (the SDK only ships vertical sliders).
-// Track and pointer are the designer's artwork rather than drawn shapes: both
-// carry shadows, and nanosvg implements no SVG filters, so they arrive as PNG
-// at 8× Rack's own pixel scale. Sizes below are that artwork divided back down.
+//
+// The TRACK is not drawn here. It is in res/chime.svg, exactly as the designer
+// set it, and this widget sits on top of it -- so only the pointer moves, and
+// the track keeps its own corner radius and inner shadow at any width. Drawing
+// it here from a bitmap meant stretching a 9:1 image into a 6:1 box the moment
+// the panel changed, which rounds the ends wrong.
+//
+// The pointer does come from the designer's PNG, because it carries a drop
+// shadow and nanosvg implements no SVG filters. It is exported at 8× Rack's own
+// pixel scale, hence the divide.
 struct ChimeExciteSlider : app::SliderKnob {
 	ChimeExciteSlider() {
 		horizontal = true;
@@ -609,7 +616,6 @@ struct ChimeExciteSlider : app::SliderKnob {
 		float w = box.size.x, h = box.size.y;
 		float v = 0.f;
 		if (ParamQuantity* pq = getParamQuantity()) v = clamp(pq->getScaledValue(), 0.f, 1.f);
-		blit(vg, "res/chime-slider.png", 0.f, 0.f, w, h);
 		float pw = 85.f / 8.f, ph = 116.f / 8.f;     // the pointer PNG, back at 1×
 		blit(vg, "res/chime-slider-knob.png", (w - pw) * v, (h - ph) * 0.5f, pw, ph);
 	}
@@ -621,26 +627,23 @@ struct ChimeWidget : ModuleWidget {
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/chime.svg")));
 		using sfs::hp;
 
-		// Everything sits on the quarter-HP grid, in both axes. The control pairs
-		// run DOWN their column rather than across a row: label, pot, then the
-		// jack that modulates it, joined by a pipe -- so the jack needs no label.
+		// NO sfs::PanelLabels HERE, DELIBERATELY. res/chime.svg is the designer's
+		// own file, published by `figma_panel_template.py --publish chime`, and it
+		// already carries every label, every connector line and the logo, set in
+		// their type at their weight. Drawing labels on top of it at runtime would
+		// replace all of that with panel-style.hpp's defaults -- which is the
+		// right thing only while a layout is still being worked out in code.
+		//
+		// So this constructor now places components and nothing else. The panel is
+		// the source of the layout; these positions follow it, not the other way
+		// round, and --publish reports any control whose guide it cannot find.
 		const float colA = hp(2), colB = hp(4.5f), colC = hp(7);
-		// The eight notes, and the three rows they own.
 		const float note0 = hp(8.5f), noteStep = hp(2.5f);
 		const float freqY = hp(12.5f), lfoY = hp(15.5f), audioY = hp(18);
 		const float botY = hp(23.5f);
 
-		// Added before any component so the connecting hairlines draw underneath
-		// them rather than across their faces.
-		sfs::PanelLabels* lbl = new sfs::PanelLabels();
-		lbl->box.size = box.size;
-		addChild(lbl);
-		lbl->title(hp(1), hp(1.6f), "CHIME");
-
 		ChimeDisplay* disp = new ChimeDisplay();
 		disp->module = module;
-		// 20 cells wide starting at hp(7.25) puts the display's eight internal
-		// columns over the eight control columns at hp(8.5) .. hp(26).
 		disp->box.pos  = mm2px(Vec(hp(7.25f), hp(2)));
 		disp->box.size = mm2px(Vec(hp(20), hp(9)));
 		addChild(disp);
@@ -652,98 +655,51 @@ struct ChimeWidget : ModuleWidget {
 		addChild(key);
 
 		// ── left: three rows of two pot-over-jack pairs ─────────────────────────
-		// Written out rather than looped over a table: tools/panel_reticules.py
-		// reads these positions straight out of the source to place the panel
-		// art, and it can evaluate an expression but not a struct member.
+		// Written out rather than looped over a table, because the panel tools read
+		// these positions straight out of the source and can evaluate an expression
+		// but not a struct member.
 		const float rowA = hp(4), rowAj = hp(6);
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, rowA)), module, Chime::RATE_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, rowAj)), module, Chime::RATE_INPUT));
-		lbl->pairDown(colA, rowA, rowAj, "RATE");
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowA)), module, Chime::SPREAD_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowAj)), module, Chime::SPREAD_INPUT));
-		lbl->pairDown(colB, rowA, rowAj, "SPREAD");
 
 		const float rowB = hp(9), rowBj = hp(11);
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, rowB)), module, Chime::RELATE_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, rowBj)), module, Chime::RELATE_INPUT));
-		lbl->pairDown(colA, rowB, rowBj, "RELATE");
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowB)), module, Chime::SHAPE_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowBj)), module, Chime::SHAPE_INPUT));
-		lbl->pairDown(colB, rowB, rowBj, "CURVE");
 
 		const float rowC = hp(14), rowCj = hp(16);
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, rowC)), module, Chime::DECAY_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, rowCj)), module, Chime::DECAY_INPUT));
-		lbl->pairDown(colA, rowC, rowCj, "DECAY");
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowC)), module, Chime::DRIFT_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowCj)), module, Chime::DRIFT_INPUT));
-		lbl->pairDown(colB, rowC, rowCj, "DRIFT");
 
-		// The key arrives by CV only: the design gives ROOT and SCALE jacks and no
-		// pots, so Chime follows whatever key the patch is in (Key, Arrange) and
-		// the context menu is where you set one by hand. Neither has a partner
-		// control, so neither gets a pipe.
+		// The key arrives by CV only -- the panel gives ROOT and SCALE jacks and no
+		// pots, so Chime follows whatever key the patch is in and the context menu
+		// is where you set one by hand.
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, hp(19.5f))), module, Chime::ROOT_INPUT));
-		lbl->jack(colA, hp(19.5f), "ROOT");
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, hp(19.5f))), module, Chime::SCALE_INPUT));
-		lbl->jack(colB, hp(19.5f), "SCALE");
 
-		// ── the eight notes: FREQ on the faceplate, the two out rows on the plate ─
+		// ── the eight notes ─────────────────────────────────────────────────────
 		for (int c = 0; c < CHIME_NCH; c++) {
 			float x = note0 + noteStep * c;
 			addParam(createParamCentered<Trimpot>(mm2px(Vec(x, freqY)), module, Chime::ATTEN_PARAM + c));
 			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, lfoY)), module, Chime::LFO_OUTPUT + c));
 			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, audioY)), module, Chime::AUDIO_OUTPUT + c));
 		}
-		// One label for a row of eight, centred between columns 4 and 5, with a
-		// tick over each column. FREQ threads a rail through its ticks; the two
-		// rows on the plate leave the rail out, so their ticks read as pointers
-		// into the plate rather than as a bus running across it.
-		auto rowLabel = [&](float y, const char* text, bool rail, bool onPlate) {
-			const float mid = note0 + noteStep * 3.5f;
-			if (rail) {
-				lbl->link(note0, y, mid - hp(0.75f), y, onPlate);
-				lbl->link(mid + hp(0.75f), y, note0 + noteStep * 7.f, y, onPlate);
-			}
-			for (int c = 0; c < CHIME_NCH; c++) {
-				float x = note0 + noteStep * c;
-				lbl->link(x, y - hp(0.25f), x, y + hp(0.25f), onPlate);
-			}
-			lbl->add(mid, y, text, onPlate ? sfs::PanelLabels::ON_PLATE
-			                               : sfs::PanelLabels::LABEL);
-		};
-		rowLabel(hp(11.5f),  "FREQ",    true,  false);
-		rowLabel(hp(14),     "LFO OUT", false, true);
-		rowLabel(hp(16.75f), "AUDIO",   false, true);
 
-		// ── bottom: one row, so every label on it shares a baseline ─────────────
+		// ── bottom row ──────────────────────────────────────────────────────────
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, botY)), module, Chime::CLOCK_INPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(colB, botY)), module, Chime::GATE_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(colC, botY)), module, Chime::VOCT_OUTPUT));
-		lbl->jack(colA, botY, "CLOCK");
-		lbl->jack(colB, botY, "GATE");
-		lbl->jack(colC, botY, "V/OCT");
-
-		// Octave is the one pot on this row, so its pipe runs across to its jack.
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(9.5f), botY)), module, Chime::OCT_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(11.75f), botY)), module, Chime::OCT_INPUT));
-		lbl->jack(hp(9.5f), botY, "OCTAVE");
-		lbl->link(hp(9.5f), botY, hp(11.75f), botY);
-
-		// The slider spans hp(13)..hp(19); its labels sit at the ends of the track,
-		// on the same baseline as the rest of the row, which is why they are placed
-		// by hand rather than through note().
 		addParam(createParamCentered<ChimeExciteSlider>(mm2px(Vec(hp(16), botY)), module, Chime::EXCITE_PARAM));
-		lbl->add(hp(13), botY - sfs::LABEL_GAP_JACK, "BOW", sfs::PanelLabels::LABEL, NVG_ALIGN_LEFT);
-		lbl->add(hp(19), botY - sfs::LABEL_GAP_JACK, "STRIKE", sfs::PanelLabels::LABEL, NVG_ALIGN_RIGHT);
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(21), botY)), module, Chime::EXCITE_INPUT));
-		lbl->jack(hp(21), botY, "EXCITER");
-		lbl->link(hp(19), botY, hp(21), botY);          // slider → its CV jack
-
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(23.5f), botY)), module, Chime::MIX_L_OUTPUT));
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(26), botY)), module, Chime::MIX_R_OUTPUT));
-		lbl->jackOnPlate(hp(23.5f), botY, "L");
-		lbl->jackOnPlate(hp(26), botY, "R");
 	}
 
 	// Three params the panel has no control for. ROOT and SCALE are CV-only by

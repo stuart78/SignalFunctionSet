@@ -40,7 +40,7 @@ SIZES = {
     "CKSS": (14.0, 20.641), "CKSSThree": (13.457, 28.348),
     "VCVButton": (18.0, 18.0), "VCVLightBezel": (21.26, 21.26),
     "VCVLightLatch": (18.0, 18.0), "VCVSlider": (19.843, 76.535),
-    "ChimeExciteSlider": (30.0 * MM, 7.0 * MM),      # custom horizontal slider
+    "ChimeExciteSlider": (30.48 * MM, 5.08 * MM),    # custom horizontal slider
     "TinyLight": (1.0 * MM, 1.0 * MM), "SmallLight": (2.0 * MM, 2.0 * MM),
     "MediumLight": (3.0 * MM, 3.0 * MM), "LargeLight": (5.0 * MM, 5.0 * MM),
 }
@@ -308,7 +308,7 @@ MODULES = {
 # than a target for it. Splicing generated reticules into these would draw
 # circles straight over the design. Named explicitly on the command line they
 # still run, so the guard is against the bare sweep, not against intent.
-FINISHED = {"crystal"}
+FINISHED = {"crystal", "chime"}
 
 if __name__ == "__main__":
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
