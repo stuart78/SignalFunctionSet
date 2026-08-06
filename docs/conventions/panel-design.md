@@ -153,3 +153,23 @@ Two things to avoid, both of which happened:
 `TYPE_SCREEN_SMALL` (1.90 mm) is the screen's counterpart to `TYPE_NOTE` and is
 for rows that genuinely will not fit — check first, because eight columns across
 a 28HP display still fits the full size.
+
+## Images in widgets
+
+Rack's `Window::loadImage()` header says it plainly:
+
+> Do not store this reference across screen frames, as the Window may have
+> changed, invalidating the Image.
+
+Take it literally. Call it inside `draw()` and let the returned `shared_ptr` go
+out of scope at the end of the frame — the Window's cache is the owner, and the
+call is a map lookup, run once per dirty framebuffer.
+
+Holding it as a widget member **crashes on quit**. Rack destroys the Window
+before the Scene, so a widget still holding the last reference runs `~Image()`
+— and therefore `glDeleteTextures` — through a NanoVG context that no longer
+exists. It is a clean segfault in `glnvg__renderDeleteTexture`, it only happens
+at shutdown, and nothing about the running module hints at it.
+
+(A PNG is worth reaching for at all because nanosvg implements no SVG filters,
+so a drop shadow on component artwork is silently dropped.)

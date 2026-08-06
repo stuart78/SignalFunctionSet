@@ -1973,11 +1973,7 @@ struct CrystalDisplay : Widget {
 // with, implements no SVG filters at all, so the drop shadow on the artwork
 // simply vanished. These states are exported to PNG with the shadow baked in.
 struct CrystalToggle : app::Switch {
-	std::shared_ptr<Image> img[2];
-
 	CrystalToggle() {
-		img[0] = APP->window->loadImage(asset::plugin(pluginInstance, "res/toggle-off.png"));
-		img[1] = APP->window->loadImage(asset::plugin(pluginInstance, "res/toggle-on.png"));
 		// 5.08 x 7.62mm — 1HP by 1.5HP — taken from the placeholder in the panel
 		// artwork itself (a 60x90 unit rect at exactly this position), not
 		// guessed. 60:90 is the same aspect as the 120x180 PNGs, so one box
@@ -1987,10 +1983,20 @@ struct CrystalToggle : app::Switch {
 
 	void draw(const DrawArgs& args) override {
 		ParamQuantity* pq = getParamQuantity();
-		int i = (pq && pq->getValue() > 0.5f) ? 1 : 0;
-		if (!img[i] || img[i]->handle < 0) return;
+		bool on = pq && pq->getValue() > 0.5f;
+		// Loaded per frame, and NOT held as a member. Window::loadImage's own
+		// header says not to store the reference across frames, and the reason
+		// bites at shutdown: Rack destroys the Window before the Scene, so a
+		// widget still holding the last reference runs ~Image() — and therefore
+		// glDeleteTextures — through a NanoVG context that no longer exists.
+		// The Window's cache is the owner; this is a map lookup, drawn once per
+		// dirty framebuffer.
+		std::shared_ptr<Image> img = APP->window->loadImage(
+			asset::plugin(pluginInstance, on ? "res/toggle-on.png"
+			                                 : "res/toggle-off.png"));
+		if (!img || img->handle < 0) return;
 		NVGpaint paint = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y,
-		                                 0.f, img[i]->handle, 1.f);
+		                                 0.f, img->handle, 1.f);
 		nvgBeginPath(args.vg);
 		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		nvgFillPaint(args.vg, paint);
