@@ -686,6 +686,22 @@ struct ChimeWidget : ModuleWidget {
 		addParam(createParamCentered<VCVButton>(mm2px(Vec(colB, hp(19.5f))), module, Chime::RESEED_PARAM));
 		lbl->trim(colB, hp(19.5f), "SEED");
 
+		// ── the key ─────────────────────────────────────────────────────────────
+		// ROOT and SCALE sit in the band under the note plate rather than in the
+		// left column, because the left column has no room left for a pair. It
+		// reads: they are what names the pitches on the screen directly above,
+		// and they take the note columns' own x positions so the two line up.
+		// Pairs run ACROSS here -- the band is one row tall.
+		const float keyY = hp(21);
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(note0, keyY)), module, Chime::ROOT_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(note0 + noteStep, keyY)), module, Chime::ROOT_INPUT));
+		lbl->trim(note0, keyY, "ROOT");
+		lbl->link(note0, keyY, note0 + noteStep, keyY);
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(note0 + noteStep * 2.f, keyY)), module, Chime::SCALE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(note0 + noteStep * 3.f, keyY)), module, Chime::SCALE_INPUT));
+		lbl->trim(note0 + noteStep * 2.f, keyY, "SCALE");
+		lbl->link(note0 + noteStep * 2.f, keyY, note0 + noteStep * 3.f, keyY);
+
 		// ── the eight notes: FREQ on the faceplate, the two out rows on the plate ─
 		for (int c = 0; c < CHIME_NCH; c++) {
 			float x = note0 + noteStep * c;

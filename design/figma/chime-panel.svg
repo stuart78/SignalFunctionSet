@@ -23,6 +23,10 @@
     <circle cx="270" cy="960" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
     <circle cx="120" cy="1170" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
     <circle cx="270" cy="1170" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="510" cy="1260" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="660" cy="1260" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="810" cy="1260" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="960" cy="1260" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
     <circle cx="510" cy="750" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
     <circle cx="660" cy="750" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
     <circle cx="810" cy="750" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
@@ -62,6 +66,8 @@
     <line x1="270" y1="540" x2="270" y2="660" stroke="#9a9aa6" stroke-width="4.1339"/>
     <line x1="120" y1="840" x2="120" y2="960" stroke="#9a9aa6" stroke-width="4.1339"/>
     <line x1="270" y1="840" x2="270" y2="960" stroke="#9a9aa6" stroke-width="4.1339"/>
+    <line x1="510" y1="1260" x2="660" y2="1260" stroke="#9a9aa6" stroke-width="4.1339"/>
+    <line x1="810" y1="1260" x2="960" y2="1260" stroke="#9a9aa6" stroke-width="4.1339"/>
     <line x1="1140" y1="1410" x2="1260" y2="1410" stroke="#9a9aa6" stroke-width="4.1339"/>
     <text x="60" y="96" font-family="Figtree" font-size="66.1417" font-weight="600" letter-spacing="1.1811" fill="#231f20" text-anchor="start" dominant-baseline="middle">CHIME</text>
     <text x="120" y="187.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">RATE</text>
@@ -72,6 +78,8 @@
     <text x="270" y="787.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">DRIFT</text>
     <text x="120" y="1102.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">OCT</text>
     <text x="270" y="1117.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">SEED</text>
+    <text x="510" y="1207.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">ROOT</text>
+    <text x="810" y="1207.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">SCALE</text>
     <text x="120" y="1342.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">CLOCK</text>
     <text x="270" y="1342.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">GATE</text>
     <text x="420" y="1342.5" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">V/OCT</text>
