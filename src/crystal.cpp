@@ -1969,11 +1969,32 @@ struct CrystalDisplay : Widget {
 	}
 };
 
-struct CrystalToggle : app::SvgSwitch {
+// An IMAGE switch rather than an SvgSwitch: nanosvg, which Rack parses panels
+// with, implements no SVG filters at all, so the drop shadow on the artwork
+// simply vanished. These states are exported to PNG with the shadow baked in.
+struct CrystalToggle : app::Switch {
+	std::shared_ptr<Image> img[2];
+
 	CrystalToggle() {
-		shadow->opacity = 0.f;
-		addFrame(Svg::load(asset::plugin(pluginInstance, "res/Toggle-Off.svg")));
-		addFrame(Svg::load(asset::plugin(pluginInstance, "res/Toggle-On.svg")));
+		img[0] = APP->window->loadImage(asset::plugin(pluginInstance, "res/toggle-off.png"));
+		img[1] = APP->window->loadImage(asset::plugin(pluginInstance, "res/toggle-on.png"));
+		// 5.08 x 7.62mm — 1HP by 1.5HP — taken from the placeholder in the panel
+		// artwork itself (a 60x90 unit rect at exactly this position), not
+		// guessed. 60:90 is the same aspect as the 120x180 PNGs, so one box
+		// serves both states and neither shifts as it is clicked.
+		box.size = mm2px(Vec(5.08f, 7.62f));
+	}
+
+	void draw(const DrawArgs& args) override {
+		ParamQuantity* pq = getParamQuantity();
+		int i = (pq && pq->getValue() > 0.5f) ? 1 : 0;
+		if (!img[i] || img[i]->handle < 0) return;
+		NVGpaint paint = nvgImagePattern(args.vg, 0.f, 0.f, box.size.x, box.size.y,
+		                                 0.f, img[i]->handle, 1.f);
+		nvgBeginPath(args.vg);
+		nvgRect(args.vg, 0.f, 0.f, box.size.x, box.size.y);
+		nvgFillPaint(args.vg, paint);
+		nvgFill(args.vg);
 	}
 };
 

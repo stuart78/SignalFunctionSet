@@ -349,8 +349,10 @@
       <path d="M343.2,335.46c5.57,0,10.1,4.53,10.1,10.1s-4.53,10.1-10.1,10.1-10.1-4.53-10.1-10.1,4.53-10.1,10.1-10.1M343.2,334.26c-6.24,0-11.3,5.06-11.3,11.3s5.06,11.3,11.3,11.3,11.3-5.06,11.3-11.3-5.06-11.3-11.3-11.3h0Z" fill="#dd6400"/>
     </g>
   </g>
-<g id="Reticules">
+  <g id="PanelArt">
     <rect x="14.17" y="34.02" width="345.83" height="153.92" rx="2.88" fill="#1a1a32"/>
+  </g>
+  <g id="Reticules" style="display:none">
     <circle cx="28.80" cy="216.31" r="8.49" fill="none" stroke="#b2b2b2" stroke-width="0.48"/>
     <circle cx="68.09" cy="216.31" r="8.49" fill="none" stroke="#b2b2b2" stroke-width="0.48"/>
     <circle cx="107.40" cy="216.31" r="8.49" fill="none" stroke="#b2b2b2" stroke-width="0.48"/>

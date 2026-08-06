@@ -5,9 +5,11 @@
   <g id="Background">
     <rect width="480.00" height="379.43" fill="#f0f0f0"/>
   </g>
-  <g id="Reticules">
+  <g id="PanelArt">
     <rect x="345.47" y="23.62" width="126.97" height="342.52" rx="6.00" fill="#1a1a1a"/>
     <rect x="11.81" y="32.48" width="307.09" height="153.54" rx="3.00" fill="#1a1a32"/>
+  </g>
+  <g id="Reticules" style="display:none">
     <circle cx="35.43" cy="218.50" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="87.40" cy="218.50" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="139.37" cy="218.50" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>

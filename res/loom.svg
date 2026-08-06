@@ -2,10 +2,12 @@
   <g id="Background">
     <rect x="0" y="0" width="420.0000" height="379.4291" fill="#f0f0f0"/>
   </g>
-  <g id="Reticules">
+  <g id="PanelArt">
     <rect x="93.00" y="237.00" width="285.00" height="70.50" rx="6.00" fill="#1a1a1a"/>
     <rect x="352.50" y="313.50" width="63.00" height="43.50" rx="6.00" fill="#1a1a1a"/>
     <rect x="105.00" y="30.00" width="300.00" height="198.00" rx="3.00" fill="#1a1a32"/>
+  </g>
+  <g id="Reticules" style="display:none">
     <circle cx="30.00" cy="60.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="60.00" cy="60.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="30.00" cy="90.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>

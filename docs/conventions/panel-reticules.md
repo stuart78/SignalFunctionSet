@@ -89,3 +89,20 @@ integer constants its loops use (`{"CR_NL": 4}`).
 - **Labels are drawn in nanovg, not SVG.** Rack ignores `<text>` in panels; see
   the `*Labels : Widget` pattern in any module.
 - Panel fill is `#f0f0f0`; reticule stroke is `#b2b2b2` at 0.5 width.
+
+## Two layers, and only one of them ships visible
+
+The tool owns two groups and rewrites both on every run:
+
+* **`PanelArt`** — the dark plates and the screen rects. These are DESIGN: Rack
+  draws components over their own footprints, so the plates, the screens and the
+  runtime labels are most of what a player actually sees.
+* **`Reticules`** — the placement guides, written with `style="display:none"`.
+  They are for drawing against, not for shipping. Rack covers most of them with
+  the components, but not all, and a stray outline on a finished faceplate reads
+  as a mistake.
+
+They used to be one group, which meant the guides could not be hidden without
+losing the plates and screens with them. To work on a panel's artwork, delete
+the `style` attribute (or toggle the layer in the editor), draw, and let the next
+tool run put it back.

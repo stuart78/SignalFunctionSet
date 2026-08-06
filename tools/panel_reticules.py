@@ -224,10 +224,10 @@ def group_range(svg, gid):
     return None
 
 
-def shapes(elems, indent="    ", plates=(), upmm=MM):
-    """All reticules: plates, then screens, then controls, so nothing is buried."""
+def art_shapes(elems, indent="    ", plates=(), upmm=MM):
+    """What the player SEES: the dark plates and the screens."""
     out = []
-    pr, sr, sw = PLATE_R_MM * upmm, SCREEN_R_MM * upmm, STROKE_MM * upmm
+    pr, sr = PLATE_R_MM * upmm, SCREEN_R_MM * upmm
     for (x, y, w, h) in plates:
         out.append(f'{indent}<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" '
                    f'height="{h:.2f}" rx="{pr:.2f}" fill="{PLATE}"/>')
@@ -235,6 +235,15 @@ def shapes(elems, indent="    ", plates=(), upmm=MM):
         if k == "screen":
             out.append(f'{indent}<rect x="{cx-w/2:.2f}" y="{cy-h/2:.2f}" width="{w:.2f}" '
                        f'height="{h:.2f}" rx="{sr:.2f}" fill="{DISPLAY_BLUE}"/>')
+    return out
+
+
+def guide_shapes(elems, indent="    ", upmm=MM):
+    """The placement guides. These are for DRAWING against and are hidden in the
+    shipped panel — Rack covers most of them with the components, but not all,
+    and a stray outline on a finished faceplate reads as a mistake."""
+    out = []
+    sw = STROKE_MM * upmm
     for k, cx, cy, w, h in elems:
         if k == "round":
             out.append(f'{indent}<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{w/2*SCALE:.2f}" '
@@ -247,17 +256,19 @@ def shapes(elems, indent="    ", plates=(), upmm=MM):
 
 
 def splice(path, old, elems, plates=(), upmm=MM):
-    """Rewrite the single Reticules layer, leaving all other layers untouched."""
-    body = shapes(elems, "    ", plates, upmm)
+    """Rewrite the two layers this tool owns -- PanelArt and Reticules -- and
+    leave every other layer of the designer's file alone."""
+    art = art_shapes(elems, "    ", plates, upmm)
+    guides = guide_shapes(elems, "    ", upmm)
     out = old
-    r = group_range(out, "Screens")            # retire the old two-layer form
-    if r:
-        out = out[:r[0]] + out[r[3]:]
-    r = group_range(out, "Reticules")
-    if r:
-        out = out[:r[1]] + "\n" + "\n".join(body) + "\n  " + out[r[2]:]
-    else:
-        out = out.replace("</svg>", '  <g id="Reticules">\n' + "\n".join(body) + "\n  </g>\n</svg>")
+    for gid in ("Screens", "PanelArt", "Reticules"):   # drop whatever is there now
+        r = group_range(out, gid)
+        if r:
+            out = out[:r[0]] + out[r[3]:]
+    block = ('  <g id="PanelArt">\n' + "\n".join(art) + "\n  </g>\n"
+             '  <g id="Reticules" style="display:none">\n'
+             + "\n".join(guides) + "\n  </g>\n")
+    out = out.replace("</svg>", block + "</svg>")
     out = re.sub(r"\n\s*\n", "\n", out)
     open(path, "w").write(out)
     return sum(1 for e in elems if e[0] != "screen"), sum(1 for e in elems if e[0] == "screen")
