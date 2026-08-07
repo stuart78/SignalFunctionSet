@@ -227,6 +227,8 @@ struct Loom : Module {
 		ROOT_PARAM, OCT_PARAM,
 		PATTERN_PARAM, DENSITY_PARAM,
 		AUTO_PARAM, RESET_PARAM,
+		// ── appended for the 2026-08 panel; do not reorder ──────────────────
+		SCALE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -236,6 +238,8 @@ struct Loom : Module {
 		VOCT_INPUT, GATE_INPUT, VEL_INPUT,
 		CLOCK_INPUT, RESET_INPUT, PATTERN_CV_INPUT, DENSITY_CV_INPUT,
 		ENUMS(STRING_GATE_INPUT, LOOM_N),
+		// ── appended for the 2026-08 panel; do not reorder ──────────────────
+		SCALE_CV_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId {
@@ -304,6 +308,17 @@ struct Loom : Module {
 			configSwitch(PATTERN_PARAM, 0.f, (float)(PAT_COUNT - 1), 0.f, "Auto pattern", patNames);
 		}
 		configParam(DENSITY_PARAM, 0.f, 1.f, 1.f, "Auto density", "%", 0.f, 100.f);
+		{
+			// SCALE was context-menu only. The panel gives it a pot and CV, which
+			// is what puts Loom on the ROOT/SCALE bus the rest of the set shares
+			// -- one key change now reaches it like anything else. TUNING stays
+			// in the menu: it reloads all eight string pitches at once, which is
+			// a setup choice rather than something to sweep.
+			std::vector<std::string> scaleNames{"Off (free tuning)"};
+			for (int i = 0; i < sfs::NUM_SCALES; i++) scaleNames.push_back(sfs::SCALES[i].longName);
+			configSwitch(SCALE_PARAM, 0.f, (float)sfs::NUM_SCALES, 0.f, "Scale", scaleNames);
+			getParamQuantity(SCALE_PARAM)->snapEnabled = true;
+		}
 		configSwitch(AUTO_PARAM, 0.f, 1.f, 0.f, "Auto play", {"Off", "On"});
 		configButton(RESET_PARAM, "Reset auto pattern");
 
@@ -321,6 +336,7 @@ struct Loom : Module {
 		configInput(CLOCK_INPUT,     "Clock — advances the auto pattern");
 		configInput(RESET_INPUT,     "Reset the auto pattern");
 		configInput(PATTERN_CV_INPUT, "Auto pattern CV (1V per pattern)");
+		configInput(SCALE_CV_INPUT,  "Scale CV (1V per scale; 0V = free tuning)");
 		configInput(DENSITY_CV_INPUT, "Auto density CV (±5V)");
 
 		configOutput(MIX_L_OUTPUT, "Mix left");
@@ -344,6 +360,14 @@ struct Loom : Module {
 			enabled[i]  = true;
 			str[i].clear();
 		}
+	}
+
+	// SCALE: 0 = free tuning, 1..N = an sfs::SCALES index, so the pot's first
+	// position is "off" and the rest line up with the shared scale list.
+	void readKeyControls() {
+		int sc = (int)std::round(params[SCALE_PARAM].getValue()
+		                        + inputs[SCALE_CV_INPUT].getVoltage());
+		quantScale = clamp(sc, 0, sfs::NUM_SCALES) - 1;      // 0 -> -1 (off)
 	}
 
 	void applyTuning(int t) {
@@ -499,6 +523,7 @@ struct Loom : Module {
 
 	void process(const ProcessArgs& args) override {
 		const float sr = args.sampleRate;
+		readKeyControls();
 
 		if (bodySr != sr) {
 			for (int k = 0; k < NBODY; k++) body[k].set(bodyFreq[k], bodyQ[k], sr);
@@ -1324,95 +1349,74 @@ struct LoomWidget : ModuleWidget {
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/loom.svg")));
 		using sfs::hp;
 
-		const float potX = hp(2), cvX = hp(4);
-
-		sfs::PanelLabels* lbl = new sfs::PanelLabels();
-		lbl->box.size = box.size;
-		addChild(lbl);
-		lbl->title(hp(1), hp(1.6f), "LOOM");
+		// NO sfs::PanelLabels HERE, DELIBERATELY. res/loom.svg is the designer's
+		// own file, published by `figma_panel_template.py --publish loom`, and it
+		// already carries every label, every connector line and the logo, set in
+		// their type at their weight. Drawing labels over it at runtime would
+		// replace all of that with panel-style.hpp's defaults -- right while a
+		// layout is still being worked out in code, wrong once a finished face
+		// exists. This constructor places components and nothing else.
+		const float colA = hp(2), colB = hp(4.5f), colC = hp(7);
+		const float str0 = hp(8.5f), strStep = hp(2.5f);
+		const float gateY = hp(13), outY = hp(16);
+		const float knobY = hp(21), botY = hp(24);
 
 		LoomDisplay* disp = new LoomDisplay();
 		disp->module = module;
-		// 20 cells wide from hp(7) puts the display's eight string columns exactly
-		// over the eight jack columns at hp(10), hp(12) ... hp(24).
-		disp->box.pos  = mm2px(Vec(hp(7), hp(2)));
-		disp->box.size = mm2px(Vec(hp(20), hp(13.2f)));
+		disp->box.pos  = mm2px(Vec(hp(7.25f), hp(2)));
+		disp->box.size = mm2px(Vec(hp(20), hp(9)));
 		addChild(disp);
 
-		// ── left column: the instrument ────────────────────────────────────────
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(4))), module, Loom::BODY_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(4))), module, Loom::BODY_CV_INPUT));
-		lbl->pair(potX, hp(4), "BODY");
+		// ── left: four rows of two pot-over-jack pairs ─────────────────────────
+		const float rowA = hp(4), rowAj = hp(6);
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, rowA)), module, Loom::BODY_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, rowAj)), module, Loom::BODY_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowA)), module, Loom::COUPLE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowAj)), module, Loom::COUPLE_CV_INPUT));
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(6))), module, Loom::COUPLE_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(6))), module, Loom::COUPLE_CV_INPUT));
-		lbl->pair(potX, hp(6), "COUPLE");
+		const float rowB = hp(9), rowBj = hp(11);
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, rowB)), module, Loom::DECAY_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, rowBj)), module, Loom::DECAY_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowB)), module, Loom::DAMP_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowBj)), module, Loom::DAMP_CV_INPUT));
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(8))), module, Loom::DECAY_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(8))), module, Loom::DECAY_CV_INPUT));
-		lbl->pair(potX, hp(8), "DECAY");
+		const float rowC = hp(14), rowCj = hp(16);
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, rowC)), module, Loom::PICK_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, rowCj)), module, Loom::PICK_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowC)), module, Loom::SPREAD_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowCj)), module, Loom::SPREAD_CV_INPUT));
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(10))), module, Loom::DAMP_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(10))), module, Loom::DAMP_CV_INPUT));
-		lbl->pair(potX, hp(10), "DAMP");
+		const float rowD = hp(19), rowDj = hp(21);
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, rowD)), module, Loom::ROOT_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, rowDj)), module, Loom::ROOT_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, rowD)), module, Loom::SCALE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, rowDj)), module, Loom::SCALE_CV_INPUT));
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(12))), module, Loom::PICK_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(12))), module, Loom::PICK_CV_INPUT));
-		lbl->pair(potX, hp(12), "PICK");
-
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(14))), module, Loom::SPREAD_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(14))), module, Loom::SPREAD_CV_INPUT));
-		lbl->pair(potX, hp(14), "SPREAD");
-
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(17.4f))), module, Loom::ROOT_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(17.4f))), module, Loom::ROOT_CV_INPUT));
-		lbl->pair(potX, hp(17.4f), "ROOT");
-
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(potX, hp(19.4f))), module, Loom::OCT_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(cvX, hp(19.4f))), module, Loom::OCT_CV_INPUT));
-		lbl->pair(potX, hp(19.4f), "OCT");
-
-		// ── the eight strings: gate in, audio out, one column each ─────────────
-		// Same x as the display's eight strings, so a column reads top to bottom
-		// as one string: what it looks like, how you trigger it, what comes out.
+		// ── the eight strings: a gate in and an audio out each ─────────────────
 		for (int i = 0; i < LOOM_N; i++) {
-			float x = hp(10 + 2 * i);
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(x, hp(17.4f))), module, Loom::STRING_GATE_INPUT + i));
-			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, hp(19.4f))), module, Loom::STRING_OUTPUT + i));
+			float x = str0 + strStep * i;
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(x, gateY)), module, Loom::STRING_GATE_INPUT + i));
+			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, outY)), module, Loom::STRING_OUTPUT + i));
 		}
-		lbl->add(hp(9.0f), hp(17.4f), "GATE",  sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
-		lbl->add(hp(9.0f), hp(19.4f), "AUDIO", sfs::PanelLabels::ON_PLATE, NVG_ALIGN_RIGHT);
 
-		// ── bottom: the player ─────────────────────────────────────────────────
-		const float rowY = hp(22.4f);
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(2), rowY)), module, Loom::VOCT_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(4), rowY)), module, Loom::GATE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(6), rowY)), module, Loom::VEL_INPUT));
-		lbl->jack(hp(2), rowY, "V/OCT");
-		lbl->jack(hp(4), rowY, "GATE");
-		lbl->jack(hp(6), rowY, "VEL");
+		// ── the auto-player, two rows of pot + jack, each ending in a button ────
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(9.5f), knobY)), module, Loom::PATTERN_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(11.75f), knobY)), module, Loom::PATTERN_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(14.5f), knobY)), module, Loom::DENSITY_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(16.75f), knobY)), module, Loom::DENSITY_CV_INPUT));
 
+		// ── bottom row ─────────────────────────────────────────────────────────
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, botY)), module, Loom::CLOCK_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, botY)), module, Loom::GATE_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colC, botY)), module, Loom::VOCT_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(9.5f), botY)), module, Loom::OCT_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(11.75f), botY)), module, Loom::OCT_CV_INPUT));
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(hp(14.5f), botY)), module, Loom::RESET_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(16.75f), botY)), module, Loom::RESET_INPUT));
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(
-			mm2px(Vec(hp(9), rowY)), module, Loom::AUTO_PARAM, Loom::AUTO_LIGHT));
-		lbl->add(hp(9), rowY - sfs::LABEL_GAP_TRIM, "AUTO");
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(11), rowY)), module, Loom::CLOCK_INPUT));
-		lbl->jack(hp(11), rowY, "CLK");
-		addParam(createParamCentered<VCVButton>(mm2px(Vec(hp(13), rowY)), module, Loom::RESET_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(15), rowY)), module, Loom::RESET_INPUT));
-		lbl->add(hp(13), rowY - sfs::LABEL_GAP_TRIM, "RESET");
-		lbl->link(hp(13), rowY, hp(15), rowY);
-
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(16.6f), rowY)), module, Loom::PATTERN_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(18.6f), rowY)), module, Loom::PATTERN_CV_INPUT));
-		lbl->pair(hp(16.6f), rowY, "PATTERN");
-
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(20.6f), rowY)), module, Loom::DENSITY_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(22.6f), rowY)), module, Loom::DENSITY_CV_INPUT));
-		lbl->pair(hp(20.6f), rowY, "DENSITY");
-
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(24.5f), rowY)), module, Loom::MIX_L_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(26.5f), rowY)), module, Loom::MIX_R_OUTPUT));
-		lbl->add(hp(25.5f), rowY - sfs::LABEL_GAP_JACK, "MIX L / R", sfs::PanelLabels::ON_PLATE);
+			mm2px(Vec(hp(20), botY)), module, Loom::AUTO_PARAM, Loom::AUTO_LIGHT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(23.5f), botY)), module, Loom::MIX_L_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(26), botY)), module, Loom::MIX_R_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -1425,16 +1429,8 @@ struct LoomWidget : ModuleWidget {
 				sub->addChild(createMenuItem(LOOM_TUNINGS[t].name, "",
 					[=]() { m->applyTuning(t); }));
 		}));
-
-		menu->addChild(createSubmenuItem("Quantize tuning",
-			m->quantScale < 0 ? "Off" : sfs::SCALES[m->quantScale].longName,
-			[=](Menu* sub) {
-				sub->addChild(createCheckMenuItem("Off (free tuning)", "",
-					[=]() { return m->quantScale < 0; }, [=]() { m->quantScale = -1; }));
-				for (int s = 0; s < sfs::NUM_SCALES; s++)
-					sub->addChild(createCheckMenuItem(sfs::SCALES[s].longName, "",
-						[=]() { return m->quantScale == s; }, [=]() { m->quantScale = s; }));
-			}));
+		// "Quantize tuning" used to sit here too. It is the SCALE pot now, and
+		// leaving the menu copy in would give one value two sources that disagree.
 
 		menu->addChild(createIndexPtrSubmenuItem("Mouse strum",
 			{"Hover over the strings", "Click and drag only"}, &m->mouseMode));
