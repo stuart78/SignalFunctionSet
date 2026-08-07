@@ -222,6 +222,23 @@ jobs:
           pattern: nightly-*
           merge-multiple: true
 
+      - name: Clear the previous nightly's assets
+        if: env.ALL_OK == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # The rolling release holds ONE build. While every filename was the flat
+        # "-nightly" they overwrote each other and this was unnecessary; now that
+        # each carries its date and commit they would pile up instead -- and a
+        # release labelled "nightly" would be handing out stale commits next to
+        # the current one, with nothing but the filename to tell them apart.
+        run: |
+          gh release view nightly --json assets --jq '.assets[].name' 2>/dev/null \
+            | while read -r a; do
+                [ -n "$a" ] || continue
+                echo "removing stale asset $a"
+                gh release delete-asset nightly "$a" --yes || true
+              done
+
       - name: Publish rolling nightly prerelease
         if: env.ALL_OK == 'true'
         uses: softprops/action-gh-release@v2
