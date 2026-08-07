@@ -98,11 +98,42 @@ static inline void loomExciteWeights(float e, float w[EX_COUNT]) {
 	w[i0 + 1] = f;
 }
 
+// ── register patterns ──────────────────────────────────────────────────────
+// A 4-bit value stepped by two operators in turn and allowed to overflow: an
+// adder wrapping in a 16-step register. The TOP three bits pick the string.
+//
+// The top bits and not the low ones, which is not the obvious choice. `value &
+// 7` discards exactly the bit that makes the second half of a cycle differ from
+// the first, so every additive chain collapses to an 8-step order played twice
+// -- of 3364 chains, NONE survived that mapping. The top three bits keep the
+// contour and give real 16- and 32-step orders.
+//
+// Only + and - reach the full range. Multiply mod 16 is invertible only for odd
+// v, and 0 is its fixed point, so *odd never leaves; *even and / discard bits
+// outright, so those orbits fold onto themselves. "Fold" (+3,*5) is the one
+// that gets round all sixteen anyway, and the four re-plucks its folding leaves
+// behind are exactly what makes it sound unlike the others.
+struct LoomReg { const char* name; int n; uint8_t s[32]; };
+static const LoomReg LOOM_REGS[] = {
+	{"Ladder",    16, {0, 1, 3, 4, 6, 7, 1, 2, 4, 5, 7, 0, 2, 3, 5, 6}},            // +3,+3
+	{"Wide wrap", 16, {0, 3, 7, 2, 6, 1, 5, 0, 4, 7, 3, 6, 2, 5, 1, 4}},            // +7,+7
+	{"Zigzag",    16, {0, 5, 7, 4, 6, 3, 5, 2, 4, 1, 3, 0, 2, 7, 1, 6}},            // +11,+3
+	{"Ramp pair", 16, {0, 6, 1, 7, 2, 0, 3, 1, 4, 2, 5, 3, 6, 4, 7, 5}},            // +13,+5
+	{"Skip two",  16, {0, 1, 5, 6, 2, 3, 7, 0, 4, 5, 1, 2, 6, 7, 3, 4}},            // +3,+7
+	{"Fold",      32, {0, 1, 7, 1, 5, 6, 0, 2, 2, 3, 1, 3, 7, 0, 2, 4,              // +3,*5
+	                   4, 5, 3, 5, 1, 2, 4, 6, 6, 7, 5, 7, 3, 4, 6, 0}},
+};
+static const int LOOM_NREGS = (int)(sizeof(LOOM_REGS) / sizeof(LOOM_REGS[0]));
+
+// APPEND ONLY. PATTERN_PARAM stores an index, so inserting here re-points every
+// saved patch's pattern at a different one.
 enum PatternId {
 	PAT_UP, PAT_DOWN, PAT_UPDOWN, PAT_DOWNUP, PAT_CONVERGE, PAT_DIVERGE,
-	PAT_THUMB, PAT_PAIRS, PAT_SKIP, PAT_RANDOM, PAT_WALK, PAT_STRUM, PAT_COUNT
+	PAT_THUMB, PAT_PAIRS, PAT_SKIP, PAT_RANDOM, PAT_WALK, PAT_STRUM,
+	PAT_REG,                                    // the register patterns follow
+	PAT_COUNT = PAT_REG + LOOM_NREGS
 };
-static const char* PAT_NAME[PAT_COUNT] = {
+static const char* PAT_NAME[PAT_REG] = {
 	"Up", "Down", "Up-down", "Down-up", "Converge", "Diverge",
 	"Thumb", "Pairs", "Skip 3", "Random", "Walk", "Strum"
 };
@@ -266,10 +297,12 @@ struct Loom : Module {
 		configParam(OCT_PARAM, -4.f, 3.f, -2.f, "Octave");
 		getParamQuantity(OCT_PARAM)->snapEnabled = true;
 
-		configSwitch(PATTERN_PARAM, 0.f, (float)(PAT_COUNT - 1), 0.f, "Auto pattern",
-		             {PAT_NAME[0], PAT_NAME[1], PAT_NAME[2], PAT_NAME[3], PAT_NAME[4],
-		              PAT_NAME[5], PAT_NAME[6], PAT_NAME[7], PAT_NAME[8], PAT_NAME[9],
-		              PAT_NAME[10], PAT_NAME[11]});
+		{
+			std::vector<std::string> patNames;
+			for (int i = 0; i < PAT_REG; i++) patNames.push_back(PAT_NAME[i]);
+			for (int i = 0; i < LOOM_NREGS; i++) patNames.push_back(LOOM_REGS[i].name);
+			configSwitch(PATTERN_PARAM, 0.f, (float)(PAT_COUNT - 1), 0.f, "Auto pattern", patNames);
+		}
 		configParam(DENSITY_PARAM, 0.f, 1.f, 1.f, "Auto density", "%", 0.f, 100.f);
 		configSwitch(AUTO_PARAM, 0.f, 1.f, 0.f, "Auto play", {"Off", "On"});
 		configButton(RESET_PARAM, "Reset auto pattern");
@@ -429,6 +462,16 @@ struct Loom : Module {
 
 		int sel = 0;
 		int period = (n > 1) ? 2 * n - 2 : 1;
+		if (pat >= PAT_REG) {
+			// The table is written for eight strings; % n folds it onto however
+			// many are actually enabled, the same way every other pattern here
+			// indexes into list[] rather than into the strings themselves.
+			const LoomReg& r = LOOM_REGS[clamp(pat - PAT_REG, 0, LOOM_NREGS - 1)];
+			sel = r.s[autoIdx % r.n] % n;
+			autoIdx = (autoIdx + 1) & 0xFFFFF;
+			if (random::uniform() <= density) pluck(list[clamp(sel, 0, n - 1)], vel, -1.f);
+			return;
+		}
 		switch (pat) {
 			case PAT_UP:       sel = autoIdx % n; break;
 			case PAT_DOWN:     sel = n - 1 - (autoIdx % n); break;

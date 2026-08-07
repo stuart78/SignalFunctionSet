@@ -68,7 +68,7 @@ static const int SLIDE_NTUNINGS = (int)(sizeof(SLIDE_TUNINGS) / sizeof(SLIDE_TUN
 // stroke that starts the roll lands hardest. Jitter alone humanises the timing
 // of the accents but not their SHAPE, and the shape is what makes a roll sound
 // picked rather than sequenced.
-struct SlideRoll { const char* name; int n; int s[12]; float v[12]; };
+struct SlideRoll { const char* name; int n; int s[32]; float v[32]; };
 static const SlideRoll SLIDE_ROLLS[] = {
 	{"Forward roll",   6, {0, 4, 7, 1, 4, 7},
 	                      {1.00f, .68f, .74f, .86f, .66f, .72f}},
@@ -87,6 +87,47 @@ static const SlideRoll SLIDE_ROLLS[] = {
 	{"Pinch",          4, {0, 7, 0, 7}, {1.00f, .80f, .95f, .76f}},
 	{"Random",         1, {0}, {1.00f}},
 	{"Strum",          1, {0}, {1.00f}},
+
+	// ── register rolls ─────────────────────────────────────────────────────
+	// APPENDED, and they must stay at the end: PATTERN_PARAM stores an index,
+	// so inserting above re-points every saved patch at a different roll.
+	//
+	// A 4-bit value stepped by two operators in turn and allowed to overflow,
+	// its TOP three bits picking the string. The top bits and not the low ones:
+	// `value & 7` throws away exactly the bit that makes a cycle's second half
+	// differ from its first, so every additive chain collapses to an 8-step
+	// order played twice -- of 3364 chains, none survived that mapping.
+	//
+	// Only + and - get round all sixteen values. Multiply mod 16 is invertible
+	// only for odd v, whose fixed point is 0, and divide discards bits, so those
+	// chains fold onto themselves. "Fold" (+3,*5) reaches the full range in
+	// spite of that, and the four re-plucks its folding leaves are what make it
+	// sound unlike the rest -- a picked pattern, not a run.
+	//
+	// The accents follow the same rule as the rolls above: the thumb is heavier
+	// than the fingers, so bass strings land harder, and the stroke that starts
+	// the cycle hardest.
+	{"Ladder",        16, {0, 1, 3, 4, 6, 7, 1, 2, 4, 5, 7, 0, 2, 3, 5, 6},
+	                      {1.00f, .76f, .75f, .64f, .67f, .53f, .84f, .72f,
+	                       .76f, .61f, .58f, .80f, .85f, .68f, .67f, .57f}},
+	{"Wide wrap",     16, {0, 3, 7, 2, 6, 1, 5, 0, 4, 7, 3, 6, 2, 5, 1, 4},
+	                      {1.00f, .68f, .58f, .72f, .67f, .76f, .67f, .80f,
+	                       .76f, .53f, .75f, .57f, .85f, .61f, .84f, .64f}},
+	{"Zigzag",        16, {0, 5, 7, 4, 6, 3, 5, 2, 4, 1, 3, 0, 2, 7, 1, 6},
+	                      {1.00f, .61f, .58f, .64f, .67f, .68f, .67f, .72f,
+	                       .76f, .76f, .75f, .80f, .85f, .53f, .84f, .57f}},
+	{"Ramp pair",     16, {0, 6, 1, 7, 2, 0, 3, 1, 4, 2, 5, 3, 6, 4, 7, 5},
+	                      {1.00f, .57f, .84f, .53f, .85f, .80f, .75f, .76f,
+	                       .76f, .72f, .67f, .68f, .67f, .64f, .58f, .61f}},
+	{"Skip two",      16, {0, 1, 5, 6, 2, 3, 7, 0, 4, 5, 1, 2, 6, 7, 3, 4},
+	                      {1.00f, .76f, .67f, .57f, .85f, .68f, .58f, .80f,
+	                       .76f, .61f, .84f, .72f, .67f, .53f, .75f, .64f}},
+	{"Fold",          32, {0, 1, 7, 1, 5, 6, 0, 2, 2, 3, 1, 3, 7, 0, 2, 4,
+	                       4, 5, 3, 5, 1, 2, 4, 6, 6, 7, 5, 7, 3, 4, 6, 0},
+	                      {1.00f, .76f, .58f, .76f, .71f, .57f, .88f, .72f,
+	                       .85f, .68f, .84f, .68f, .62f, .80f, .79f, .64f,
+	                       .76f, .61f, .75f, .61f, .89f, .72f, .71f, .57f,
+	                       .67f, .53f, .67f, .53f, .80f, .64f, .62f, .80f}},
 };
 
 // The thumb is heavier than the fingers, so the bass strings come out louder
