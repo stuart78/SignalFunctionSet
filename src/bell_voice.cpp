@@ -213,7 +213,15 @@ void BellEngine::setVcoNote(int ch, int midinote) {
 	if (ch < 0 || ch >= MAX_CH || !p_->tablesInit) return;
 	if (midinote < 0) midinote = 0; if (midinote > 127) midinote = 127;
 	if (!p_->vcoArmed[ch] || p_->vcoNote[ch] != midinote) {
-		p_->vco[ch].init(p_->unpacked, midinote, 127);  // full velocity
+		// Retrigger once armed, for the same reason the note path does -- a plain
+		// init zeroes every operator phase, gain, feedback tail and envelope
+		// level, so the output drops to zero for a sample. Here it matters MORE:
+		// this voice is re-inited every time V/OCT crosses a semitone, not only
+		// when a key is struck, and it is supposed to be a continuous oscillator
+		// for an external ADSR to shape. Under envBypass the carriers hold at
+		// peak but the MODULATORS run their envelopes, so a reset also collapses
+		// the timbre to a bare carrier and blooms it back at every semitone.
+		p_->vco[ch].init(p_->unpacked, midinote, 127, p_->vcoArmed[ch]);
 		p_->vcoNote[ch] = midinote;
 		p_->vcoArmed[ch] = true;
 	}

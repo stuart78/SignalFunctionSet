@@ -31,13 +31,18 @@ class Lfo {
  private:
   static uint32_t unit_;
 
-  uint32_t phase_;  // Q32
-  uint32_t delta_;
-  uint8_t waveform_;
-  uint8_t randstate_;
-  bool sync_;
+  // SFS: initialised. randstate_ was never written anywhere before its first
+  // READ, and phase_ is only set by keydown() when the patch has LFO sync on --
+  // so on a patch with a sample-and-hold LFO, or any un-synced one, the
+  // modulation started from whatever the heap happened to hold. Two identical
+  // instances rendered different audio, which is not a thing a synth may do.
+  uint32_t phase_ = 0;  // Q32
+  uint32_t delta_ = 0;
+  uint8_t waveform_ = 0;
+  uint8_t randstate_ = 0;
+  bool sync_ = false;
 
-  uint32_t delaystate_;
-  uint32_t delayinc_;
-  uint32_t delayinc2_;
+  uint32_t delaystate_ = 0;
+  uint32_t delayinc_ = 0;
+  uint32_t delayinc2_ = 0;
 };
