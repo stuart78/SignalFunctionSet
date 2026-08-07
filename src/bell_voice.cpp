@@ -128,7 +128,14 @@ void BellEngine::setPitchBend14(int v) {
 
 void BellEngine::noteOn(int ch, int midinote, int velocity) {
 	if (ch < 0 || ch >= MAX_CH || !p_->tablesInit) return;
-	p_->notes[ch].init(p_->unpacked, midinote, velocity);
+	// A channel that is still sounding is RE-triggered rather than rebuilt: a
+	// fresh init zeroes every operator phase and every envelope level, so the
+	// output falls to zero in one sample while the previous note is still
+	// audible. That step is what clicks -- and being a step it is spectrally
+	// flat, so on a low patch it reads as a thump. A real DX7 never hits this,
+	// because consecutive notes land on different voices and the old one is left
+	// to release; here VCV's poly convention reuses the channel.
+	p_->notes[ch].init(p_->unpacked, midinote, velocity, p_->active[ch]);
 	p_->active[ch] = true;
 	p_->keyed[ch] = true;
 	p_->quietBlocks[ch] = 0;

@@ -137,6 +137,14 @@ struct Bell : Module {
 	// voltage, fast attack / slower release.
 	float envFollow[BellEngine::MAX_CH] = {};
 	float envAtkCoeff = 0.05f, envRelCoeff = 0.001f;
+	// DC blocker, per channel. Some DX7 patches put a real offset on the output
+	// (Violin 3 of the built-in bank sits at 2.9% of peak), and because the offset
+	// is gated by the amplitude envelope it arrives and leaves with every note --
+	// a woofer push rather than a sound. Cheap insurance for arbitrary cartridges,
+	// which cannot be tested here. 5Hz, so the lowest playable note is untouched.
+	float dcX[BellEngine::MAX_CH] = {}, dcY[BellEngine::MAX_CH] = {};
+	float dcVX[BellEngine::MAX_CH] = {}, dcVY[BellEngine::MAX_CH] = {};
+	float dcR = 0.99935f;
 
 	// Toggle by DX7 op id (1-6); maps to engine index 6-id.
 	void toggleOp(int dx7id) {
@@ -220,6 +228,7 @@ struct Bell : Module {
 			engine.setSampleRate(curSR);
 			envAtkCoeff = 1.f - std::exp(-1.f / (0.0008f * curSR));  // ~0.8ms attack
 			envRelCoeff = 1.f - std::exp(-1.f / (0.040f * curSR));   // ~40ms release
+			dcR = std::exp(-2.f * (float)M_PI * 5.f / (float)curSR);  // 5Hz DC blocker
 		}
 
 		// Back/Fwd voice buttons (every sample so taps aren't missed).
@@ -352,6 +361,10 @@ struct Bell : Module {
 		for (int ch = 0; ch < chans; ch++) {
 			float n = engine.sample(ch, blockPos);
 			if (!std::isfinite(n)) n = 0.f;   // never emit NaN/Inf
+			// Before the gain, so the tanh below saturates symmetrically rather
+			// than being pushed off centre by a patch's own offset.
+			float dy = n - dcX[ch] + dcR * dcY[ch];
+			dcX[ch] = n; dcY[ch] = dy; n = dy;
 			// Makeup gain: DX7 patches peak well below the engine's clip point, so at
 			// unity they were far quieter than a ±5V VCV oscillator. Drive into a tanh
 			// so a typical patch reaches ~±5V and hot multi-carrier patches saturate
@@ -377,6 +390,8 @@ struct Bell : Module {
 			for (int ch = 0; ch < chans; ch++) {
 				float s = engine.vcoSample(ch, blockPos);
 				if (!std::isfinite(s)) s = 0.f;
+				float vy = s - dcVX[ch] + dcR * dcVY[ch];
+				dcVX[ch] = s; dcVY[ch] = vy; s = vy;
 				outputs[VCO_OUTPUT].setVoltage(clamp(s * 16.f * outGain, -10.f, 10.f), ch);   // match audio makeup
 			}
 		}

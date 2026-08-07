@@ -29,7 +29,11 @@
 
 class Dx7Note {
  public:
-  void init(const char patch[128], int midinote, int velocity);
+  // SFS: retrigger keeps the oscillator phases, the operator gains, the
+  // feedback history and the envelope levels running, so restarting a voice
+  // that is still sounding is continuous. A fresh note still resets them all.
+  void init(const char patch[128], int midinote, int velocity,
+            bool retrigger = false);
 
   // Note: this _adds_ to the buffer. Interesting question whether it's
   // worth it...

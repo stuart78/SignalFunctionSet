@@ -26,8 +26,12 @@ class Env {
   // (ie, value 0..99). The outlevel parameter is calibrated in microsteps
   // (ie units of approx .023 dB), with 99 * 32 = nominal full scale. The
   // rate_scaling parameter is in qRate units (ie 0..63).
+  // SFS: keepLevel re-enters the attack from the CURRENT level instead of from
+  // silence. Zeroing it is right for a fresh note and wrong for a retrigger --
+  // a channel that is still sounding drops to zero in one sample, which is a
+  // full-amplitude step, and a step is spectrally flat, so it thumps.
   void init(const int rates[4], const int levels[4], int outlevel,
-      int rate_scaling);
+      int rate_scaling, bool keepLevel = false);
 
   // Result is in Q24/doubling log format. Also, result is subsampled
   // for every N samples.

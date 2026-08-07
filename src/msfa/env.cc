@@ -26,14 +26,15 @@ void Env::init_sr(double sampleRate) {
   s_envSrFactor = (sampleRate > 0.0) ? (44100.0 / sampleRate) : 1.0;
 }
 
-void Env::init(const int r[4], const int l[4], int32_t ol, int rate_scaling) {
+void Env::init(const int r[4], const int l[4], int32_t ol, int rate_scaling,
+               bool keepLevel) {
   for (int i = 0; i < 4; i++) {
     rates_[i] = r[i];
     levels_[i] = l[i];
   }
   outlevel_ = ol;
   rate_scaling_ = rate_scaling;
-  level_ = 0;
+  if (!keepLevel) level_ = 0;      // SFS: see the header
   down_ = true;
   advance(0);
 }

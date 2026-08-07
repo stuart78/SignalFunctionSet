@@ -128,7 +128,8 @@ static const uint8_t pitchmodsenstab[] = {
   0, 10, 20, 33, 55, 92, 153, 255
 };
 
-void Dx7Note::init(const char patch[156], int midinote, int velocity) {
+void Dx7Note::init(const char patch[156], int midinote, int velocity,
+                   bool retrigger) {
   int rates[4];
   int levels[4];
   for (int op = 0; op < 6; op++) {
@@ -155,7 +156,7 @@ void Dx7Note::init(const char patch[156], int midinote, int velocity) {
     outlevel += ScaleVelocity(velocity, patch[off + 15]);
     outlevel = max(0, outlevel);
     int rate_scaling = ScaleRate(midinote, patch[off + 13]);
-    env_[op].init(rates, levels, outlevel, rate_scaling);
+    env_[op].init(rates, levels, outlevel, rate_scaling, retrigger);
 
     // SFS: peak level the env can reach (highest EG level + this op's outlevel),
     // in the same Q24<<16 units env getsample() returns. Used for the VCO/raw
@@ -173,15 +174,17 @@ void Dx7Note::init(const char patch[156], int midinote, int velocity) {
     int32_t freq = osc_freq(midinote, mode, coarse, fine, detune);
     basepitch_[op] = freq;
     // cout << op << " freq: " << freq << endl;
-    params_[op].phase = 0;
-    params_[op].gain[1] = 0;
+    if (!retrigger) {                 // SFS: continuity on retrigger, see the header
+      params_[op].phase = 0;
+      params_[op].gain[1] = 0;
+    }
   }
   for (int i = 0; i < 4; i++) {
     rates[i] = patch[126 + i];
     levels[i] = patch[130 + i];
   }
   pitchenv_.set(rates, levels);
-  fb_buf_[0] = fb_buf_[1] = 0;  // SFS: was uninitialized → garbage feedback on note 1
+  if (!retrigger) fb_buf_[0] = fb_buf_[1] = 0;  // SFS: was uninitialized → garbage feedback on note 1
   algorithm_ = patch[134];
   if (algorithm_ < 0 || algorithm_ > 31) algorithm_ = 0;  // SFS: guard bad patches
   int feedback = patch[135];
