@@ -34,9 +34,51 @@ env:
   RACK_SDK_VERSION: "2.6.4"
 
 jobs:
+
+  # ── Derive the build identity ONCE ─────────────────────────────────────────
+  # It used to be computed inline in every job that needed it: three copies that
+  # had to agree, and the Windows one could not work at all, because its msys2
+  # shell has no git on PATH (`git rev-parse` there is exit 127). Deriving it
+  # once on ubuntu and passing it down removes both problems.
+  stamp:
+    name: Build stamp
+    runs-on: ubuntu-latest
+    outputs:
+      date: ${{ steps.s.outputs.date }}
+      sha: ${{ steps.s.outputs.sha }}
+      version: ${{ steps.s.outputs.version }}
+      wip: ${{ steps.s.outputs.wip }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: s
+        # Checked, not merely captured: git returning nothing still exits 0, so
+        # an unchecked stamp would read "2.16.3-nightly..abc1234" and SHIP it. A
+        # malformed version reaching people is worse than a failed build.
+        run: |
+          set -e
+          DATE=$(git show -s --format=%cd --date=format:%Y%m%d HEAD)
+          SHA=$(git rev-parse --short=7 HEAD)
+          case "$DATE" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+            *) echo "::error::bad build date '$DATE'"; exit 1 ;; esac
+          [ -n "$SHA" ] || { echo "::error::empty commit sha"; exit 1; }
+          # The WIP list is READ from plugin.json, never written out here. As a
+          # hand-kept sentence it drifted -- it named Wave and Ratio and then
+          # never grew, so six later hidden modules went unmentioned.
+          WIP=$(jq -r '[.modules[] | select(.hidden) | .name] | join(", ")' plugin.json)
+          [ -n "$WIP" ] || WIP="none"
+          {
+            echo "date=$DATE"
+            echo "sha=$SHA"
+            echo "version=$(jq -r .version plugin.json)-nightly.$DATE.$SHA"
+            echo "wip=$WIP"
+          } >> "$GITHUB_OUTPUT"
+          echo "stamp: -nightly.$DATE.$SHA"
+          echo "wip:   $WIP"
+
   # ── Unix platforms: mac-arm64, mac-x64, lin-x64 — plain bash ────────────────
   build-unix:
     name: Build ${{ matrix.sdk }}
+    needs: stamp
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -68,24 +110,14 @@ jobs:
 
       - name: Stamp nightly identity + un-hide WIP modules
         run: |
-          # Derived first and CHECKED. Inlined in the jq call, a git that returns
-          # nothing still succeeds and stamps "2.16.3-nightly..abc1234" -- a
-          # malformed version that then ships, which is worse than not building.
-          set -e
-          DATE=$(git show -s --format=%cd --date=format:%Y%m%d HEAD)
-          SHA=$(git rev-parse --short=7 HEAD)
-          case "$DATE" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
-            *) echo "::error::bad build date '$DATE'"; exit 1 ;; esac
-          [ -n "$SHA" ] || { echo "::error::empty commit sha"; exit 1; }
           jq '
             .slug    += "-nightly"
             | .name  += " (Nightly)"
             | (if .brand then .brand += " Nightly" else . end)
             | .version += $stamp
             | .modules |= map(if .hidden then .hidden = false else . end)
-          ' --arg stamp "-nightly.$DATE.$SHA" \
+          ' --arg stamp "-nightly.${{ needs.stamp.outputs.date }}.${{ needs.stamp.outputs.sha }}" \
             plugin.json > plugin.json.tmp && mv plugin.json.tmp plugin.json
-          echo "SFS_SHA=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
           echo "--- nightly identity ---"
           jq '{slug, name, version}' plugin.json
 
@@ -108,6 +140,7 @@ jobs:
   # ── Windows: native MinGW64 via MSYS2 ───────────────────────────────────────
   build-win:
     name: Build win-x64
+    needs: stamp
     runs-on: windows-latest
     defaults:
       run:
@@ -135,22 +168,13 @@ jobs:
 
       - name: Stamp nightly identity + un-hide WIP modules
         run: |
-          # Derived first and CHECKED. Inlined in the jq call, a git that returns
-          # nothing still succeeds and stamps "2.16.3-nightly..abc1234" -- a
-          # malformed version that then ships, which is worse than not building.
-          set -e
-          DATE=$(git show -s --format=%cd --date=format:%Y%m%d HEAD)
-          SHA=$(git rev-parse --short=7 HEAD)
-          case "$DATE" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
-            *) echo "::error::bad build date '$DATE'"; exit 1 ;; esac
-          [ -n "$SHA" ] || { echo "::error::empty commit sha"; exit 1; }
           jq '
             .slug    += "-nightly"
             | .name  += " (Nightly)"
             | (if .brand then .brand += " Nightly" else . end)
             | .version += $stamp
             | .modules |= map(if .hidden then .hidden = false else . end)
-          ' --arg stamp "-nightly.$DATE.$SHA" \
+          ' --arg stamp "-nightly.${{ needs.stamp.outputs.date }}.${{ needs.stamp.outputs.sha }}" \
             plugin.json > plugin.json.tmp && mv plugin.json.tmp plugin.json
           jq '{slug, name, version}' plugin.json
 
@@ -174,7 +198,7 @@ jobs:
   # ── Collect, publish rolling prerelease, notify Discord ─────────────────────
   release:
     name: Publish nightly
-    needs: [build-unix, build-win]
+    needs: [stamp, build-unix, build-win]
     if: always()
     runs-on: ubuntu-latest
     permissions:
@@ -182,27 +206,13 @@ jobs:
     env:
       # Job-level so the notify steps can gate on it in their `if:`.
       DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-      ALL_OK: ${{ needs.build-unix.result == 'success' && needs.build-win.result == 'success' }}
+      ALL_OK: ${{ needs.stamp.result == 'success' && needs.build-unix.result == 'success' && needs.build-win.result == 'success' }}
     steps:
       - name: Check out plugin
         uses: actions/checkout@v4
 
-      - name: Compute build stamp + the WIP module list
-        # The WIP list is READ from plugin.json, not written out here. As a
-        # hand-kept sentence it drifted: it named Wave and Ratio and then never
-        # grew, so six further hidden modules went unmentioned. Whatever the build
-        # un-hides is exactly what carries `hidden: true`, so ask the file.
-        run: |
-          set -e
-          DATE=$(git show -s --format=%cd --date=format:%Y%m%d HEAD)
-          SHA=$(git rev-parse --short=7 HEAD)
-          case "$DATE" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
-            *) echo "::error::bad build date '$DATE'"; exit 1 ;; esac
-          echo "SFS_SHA=$SHA" >> "$GITHUB_ENV"
-          echo "SFS_VER=$(jq -r .version plugin.json)-nightly.$DATE.$SHA" >> "$GITHUB_ENV"
-          WIP=$(jq -r '[.modules[] | select(.hidden) | .name] | join(", ")' plugin.json)
-          [ -n "$WIP" ] || WIP="none"
-          echo "SFS_WIP=$WIP" >> "$GITHUB_ENV"
+      - name: Carry the stamp into the env the notify steps read
+        run: echo "SFS_SHA=${{ needs.stamp.outputs.sha }}" >> "$GITHUB_ENV"
 
       - name: Download all artifacts
         if: env.ALL_OK == 'true'
@@ -223,8 +233,8 @@ jobs:
           body: |
             **Automated nightly build** — the bleeding edge, rebuilt on every commit to `master`.
 
-            - Version `${{ env.SFS_VER }}` — commit `${{ env.SFS_SHA }}`
-            - Un-hides the work-in-progress modules, which aren't in the stable release: ${{ env.SFS_WIP }}
+            - Version `${{ needs.stamp.outputs.version }}` — commit `${{ needs.stamp.outputs.sha }}`
+            - Un-hides the work-in-progress modules, which aren't in the stable release: ${{ needs.stamp.outputs.wip }}
             - Platforms: mac arm64, mac x64, Windows x64, Linux x64.
 
             Each nightly now carries its date and commit in the filename, so builds from different days no longer overwrite each other in your downloads folder.
