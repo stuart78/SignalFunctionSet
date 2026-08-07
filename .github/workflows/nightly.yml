@@ -68,14 +68,24 @@ jobs:
 
       - name: Stamp nightly identity + un-hide WIP modules
         run: |
+          # Derived first and CHECKED. Inlined in the jq call, a git that returns
+          # nothing still succeeds and stamps "2.16.3-nightly..abc1234" -- a
+          # malformed version that then ships, which is worse than not building.
+          set -e
+          DATE=$(git show -s --format=%cd --date=format:%Y%m%d HEAD)
+          SHA=$(git rev-parse --short=7 HEAD)
+          case "$DATE" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+            *) echo "::error::bad build date '$DATE'"; exit 1 ;; esac
+          [ -n "$SHA" ] || { echo "::error::empty commit sha"; exit 1; }
           jq '
             .slug    += "-nightly"
             | .name  += " (Nightly)"
             | (if .brand then .brand += " Nightly" else . end)
-            | .version += "-nightly"
+            | .version += $stamp
             | .modules |= map(if .hidden then .hidden = false else . end)
-          ' plugin.json > plugin.json.tmp && mv plugin.json.tmp plugin.json
-          echo "SFS_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          ' --arg stamp "-nightly.$DATE.$SHA" \
+            plugin.json > plugin.json.tmp && mv plugin.json.tmp plugin.json
+          echo "SFS_SHA=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_ENV"
           echo "--- nightly identity ---"
           jq '{slug, name, version}' plugin.json
 
@@ -125,13 +135,23 @@ jobs:
 
       - name: Stamp nightly identity + un-hide WIP modules
         run: |
+          # Derived first and CHECKED. Inlined in the jq call, a git that returns
+          # nothing still succeeds and stamps "2.16.3-nightly..abc1234" -- a
+          # malformed version that then ships, which is worse than not building.
+          set -e
+          DATE=$(git show -s --format=%cd --date=format:%Y%m%d HEAD)
+          SHA=$(git rev-parse --short=7 HEAD)
+          case "$DATE" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+            *) echo "::error::bad build date '$DATE'"; exit 1 ;; esac
+          [ -n "$SHA" ] || { echo "::error::empty commit sha"; exit 1; }
           jq '
             .slug    += "-nightly"
             | .name  += " (Nightly)"
             | (if .brand then .brand += " Nightly" else . end)
-            | .version += "-nightly"
+            | .version += $stamp
             | .modules |= map(if .hidden then .hidden = false else . end)
-          ' plugin.json > plugin.json.tmp && mv plugin.json.tmp plugin.json
+          ' --arg stamp "-nightly.$DATE.$SHA" \
+            plugin.json > plugin.json.tmp && mv plugin.json.tmp plugin.json
           jq '{slug, name, version}' plugin.json
 
       - name: Build
@@ -167,8 +187,22 @@ jobs:
       - name: Check out plugin
         uses: actions/checkout@v4
 
-      - name: Compute short SHA
-        run: echo "SFS_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+      - name: Compute build stamp + the WIP module list
+        # The WIP list is READ from plugin.json, not written out here. As a
+        # hand-kept sentence it drifted: it named Wave and Ratio and then never
+        # grew, so six further hidden modules went unmentioned. Whatever the build
+        # un-hides is exactly what carries `hidden: true`, so ask the file.
+        run: |
+          set -e
+          DATE=$(git show -s --format=%cd --date=format:%Y%m%d HEAD)
+          SHA=$(git rev-parse --short=7 HEAD)
+          case "$DATE" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+            *) echo "::error::bad build date '$DATE'"; exit 1 ;; esac
+          echo "SFS_SHA=$SHA" >> "$GITHUB_ENV"
+          echo "SFS_VER=$(jq -r .version plugin.json)-nightly.$DATE.$SHA" >> "$GITHUB_ENV"
+          WIP=$(jq -r '[.modules[] | select(.hidden) | .name] | join(", ")' plugin.json)
+          [ -n "$WIP" ] || WIP="none"
+          echo "SFS_WIP=$WIP" >> "$GITHUB_ENV"
 
       - name: Download all artifacts
         if: env.ALL_OK == 'true'
@@ -189,9 +223,11 @@ jobs:
           body: |
             **Automated nightly build** — the bleeding edge, rebuilt on every commit to `master`.
 
-            - Commit `${{ env.SFS_SHA }}`
-            - Includes work-in-progress modules (Wave, Ratio) that aren't in the stable release.
+            - Version `${{ env.SFS_VER }}` — commit `${{ env.SFS_SHA }}`
+            - Un-hides the work-in-progress modules, which aren't in the stable release: ${{ env.SFS_WIP }}
             - Platforms: mac arm64, mac x64, Windows x64, Linux x64.
+
+            Each nightly now carries its date and commit in the filename, so builds from different days no longer overwrite each other in your downloads folder.
 
             ⚠️ This is a **separate plugin** (slug `SignalFunctionSet-nightly`, shows as *Signal Function Set (Nightly)*). It installs alongside the VCV Library build, but patches you make with it are **not** interchangeable with the release version. Unsigned — macOS may warn on first load.
 

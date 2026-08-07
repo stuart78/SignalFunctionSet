@@ -52,11 +52,7 @@ core rather than each growing their own.
   on what little the loop leaves them. Separately, below about 24 Hz every
   exciter breaks down, which is the subsonic end of the tuning range rather than
   an exciter fault.
-- **Nightly workflow** — `.github/workflows/nightly.yml` release notes name a
-  stale WIP list ("Wave, Ratio"); the build un-hides everything correctly, only
-  the description is out of date. The nightly version string is also pinned to
-  `plugin.json`'s version, so consecutive nightlies are not distinguishable by
-  filename. Its actions also emit Node 20 deprecation warnings.
+- **Nightly workflow** — its actions still emit Node 20 deprecation warnings.
 - **Crystal** — retired enum entries still appear in the parameter list for
   MIDI-map and automation; `surfaceDist()` is now unused.
 - **Fill** — dragging a queue row past the visible rows does not auto-scroll,
