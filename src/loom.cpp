@@ -1408,6 +1408,9 @@ struct LoomWidget : ModuleWidget {
 		// ── bottom row ─────────────────────────────────────────────────────────
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, botY)), module, Loom::CLOCK_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, botY)), module, Loom::GATE_INPUT));
+		// VEL stands above V/OCT with no pot of its own, so no pipe joins them --
+		// it is the poly velocity that goes with the poly gate, not a modulator.
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colC, hp(21))), module, Loom::VEL_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colC, botY)), module, Loom::VOCT_INPUT));
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(9.5f), botY)), module, Loom::OCT_PARAM));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(11.75f), botY)), module, Loom::OCT_CV_INPUT));
