@@ -162,11 +162,6 @@ struct Bell : Module {
 	}
 
 	Bell() {
-		// OpMorph hangs off the right. Both buffers are allocated here because
-		// Rack requires the mother to own them whether or not one is attached.
-		rightExpander.producerMessage = new OpMorphMessage();
-		rightExpander.consumerMessage = new OpMorphMessage();
-
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(VOICE_PARAM, 0.f, 31.f, 0.f, "Voice", "", 0.f, 1.f, 1.f);
 		paramQuantities[VOICE_PARAM]->snapEnabled = true;
@@ -239,11 +234,6 @@ struct Bell : Module {
 		if (v >= n) v = n - 1;
 		v = ((v + d) % n + n) % n;
 		params[VOICE_PARAM].setValue((float) v);
-	}
-
-	~Bell() {
-		delete (OpMorphMessage*) rightExpander.producerMessage;
-		delete (OpMorphMessage*) rightExpander.consumerMessage;
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -328,9 +318,13 @@ struct Bell : Module {
 			// An attached OpMorph drives the routing outright; without one, the
 			// panel's own morph applies. Checked every block so unplugging the
 			// expander hands control straight back.
+			// The WRITER owns the buffers, so these live on OpMorph's leftExpander
+			// and are read from here. Wiring it the other way round -- the mother
+			// owning them and the expander writing into them -- puts two modules
+			// on one buffer and depends on which processes first.
 			OpMorphMessage* xm = nullptr;
 			if (rightExpander.module && rightExpander.module->model == modelOpMorph)
-				xm = (OpMorphMessage*) rightExpander.consumerMessage;
+				xm = (OpMorphMessage*) rightExpander.module->leftExpander.consumerMessage;
 			if (xm && xm->active) {
 				engine.setMatrixWeights(xm->w, xm->fbSrc, xm->fbDst);
 				hasExpander = true;

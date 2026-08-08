@@ -39,12 +39,13 @@ static const int OPM_COLS = 4, OPM_ROWS = 4;
 static const int OPM_SLOTS = OPM_COLS * OPM_ROWS;
 
 struct OpMorph : Module {
+	// Indices are stable: HEADING/SPEED replaced an absolute X/Y in place.
 	enum ParamId {
-		X_PARAM, Y_PARAM, SPREAD_PARAM, STEP_PARAM,
+		HEADING_PARAM, SPEED_PARAM, SPREAD_PARAM, STEP_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
-		X_CV_INPUT, Y_CV_INPUT, CLOCK_INPUT, RESET_INPUT,
+		HEADING_CV_INPUT, SPEED_CV_INPUT, CLOCK_INPUT, RESET_INPUT,
 		PARAMS_UNUSED_INPUT,      // reserved; keeps later appends honest
 		INPUTS_LEN
 	};
@@ -68,21 +69,34 @@ struct OpMorph : Module {
 	bool  dispActive = false;
 
 	OpMorph() {
+		// The WRITER owns the buffers. Writing into the mother's own outgoing
+		// buffer instead puts two modules on one allocation and makes the result
+		// depend on which of them Rack happens to process first.
+		leftExpander.producerMessage = new OpMorphMessage();
+		leftExpander.consumerMessage = new OpMorphMessage();
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		configParam(X_PARAM, 0.f, (float)OPM_COLS, 0.f, "X position", " slots");
-		configParam(Y_PARAM, 0.f, (float)OPM_ROWS, 0.f, "Y position", " slots");
+		// A heading and a speed rather than a position. On a torus that is the
+		// natural pair: set a direction and the point travels forever, wrapping,
+		// instead of you steering it into an edge it cannot cross.
+		configParam(HEADING_PARAM, -180.f, 180.f, 30.f, "Heading", "°");
+		configParam(SPEED_PARAM, 0.f, 1.f, 0.15f, "Speed", " slots/s", 0.f, 4.f);
 		configParam(SPREAD_PARAM, 0.f, 2.f, 1.f, "Depth", "x");
 		configSwitch(STEP_PARAM, 0.f, 1.f, 0.f, "Clock steps the field", {"Off", "On"});
-		configInput(X_CV_INPUT, "X CV (1V per slot, wraps)");
-		configInput(Y_CV_INPUT, "Y CV (1V per slot, wraps)");
+		configInput(HEADING_CV_INPUT, "Heading CV (±5V = ±180°)");
+		configInput(SPEED_CV_INPUT, "Speed CV (±5V)");
 		configInput(CLOCK_INPUT, "Clock — steps to the next slot");
-		configInput(RESET_INPUT, "Reset to the first slot");
+		configInput(RESET_INPUT, "Return to the first slot");
 		// A spread of algorithms rather than 1..16: the field is nicer to travel
 		// when neighbours differ, and these run stacks -> pairs -> parallel.
 		static const int SEED[OPM_SLOTS] = {
 			0, 1, 4, 6,  7, 9, 13, 15,  17, 18, 20, 21,  24, 27, 29, 31
 		};
 		for (int i = 0; i < OPM_SLOTS; i++) loadSlot(i, SEED[i]);
+	}
+
+	~OpMorph() {
+		delete (OpMorphMessage*) leftExpander.producerMessage;
+		delete (OpMorphMessage*) leftExpander.consumerMessage;
 	}
 
 	void loadSlot(int i, int algo) {
@@ -98,21 +112,25 @@ struct OpMorph : Module {
 	}
 
 	void process(const ProcessArgs& args) override {
-		if (resetTrig.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f)) stepIdx = 0;
+		if (resetTrig.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f)) {
+			stepIdx = 0; posX = posY = 0.f;
+		}
 		stepping = params[STEP_PARAM].getValue() > 0.5f;
 		if (stepping && clockTrig.process(inputs[CLOCK_INPUT].getVoltage(), 0.1f, 1.f))
 			stepIdx = (stepIdx + 1) % OPM_SLOTS;
 
-		float x, y;
 		if (stepping) {
-			x = (float)(stepIdx % OPM_COLS);
-			y = (float)(stepIdx / OPM_COLS);
+			posX = (float)(stepIdx % OPM_COLS);
+			posY = (float)(stepIdx / OPM_COLS);
 		} else {
-			x = params[X_PARAM].getValue() + inputs[X_CV_INPUT].getVoltage();
-			y = params[Y_PARAM].getValue() + inputs[Y_CV_INPUT].getVoltage();
+			float headDeg = params[HEADING_PARAM].getValue()
+			              + inputs[HEADING_CV_INPUT].getVoltage() * 36.f;
+			float speed = clamp(params[SPEED_PARAM].getValue()
+			                  + inputs[SPEED_CV_INPUT].getVoltage() / 5.f, -1.f, 1.f) * 4.f;
+			float th = headDeg * (float)M_PI / 180.f;
+			posX = wrapf(posX + std::cos(th) * speed * args.sampleTime, (float)OPM_COLS);
+			posY = wrapf(posY + std::sin(th) * speed * args.sampleTime, (float)OPM_ROWS);
 		}
-		posX = wrapf(x, (float)OPM_COLS);
-		posY = wrapf(y, (float)OPM_ROWS);
 
 		// Bilinear over the four nearest slots, with wraparound indexing — this
 		// is what makes travelling off one edge continuous with the other.
@@ -143,15 +161,13 @@ struct OpMorph : Module {
 		bool motherHere = leftExpander.module && leftExpander.module->model == modelOperator;
 		dispActive = motherHere;
 		lights[CONNECTED_LIGHT].setBrightness(motherHere ? 1.f : 0.f);
-		if (motherHere) {
-			OpMorphMessage* msg = (OpMorphMessage*) leftExpander.module->rightExpander.producerMessage;
-			if (msg) {
-				msg->active = true;
-				std::memcpy(msg->w, w, sizeof(w));
-				msg->fbSrc = slotFbSrc[near];
-				msg->fbDst = slotFbDst[near];
-				leftExpander.module->rightExpander.requestMessageFlip();
-			}
+		OpMorphMessage* msg = (OpMorphMessage*) leftExpander.producerMessage;
+		if (msg) {
+			msg->active = motherHere;
+			std::memcpy(msg->w, w, sizeof(w));
+			msg->fbSrc = slotFbSrc[near];
+			msg->fbDst = slotFbDst[near];
+			leftExpander.requestMessageFlip();
 		}
 	}
 
@@ -183,6 +199,7 @@ struct OpMorphDisplay : Widget {
 	OpMorph* module = nullptr;
 	std::shared_ptr<Font> font;
 
+	int selected = -1;
 	void drawField(NVGcontext* vg, float x, float y, float w, float h,
 	               const int* algo, float px, float py, bool live) {
 		float cw = w / OPM_COLS, ch = h / OPM_ROWS;
@@ -192,6 +209,9 @@ struct OpMorphDisplay : Widget {
 				nvgBeginPath(vg);
 				nvgRoundedRect(vg, cx + 1.f, cy + 1.f, cw - 2.f, ch - 2.f, 2.f);
 				nvgFillColor(vg, OPM_DIM); nvgFill(vg);
+				if (r * OPM_COLS + c == selected) {
+					nvgStrokeColor(vg, OPM_BLUE); nvgStrokeWidth(vg, 1.2f); nvgStroke(vg);
+				}
 				if (font && font->handle >= 0 && algo) {
 					sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 					nvgFillColor(vg, OPM_TEXT);
@@ -200,17 +220,20 @@ struct OpMorphDisplay : Widget {
 					        string::f("%d", algo[r * OPM_COLS + c] + 1).c_str(), NULL);
 				}
 			}
-		// the travelling point, drawn wrapped so it never disappears at a seam
+		// The travelling point. ONE dot, and scissored to the field: the wrapped
+		// copies used to be drawn nine times with a loose bounds test, which put
+		// stray dots outside the screen area entirely.
 		if (!live) return;
-		for (int dy = -1; dy <= 1; dy++)
-			for (int dx = -1; dx <= 1; dx++) {
-				float gx = x + (px + dx * OPM_COLS) * cw + cw / 2;
-				float gy = y + (py + dy * OPM_ROWS) * ch + ch / 2;
-				if (gx < x - cw || gx > x + w + cw || gy < y - ch || gy > y + h + ch) continue;
-				nvgBeginPath(vg);
-				nvgCircle(vg, gx, gy, 3.2f);
-				nvgFillColor(vg, OPM_HOT); nvgFill(vg);
-			}
+		nvgSave(vg);
+		nvgScissor(vg, x, y, w, h);
+		float gx = x + px * cw + cw / 2, gy = y + py * ch + ch / 2;
+		nvgBeginPath(vg);
+		nvgCircle(vg, gx, gy, 4.2f);
+		nvgFillColor(vg, nvgTransRGBA(OPM_HOT, 60)); nvgFill(vg);
+		nvgBeginPath(vg);
+		nvgCircle(vg, gx, gy, 2.6f);
+		nvgFillColor(vg, OPM_HOT); nvgFill(vg);
+		nvgRestore(vg);
 	}
 
 	void drawMatrix(NVGcontext* vg, float x, float y, float w, float h, const float ww[6][7]) {
@@ -234,6 +257,46 @@ struct OpMorphDisplay : Widget {
 			}
 	}
 
+	// Which slot is under a point, or -1 outside the field.
+	int slotAt(Vec p) {
+		float pad = 4.f, w = box.size.x - 2 * pad, fieldH = box.size.y * 0.46f;
+		if (p.x < pad || p.x > pad + w || p.y < pad || p.y > pad + fieldH) return -1;
+		int c = (int)((p.x - pad) / (w / OPM_COLS));
+		int r = (int)((p.y - pad) / (fieldH / OPM_ROWS));
+		if (c < 0 || c >= OPM_COLS || r < 0 || r >= OPM_ROWS) return -1;
+		return r * OPM_COLS + c;
+	}
+
+	// Click a slot to select it, drag up/down or scroll to change its algorithm.
+	// Doing this from the context menu was four clicks deep for one number.
+	void onButton(const ButtonEvent& e) override {
+		if (module && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+			int s = slotAt(e.pos);
+			if (s >= 0) { module->editSlot = s; e.consume(this); return; }
+		}
+		Widget::onButton(e);
+	}
+	void onDragStart(const DragStartEvent& e) override { dragAccum = 0.f; }
+	void onDragMove(const DragMoveEvent& e) override {
+		if (!module) return;
+		dragAccum -= e.mouseDelta.y / APP->scene->rackScroll->getZoom();
+		while (dragAccum >= 6.f) { bump(+1); dragAccum -= 6.f; }
+		while (dragAccum <= -6.f) { bump(-1); dragAccum += 6.f; }
+	}
+	void onHoverScroll(const HoverScrollEvent& e) override {
+		if (!module) return;
+		int s = slotAt(e.pos);
+		if (s < 0) return;
+		module->editSlot = s;
+		bump(e.scrollDelta.y > 0.f ? +1 : -1);
+		e.consume(this);
+	}
+	void bump(int d) {
+		int i = clamp(module->editSlot, 0, OPM_SLOTS - 1);
+		module->loadSlot(i, ((module->slotAlgo[i] + d) % 32 + 32) % 32);
+	}
+	float dragAccum = 0.f;
+
 	void draw(const DrawArgs& args) override {
 		NVGcontext* vg = args.vg;
 		if (!font || font->handle < 0) font = sfs::panelFont();
@@ -244,6 +307,7 @@ struct OpMorphDisplay : Widget {
 		float pad = 4.f, w = box.size.x - 2 * pad;
 		float fieldH = box.size.y * 0.46f;
 		if (!module) { drawPreview(vg, pad, w, fieldH); return; }
+		selected = module->editSlot;
 		drawField(vg, pad, pad, w, fieldH, module->slotAlgo,
 		          module->posX, module->posY, true);
 		drawMatrix(vg, pad, pad * 2 + fieldH, w, box.size.y - fieldH - 3 * pad, module->dispW);
@@ -285,12 +349,12 @@ struct OpMorphWidget : ModuleWidget {
 		addChild(disp);
 
 		const float colA = hp(2.75f), colB = hp(9);
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, hp(17))), module, OpMorph::X_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, hp(19))), module, OpMorph::X_CV_INPUT));
-		lbl->pairDown(colA, hp(17), hp(19), "X");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, hp(17))), module, OpMorph::Y_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, hp(19))), module, OpMorph::Y_CV_INPUT));
-		lbl->pairDown(colB, hp(17), hp(19), "Y");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, hp(17))), module, OpMorph::HEADING_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, hp(19))), module, OpMorph::HEADING_CV_INPUT));
+		lbl->pairDown(colA, hp(17), hp(19), "HEADING");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, hp(17))), module, OpMorph::SPEED_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, hp(19))), module, OpMorph::SPEED_CV_INPUT));
+		lbl->pairDown(colB, hp(17), hp(19), "SPEED");
 
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, hp(22))), module, OpMorph::SPREAD_PARAM));
 		lbl->trim(colA, hp(22), "DEPTH");
