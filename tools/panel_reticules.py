@@ -308,7 +308,7 @@ MODULES = {
 # than a target for it. Splicing generated reticules into these would draw
 # circles straight over the design. Named explicitly on the command line they
 # still run, so the guard is against the bare sweep, not against intent.
-FINISHED = {"crystal", "chime", "loom"}
+FINISHED = {"crystal", "chime", "loom", "slide"}
 
 if __name__ == "__main__":
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

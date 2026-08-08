@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "panel-style.hpp"
 #include "waveguide.hpp"
+#include "scales.hpp"
 #include <cmath>
 #include <string>
 #include <vector>
@@ -195,6 +196,8 @@ struct Slide : Module {
 		AUTO_PARAM, RESET_PARAM,
 		// ── appended after the first release; do not reorder ────────────────
 		BLOCK_PARAM, SWELL_PARAM, COUPLE_PARAM, VIBRATE_PARAM, DYN_PARAM,
+		// ── appended for the 2026-08 panel ──────────────────────────────────
+		SCALE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -203,13 +206,39 @@ struct Slide : Module {
 		VOCT_INPUT, GATE_INPUT, VEL_INPUT,
 		CLOCK_INPUT, RESET_INPUT, PATTERN_CV_INPUT, DENSITY_CV_INPUT,
 		VOL_INPUT,
+		// ── appended for the 2026-08 panel ──────────────────────────────────
+		ROOT_CV_INPUT, SCALE_CV_INPUT,
 		INPUTS_LEN
 	};
-	enum OutputId { MIX_L_OUTPUT, MIX_R_OUTPUT, POLY_OUTPUT, OUTPUTS_LEN };
+	// POLY_OUTPUT is RETIRED from the panel -- per-string audio moves to an
+	// expander -- but stays in the enum, because Rack serialises outputs by
+	// index and removing it would re-point every cable in a saved patch.
+	enum OutputId { MIX_L_OUTPUT, MIX_R_OUTPUT, POLY_OUTPUT,
+	                EVEN_OUTPUT, ODD_OUTPUT, OUTPUTS_LEN };
 	enum LightId { AUTO_LIGHT, LIGHTS_LEN };
 
 	SlideString str[SLIDE_NCH];
 	float tune[SLIDE_NCH] = {};
+
+	int curScale = -1;                   // -1 = free; else an index into sfs::SCALES
+
+	// Snap where the bar is GOING, never where it is: the glide has to travel
+	// through the notes in between or it stops being a slide. And snap the bar
+	// rather than each string, because the bar is one rigid object -- moving
+	// strings independently would break the tuning's intervals, which is the
+	// whole reason a lap steel is tuned to a chord.
+	float snapBar(float semis) const {
+		if (curScale < 0 || curScale >= sfs::NUM_SCALES) return semis;
+		const sfs::Scale& sc = sfs::SCALES[curScale];
+		float best = semis, bestD = 1e9f;
+		for (int oct = -2; oct <= 3; oct++)
+			for (int d = 0; d < sc.size; d++) {
+				float cand = sc.intervals[d] + 12.f * oct;
+				float dist = std::fabs(cand - semis);
+				if (dist < bestD) { bestD = dist; best = cand; }
+			}
+		return best;
+	}
 
 	// ── the bar ───────────────────────────────────────────────────────────────
 	float barSm = 0.f, barPrev = 0.f;    // where the bar IS, and where it was
@@ -299,6 +328,18 @@ struct Slide : Module {
 
 		configParam(ROOT_PARAM, -12.f, 12.f, 0.f, "Root", " semitones");
 		getParamQuantity(ROOT_PARAM)->snapEnabled = true;
+		{
+			// A bar is not a fret, so nothing here is quantized by construction --
+			// which is the point of a steel and also why an auto-played roll can
+			// wander out of key. SCALE snaps the BAR's offset, not each string:
+			// the bar is one rigid object and moves them all by the same ratio,
+			// so snapping per string would break the tuning's intervals, which is
+			// the one thing the instrument exists to preserve.
+			std::vector<std::string> names{"Off (free)"};
+			for (int i = 0; i < sfs::NUM_SCALES; i++) names.push_back(sfs::SCALES[i].longName);
+			configSwitch(SCALE_PARAM, 0.f, (float)sfs::NUM_SCALES, 0.f, "Scale", names);
+			getParamQuantity(SCALE_PARAM)->snapEnabled = true;
+		}
 		configParam(OCT_PARAM, -4.f, 2.f, -2.f, "Octave");
 		getParamQuantity(OCT_PARAM)->snapEnabled = true;
 
@@ -328,10 +369,14 @@ struct Slide : Module {
 		configInput(PATTERN_CV_INPUT, "Roll CV (1V per pattern)");
 		configInput(DENSITY_CV_INPUT, "Roll density CV (±5V)");
 		configInput(VOL_INPUT, "Volume pedal (0–10V) — the real answer to swells; overrides SWELL");
+		configInput(ROOT_CV_INPUT,  "Root CV (1V/oct, semitone-quantized)");
+		configInput(SCALE_CV_INPUT, "Scale CV (1V per scale; 0V = free)");
 
 		configOutput(MIX_L_OUTPUT, "Mix left");
 		configOutput(MIX_R_OUTPUT, "Mix right");
 		configOutput(POLY_OUTPUT,  "Per-string audio (polyphonic, 8 channels)");
+		configOutput(EVEN_OUTPUT, "Even strings (2, 4, 6, 8) summed");
+		configOutput(ODD_OUTPUT,  "Odd strings (1, 3, 5, 7) summed");
 
 		applyTuning(0);
 	}
@@ -438,6 +483,9 @@ struct Slide : Module {
 		float barTarget = params[BAR_PARAM].getValue();
 		if (inputs[BAR_CV_INPUT].isConnected())
 			barTarget += inputs[BAR_CV_INPUT].getVoltage() * 12.f;
+		curScale = clamp((int)std::round(params[SCALE_PARAM].getValue()
+		                 + inputs[SCALE_CV_INPUT].getVoltage()), 0, sfs::NUM_SCALES) - 1;
+		barTarget = snapBar(barTarget);
 
 		if (playMode == 1 && inputs[VOCT_INPUT].isConnected()) {
 			int nv = std::max(1, inputs[VOCT_INPUT].getChannels());
@@ -647,8 +695,10 @@ struct Slide : Module {
 		}
 
 		// ── pitch ─────────────────────────────────────────────────────────────
-		float basePitch = params[OCT_PARAM].getValue()
-		                + params[ROOT_PARAM].getValue() / 12.f;
+		float rootSemis = params[ROOT_PARAM].getValue();
+		if (inputs[ROOT_CV_INPUT].isConnected())
+			rootSemis += std::round(inputs[ROOT_CV_INPUT].getVoltage() * 12.f);
+		float basePitch = params[OCT_PARAM].getValue() + rootSemis / 12.f;
 		// In melody mode V/OCT has already been spent placing the bar; adding it
 		// here as well would transpose the note a second time.
 		if (!(playMode == 1 && inputs[VOCT_INPUT].isConnected()))
@@ -701,7 +751,7 @@ struct Slide : Module {
 
 		// ── the strings ───────────────────────────────────────────────────────
 		float bus = 0.f;
-		float mixL = 0.f, mixR = 0.f;
+		float mixL = 0.f, mixR = 0.f, sumEven = 0.f, sumOdd = 0.f;
 		outputs[POLY_OUTPUT].setChannels(SLIDE_NCH);
 
 		for (int i = 0; i < SLIDE_NCH; i++) {
@@ -793,6 +843,8 @@ struct Slide : Module {
 			mixL += s.out * std::cos(th);
 			mixR += s.out * std::sin(th);
 			outputs[POLY_OUTPUT].setVoltage(sfs::softClip(s.out * 10.f), i);
+			// String 1 is index 0, so the ODD strings are the even indices.
+			(i % 2 ? sumEven : sumOdd) += s.out;
 
 			float a = std::fabs(s.out);
 			s.amp += (a > s.amp ? 0.02f : 0.0009f) * (a - s.amp);
@@ -828,6 +880,8 @@ struct Slide : Module {
 		yL = std::tanh(yL * dr) / std::sqrt(dr);
 		yR = std::tanh(yR * dr) / std::sqrt(dr);
 
+		outputs[EVEN_OUTPUT].setVoltage(sfs::softClip(sumEven * 10.f));
+		outputs[ODD_OUTPUT].setVoltage(sfs::softClip(sumOdd * 10.f));
 		outputs[MIX_L_OUTPUT].setVoltage(sfs::softClip(yL * 11.f));
 		outputs[MIX_R_OUTPUT].setVoltage(sfs::softClip(yR * 11.f));
 	}
@@ -1086,97 +1140,73 @@ struct SlideWidget : ModuleWidget {
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/slide.svg")));
 		using sfs::hp;
 
-		sfs::PanelLabels* lbl = new sfs::PanelLabels();
-		lbl->box.size = box.size;
-		addChild(lbl);
-		lbl->title(hp(1), hp(1.6f), "SLIDE");
-
+		// NO sfs::PanelLabels HERE, DELIBERATELY. res/slide.svg is the designer's
+		// own file, published by `figma_panel_template.py --publish slide`, and it
+		// carries every label, connector line and the logo at their weights.
+		// Drawing labels over it at runtime would replace all of that with
+		// panel-style.hpp's defaults. This places components and nothing else.
 		SlideDisplay* disp = new SlideDisplay();
 		disp->module = module;
-		disp->box.pos  = mm2px(Vec(hp(0.8f), hp(2.6f)));
-		disp->box.size = mm2px(Vec(hp(24.4f), hp(9.6f)));
+		disp->box.pos  = mm2px(Vec(hp(0.75f), hp(2)));
+		disp->box.size = mm2px(Vec(hp(26.5f), hp(10.5f)));
 		addChild(disp);
 
-		// ── the bar, and the hand that moves it ────────────────────────────────
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(2), hp(14.4f))), module, Slide::BAR_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(4), hp(14.4f))), module, Slide::BAR_CV_INPUT));
-		lbl->pair(hp(2), hp(14.4f), "BAR");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(7), hp(14.4f))), module, Slide::SLANT_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(9), hp(14.4f))), module, Slide::SLANT_CV_INPUT));
-		lbl->pair(hp(7), hp(14.4f), "SLANT");
+		// ── the bar ────────────────────────────────────────────────────────────
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(2), hp(15))), module, Slide::BAR_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(2), hp(17))), module, Slide::BAR_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(4), hp(17))), module, Slide::GLIDE_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(6), hp(15))), module, Slide::SLANT_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(6), hp(17))), module, Slide::SLANT_CV_INPUT));
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(12), hp(14.4f))), module, Slide::GLIDE_PARAM));
-		lbl->trim(hp(12), hp(14.4f), "GLIDE");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(14), hp(14.4f))), module, Slide::VIB_PARAM));
-		lbl->trim(hp(14), hp(14.4f), "VIB");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(16), hp(14.4f))), module, Slide::VIBRATE_PARAM));
-		lbl->trim(hp(16), hp(14.4f), "SPEED");
+		// ── vibrato and the hand ───────────────────────────────────────────────
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(9), hp(15))), module, Slide::VIB_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(13), hp(15))), module, Slide::VIBRATE_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(9), hp(18))), module, Slide::DYN_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(11), hp(18))), module, Slide::COUPLE_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(13), hp(18))), module, Slide::BLOCK_PARAM));
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(19), hp(14.4f))), module, Slide::ROOT_PARAM));
-		lbl->trim(hp(19), hp(14.4f), "ROOT");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(21), hp(14.4f))), module, Slide::OCT_PARAM));
-		lbl->trim(hp(21), hp(14.4f), "OCT");
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(23.2f), hp(14.4f))), module, Slide::VOCT_INPUT));
-		lbl->jack(hp(23.2f), hp(14.4f), "V/OCT");
+		// ── string, pickup and amp ─────────────────────────────────────────────
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(16), hp(14))), module, Slide::PICK_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(18), hp(14))), module, Slide::PICK_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(20), hp(14))), module, Slide::DAMP_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(22), hp(14))), module, Slide::DAMP_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(24), hp(14))), module, Slide::SWELL_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(26), hp(14))), module, Slide::VOL_INPUT));
 
-		// ── the string and the pickup ──────────────────────────────────────────
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(2), hp(17.6f))), module, Slide::DECAY_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(4), hp(17.6f))), module, Slide::DECAY_CV_INPUT));
-		lbl->pair(hp(2), hp(17.6f), "DECAY");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(7), hp(17.6f))), module, Slide::DAMP_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(9), hp(17.6f))), module, Slide::DAMP_CV_INPUT));
-		lbl->pair(hp(7), hp(17.6f), "DAMP");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(12), hp(17.6f))), module, Slide::PICK_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(14), hp(17.6f))), module, Slide::PICK_CV_INPUT));
-		lbl->pair(hp(12), hp(17.6f), "PICK");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(17), hp(17.6f))), module, Slide::TONE_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(19), hp(17.6f))), module, Slide::TONE_CV_INPUT));
-		lbl->pair(hp(17), hp(17.6f), "TONE");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(21.6f), hp(17.6f))), module, Slide::PICKUP_PARAM));
-		lbl->trim(hp(21.6f), hp(17.6f), "P.UP");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(23.6f), hp(17.6f))), module, Slide::DRIVE_PARAM));
-		lbl->trim(hp(23.6f), hp(17.6f), "DRIVE");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(16), hp(17))), module, Slide::PICKUP_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(18), hp(17))), module, Slide::DRIVE_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(20), hp(17))), module, Slide::TONE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(22), hp(17))), module, Slide::TONE_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(24), hp(17))), module, Slide::DECAY_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(26), hp(17))), module, Slide::DECAY_CV_INPUT));
 
-		// ── playing ────────────────────────────────────────────────────────────
-		const float rowY = hp(21.4f);
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(2), rowY)), module, Slide::GATE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(4), rowY)), module, Slide::VEL_INPUT));
-		lbl->jack(hp(2), rowY, "GATE");
-		lbl->jack(hp(4), rowY, "VEL");
+		// ── playing in ─────────────────────────────────────────────────────────
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(2), hp(21))), module, Slide::CLOCK_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(4.5f), hp(21))), module, Slide::VEL_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(2), hp(24))), module, Slide::GATE_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(4.5f), hp(24))), module, Slide::VOCT_INPUT));
 
+		// ── the key ────────────────────────────────────────────────────────────
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(8), hp(22))), module, Slide::ROOT_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(8), hp(24))), module, Slide::ROOT_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(9.5f), hp(23))), module, Slide::OCT_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(11), hp(22))), module, Slide::SCALE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(11), hp(24))), module, Slide::SCALE_CV_INPUT));
+
+		// ── the auto player ────────────────────────────────────────────────────
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(
-			mm2px(Vec(hp(7), rowY)), module, Slide::AUTO_PARAM, Slide::AUTO_LIGHT));
-		lbl->add(hp(7), rowY - sfs::LABEL_GAP_TRIM, "AUTO");
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(9), rowY)), module, Slide::CLOCK_INPUT));
-		lbl->jack(hp(9), rowY, "CLK");
-		addParam(createParamCentered<VCVButton>(mm2px(Vec(hp(11), rowY)), module, Slide::RESET_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(13), rowY)), module, Slide::RESET_INPUT));
-		lbl->add(hp(11), rowY - sfs::LABEL_GAP_TRIM, "RESET");
-		lbl->link(hp(11), rowY, hp(13), rowY);
+			mm2px(Vec(hp(14), hp(22))), module, Slide::AUTO_PARAM, Slide::AUTO_LIGHT));
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(hp(14), hp(24))), module, Slide::RESET_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(16), hp(22))), module, Slide::PATTERN_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(16), hp(24))), module, Slide::PATTERN_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(19), hp(22))), module, Slide::DENSITY_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(19), hp(24))), module, Slide::DENSITY_CV_INPUT));
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(15.5f), rowY)), module, Slide::PATTERN_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(17.5f), rowY)), module, Slide::PATTERN_CV_INPUT));
-		lbl->pair(hp(15.5f), rowY, "ROLL");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(19.5f), rowY)), module, Slide::DENSITY_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(21.5f), rowY)), module, Slide::DENSITY_CV_INPUT));
-		lbl->pair(hp(19.5f), rowY, "DENS");
-
-		const float outY = hp(24.f);
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(2), outY)), module, Slide::SWELL_PARAM));
-		lbl->trim(hp(2), outY, "SWELL");
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(4), outY)), module, Slide::VOL_INPUT));
-		lbl->jack(hp(4), outY, "VOL");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(7), outY)), module, Slide::COUPLE_PARAM));
-		lbl->trim(hp(7), outY, "COUPLE");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(9.5f), outY)), module, Slide::BLOCK_PARAM));
-		lbl->trim(hp(9.5f), outY, "BLOCK");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(12), outY)), module, Slide::DYN_PARAM));
-		lbl->trim(hp(12), outY, "DYN");
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(19.5f), outY)), module, Slide::POLY_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(21.8f), outY)), module, Slide::MIX_L_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(23.8f), outY)), module, Slide::MIX_R_OUTPUT));
-		lbl->jackOnPlate(hp(19.5f), outY, "POLY");
-		lbl->add(hp(22.8f), outY - sfs::LABEL_GAP_JACK, "MIX L / R", sfs::PanelLabels::ON_PLATE);
+		// ── out ────────────────────────────────────────────────────────────────
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(23.375f), hp(21))), module, Slide::EVEN_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(26), hp(21))), module, Slide::ODD_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(23.375f), hp(24))), module, Slide::MIX_L_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(26), hp(24))), module, Slide::MIX_R_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
