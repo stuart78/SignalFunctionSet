@@ -222,6 +222,14 @@ struct Slide : Module {
 
 	int curScale = -1;                   // -1 = free; else an index into sfs::SCALES
 
+	// Where the auto player has walked the bar to, as an offset from the BAR
+	// knob. A roll on a stationary bar is an arpeggio, not a steel: a player
+	// moves between phrases, and it is the MOVING that the instrument is for.
+	// Only the destination is chosen here -- GLIDE still decides how the bar
+	// gets there, so one control governs every slide in the module.
+	float autoBarOff = 0.f;
+	bool  autoMovesBar = true;
+
 	// Snap where the bar is GOING, never where it is: the glide has to travel
 	// through the notes in between or it stops being a slide. And snap the bar
 	// rather than each string, because the bar is one rigid object -- moving
@@ -346,6 +354,7 @@ struct Slide : Module {
 		std::vector<std::string> rollNames;
 		for (int i = 0; i < SLIDE_NROLLS; i++) rollNames.push_back(SLIDE_ROLLS[i].name);
 		configSwitch(PATTERN_PARAM, 0.f, (float)(SLIDE_NROLLS - 1), 0.f, "Roll", rollNames);
+		getParamQuantity(PATTERN_PARAM)->snapEnabled = true;
 		configParam(DENSITY_PARAM, 0.f, 1.f, 1.f, "Roll density", "%", 0.f, 100.f);
 		// At zero every stroke is the same, which is what a sequencer sounds
 		// like. Turning it up brings in the pattern's own accents first and the
@@ -366,7 +375,7 @@ struct Slide : Module {
 		configInput(VEL_INPUT,      "Velocity (0–10V, polyphonic)");
 		configInput(CLOCK_INPUT,    "Clock — advances the roll");
 		configInput(RESET_INPUT,    "Reset the roll");
-		configInput(PATTERN_CV_INPUT, "Roll CV (1V per pattern)");
+		configInput(PATTERN_CV_INPUT, "Roll CV (±5V sweeps all 16)");
 		configInput(DENSITY_CV_INPUT, "Roll density CV (±5V)");
 		configInput(VOL_INPUT, "Volume pedal (0–10V) — the real answer to swells; overrides SWELL");
 		configInput(ROOT_CV_INPUT,  "Root CV (1V/oct, semitone-quantized)");
@@ -444,8 +453,14 @@ struct Slide : Module {
 	}
 
 	void rollStep() {
+		// ±5V sweeps the WHOLE list. At 1V per pattern -- the convention for
+		// ROOT and SCALE, which have to mean the same thing across modules --
+		// reaching the last of sixteen needs 15V, so an ordinary LFO only ever
+		// found the ends. Nothing outside this module reads a roll number, so
+		// there is no convention to keep here.
 		int pat = clamp((int)std::round(params[PATTERN_PARAM].getValue()
-		                + inputs[PATTERN_CV_INPUT].getVoltage()), 0, SLIDE_NROLLS - 1);
+		                + inputs[PATTERN_CV_INPUT].getVoltage() * 0.1f * SLIDE_NROLLS),
+		                0, SLIDE_NROLLS - 1);
 		float density = paramCV(DENSITY_PARAM, DENSITY_CV_INPUT, 0.f, 1.f);
 		float dyn = clamp(params[DYN_PARAM].getValue(), 0.f, 1.f);
 
@@ -471,6 +486,16 @@ struct Slide : Module {
 		// plays — it is how a random number generator plays.
 		float vel = 0.92f * (1.f + dyn * (accent - 1.f))
 		          * (1.f + dyn * 0.15f * (2.f * random::uniform() - 1.f));
+		// One move per completed cycle of the roll, so a phrase gets played
+		// somewhere before the hand goes anywhere else.
+		const SlideRoll& rr = SLIDE_ROLLS[pat];
+		if (autoMovesBar && rr.n > 0 && (rollIdx % rr.n) == rr.n - 1) {
+			float step = (random::uniform() < 0.5f ? -1.f : 1.f)
+			           * (1.f + std::floor(random::uniform() * 3.f));   // 1..3 semitones
+			// Pulled back toward the knob, or a free random walk parks itself
+			// against a limit and stays there.
+			autoBarOff = clamp((autoBarOff + step) * 0.78f, -7.f, 7.f);
+		}
 		rollIdx = (rollIdx + 1) & 0xFFFFF;
 		if (random::uniform() <= density)
 			pick(clamp(sel, 0, SLIDE_NCH - 1), clamp(vel, 0.05f, 1.f));
@@ -485,6 +510,7 @@ struct Slide : Module {
 			barTarget += inputs[BAR_CV_INPUT].getVoltage() * 12.f;
 		curScale = clamp((int)std::round(params[SCALE_PARAM].getValue()
 		                 + inputs[SCALE_CV_INPUT].getVoltage()), 0, sfs::NUM_SCALES) - 1;
+		if (params[AUTO_PARAM].getValue() > 0.5f && autoMovesBar) barTarget += autoBarOff;
 		barTarget = snapBar(barTarget);
 
 		if (playMode == 1 && inputs[VOCT_INPUT].isConnected()) {
@@ -901,6 +927,7 @@ struct Slide : Module {
 	json_t* dataToJson() override {
 		json_t* r = json_object();
 		json_object_set_new(r, "playMode", json_integer(playMode));
+		json_object_set_new(r, "autoMovesBar", json_boolean(autoMovesBar));
 		json_object_set_new(r, "pickupType", json_integer(pickupType));
 		json_object_set_new(r, "stereoWidth", json_real(stereoWidth));
 		json_object_set_new(r, "mouseMode", json_integer(mouseMode));
@@ -912,6 +939,7 @@ struct Slide : Module {
 	}
 	void dataFromJson(json_t* r) override {
 		if (json_t* j = json_object_get(r, "playMode")) playMode = (int)json_integer_value(j);
+		if (json_t* j = json_object_get(r, "autoMovesBar")) autoMovesBar = json_boolean_value(j);
 		if (json_t* j = json_object_get(r, "pickupType")) pickupType = (int)json_integer_value(j);
 		if (json_t* j = json_object_get(r, "stereoWidth")) stereoWidth = json_number_value(j);
 		if (json_t* j = json_object_get(r, "mouseMode")) mouseMode = (int)json_integer_value(j);
@@ -1008,7 +1036,27 @@ struct SlideDisplay : OpaqueWidget {
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);
 		if (!module) drawPreview(args);
 		else         drawLive(args);
+		drawRollName(args);
 		nvgRestore(args.vg);
+	}
+
+	// Which roll is selected, named. Sixteen of them are reachable by knob and
+	// by CV and none of them were written down anywhere you could see while
+	// playing -- so the six register patterns might as well not have existed.
+	void drawRollName(const DrawArgs& args) {
+		int pat = 0;
+		if (module) {
+			pat = (int)std::round(module->params[Slide::PATTERN_PARAM].getValue()
+			      + module->inputs[Slide::PATTERN_CV_INPUT].getVoltage() * 0.1f * SLIDE_NROLLS);
+		}
+		pat = clamp(pat, 0, SLIDE_NROLLS - 1);
+		bool on = module && module->params[Slide::AUTO_PARAM].getValue() > 0.5f;
+		NVGcontext* vg = args.vg;
+		sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
+		nvgFillColor(vg, on ? nvgRGB(0xec, 0x65, 0x2e) : nvgRGB(0x6a, 0x6a, 0x86));
+		nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+		nvgText(vg, box.size.x * 0.985f, box.size.y * 0.012f,
+		        string::f("%d  %s", pat + 1, SLIDE_ROLLS[pat].name).c_str(), NULL);
 	}
 
 	void drawNeck(const DrawArgs& args, const Lay& L) {
@@ -1213,6 +1261,7 @@ struct SlideWidget : ModuleWidget {
 		Slide* m = dynamic_cast<Slide*>(this->module);
 		assert(m);
 		menu->addChild(new MenuSeparator);
+		menu->addChild(createBoolPtrMenuItem("Auto roll moves the bar", "", &m->autoMovesBar));
 		menu->addChild(createSubmenuItem("Tuning", "", [=](Menu* sub) {
 			for (int t = 0; t < SLIDE_NTUNINGS; t++)
 				sub->addChild(createMenuItem(SLIDE_TUNINGS[t].name, "",
