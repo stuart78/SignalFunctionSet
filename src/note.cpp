@@ -246,11 +246,30 @@ struct Note : Module {
 	int currentRowCount() const { return SCALES[scaleIndex].size + 1; }
 
 	// V/oct (relative to C0=0) for a given matrix row in the current scale.
-	// The extra "octave" row (row == scaleSize) returns root + 12 semis.
+	// The extra row above the scale (row == scaleSize) is root + 12 for every
+	// scale that fits in an octave, and the scale's own next step for one that
+	// does not -- see below.
 	float voctForRow(int row) const {
 		int sz = currentScaleSize();
 		if (row < 0 || row > sz) return 0.f;
-		float semis = (row == sz) ? 12.f : SCALES[scaleIndex].intervals[row];
+		float semis;
+		if (row == sz) {
+			// The extra row above the scale. For a scale that lives inside an
+			// octave, the root an octave up IS its next step, which is why this
+			// was simply 12. The harmonic series climbs to 43 semitones, so 12
+			// lands BELOW nine of its own degrees and the top row of the matrix
+			// plays lower than the middle of it. Continue by the scale's own
+			// final interval instead -- which leaves every octave-bounded scale
+			// at exactly 12, so nothing else moves.
+			const sfs::Scale& sc = SCALES[scaleIndex];
+			semis = 12.f;
+			if (sz > 0 && semis <= sc.intervals[sz - 1]) {
+				float step = (sz > 1) ? sc.intervals[sz - 1] - sc.intervals[sz - 2] : 12.f;
+				semis = sc.intervals[sz - 1] + step;
+			}
+		} else {
+			semis = SCALES[scaleIndex].intervals[row];
+		}
 		semis += (float)rootNote;
 		semis += (float)octaveShift * 12.f;
 		return semis / 12.f;
