@@ -57,6 +57,12 @@ class Dx7Note {
   }
   int  algorithm() const { return algorithm_; }
 
+  // An explicit routing, from an expander. nullptr returns to the algorithm /
+  // morph path, and with neither set the note runs stock FmCore untouched.
+  void setMatrix(const FmMatrix* m) {
+    if (m) { mtxExt_ = *m; haveExt_ = true; } else { haveExt_ = false; }
+  }
+
   // SFS: a copy of the lowest carrier op's amplitude envelope (for display).
   Env carrierEnv() const;
 
@@ -67,6 +73,8 @@ class Dx7Note {
   int     morphAlgo_ = -1;
   int32_t morphT_ = 0;
   bool    morphDirty_ = true;
+  FmMatrix mtxExt_;
+  bool     haveExt_ = false;
   Env env_[6];
   FmOpParams params_[6];
   PitchEnv pitchenv_;

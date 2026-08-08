@@ -11,6 +11,16 @@
 
 struct BellEngineImpl;
 
+// The DX7 routing of one algorithm, as plain floats: w[src][dst] for dst 0..5
+// is how much of operator src is added to operator dst's PHASE (the FM index),
+// and w[src][6] is how much of it reaches the output (a plain VCA). Feedback is
+// a delayed edge and sits outside the matrix; -1 means none.
+//
+// Exported in this form so an expander can build and blend routings without
+// including any msfa header -- those define global Module/min/max/N and cannot
+// meet Rack's `using namespace rack`.
+void bellAlgorithmWeights(int algorithm, float w[6][7], int* fbSrc, int* fbDst);
+
 class BellEngine {
 public:
 	static const int BLOCK = 64;
@@ -38,6 +48,11 @@ public:
 	// SFS: morph the operator ROUTING toward another algorithm. amount 0 leaves
 	// every voice on the untouched engine path; algoB is 0..31.
 	void setMorph(int algoB, float amount);
+
+	// Drive the routing directly, overriding setMorph. Passing nullptr hands
+	// control back to the algorithm/morph path.
+	void setMatrixWeights(const float w[6][7], int fbSrc, int fbDst);
+	void clearMatrix();
                  // 0..16383, 8192 = center
 
 	void noteOn(int ch, int midinote, int velocity);

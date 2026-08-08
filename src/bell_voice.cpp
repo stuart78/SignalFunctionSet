@@ -17,6 +17,8 @@
 #include "msfa/controllers.h"
 #include "msfa/dx7note.h"
 
+#include "msfa/fm_matrix.h"
+
 #include "bell_patches.h"
 
 struct BellEngineImpl {
@@ -146,6 +148,37 @@ void BellEngine::noteOff(int ch) {
 	if (ch < 0 || ch >= MAX_CH) return;
 	p_->notes[ch].keyup();
 	p_->keyed[ch] = false;
+}
+
+void bellAlgorithmWeights(int algorithm, float w[6][7], int* fbSrc, int* fbDst) {
+	FmMatrix m;
+	fmMatrixFromAlgorithm(algorithm, m);
+	for (int i = 0; i < 6; i++)
+		for (int j = 0; j < 7; j++) w[i][j] = (float)m.w[i][j] / (float)FmMatrix::ONE;
+	if (fbSrc) *fbSrc = m.fbSrc;
+	if (fbDst) *fbDst = m.fbDst;
+}
+
+void BellEngine::setMatrixWeights(const float w[6][7], int fbSrc, int fbDst) {
+	FmMatrix m;
+	for (int i = 0; i < 6; i++)
+		for (int j = 0; j < 7; j++) {
+			float v = w[i][j];
+			if (v < 0.f) v = 0.f; if (v > 4.f) v = 4.f;   // headroom above unity
+			m.w[i][j] = (int32_t)(v * (float)FmMatrix::ONE + 0.5f);
+		}
+	m.fbSrc = fbSrc; m.fbDst = fbDst;
+	for (int ch = 0; ch < MAX_CH; ch++) {
+		p_->notes[ch].setMatrix(&m);
+		p_->vco[ch].setMatrix(&m);
+	}
+}
+
+void BellEngine::clearMatrix() {
+	for (int ch = 0; ch < MAX_CH; ch++) {
+		p_->notes[ch].setMatrix(nullptr);
+		p_->vco[ch].setMatrix(nullptr);
+	}
 }
 
 void BellEngine::setMorph(int algoB, float amount) {

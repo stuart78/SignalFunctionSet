@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "opmorph-messages.hpp"
 #include "bell_voice.h"
 #include <osdialog.h>
 #include <vector>
@@ -120,6 +121,7 @@ struct Bell : Module {
 
 	// display mirrors (GUI thread reads)
 	int  dispVoice = 0, dispBank = 0, dispAlgo = 0, dispCarrier = 0;
+	bool  hasExpander = false;          // OpMorph is driving the routing
 	float dispMorph = 0.f;              // display: how far toward algoB
 	int   dispAlgoB = 0;
 	char dispName[11] = {0};
@@ -160,6 +162,11 @@ struct Bell : Module {
 	}
 
 	Bell() {
+		// OpMorph hangs off the right. Both buffers are allocated here because
+		// Rack requires the mother to own them whether or not one is attached.
+		rightExpander.producerMessage = new OpMorphMessage();
+		rightExpander.consumerMessage = new OpMorphMessage();
+
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		configParam(VOICE_PARAM, 0.f, 31.f, 0.f, "Voice", "", 0.f, 1.f, 1.f);
 		paramQuantities[VOICE_PARAM]->snapEnabled = true;
@@ -232,6 +239,11 @@ struct Bell : Module {
 		if (v >= n) v = n - 1;
 		v = ((v + d) % n + n) % n;
 		params[VOICE_PARAM].setValue((float) v);
+	}
+
+	~Bell() {
+		delete (OpMorphMessage*) rightExpander.producerMessage;
+		delete (OpMorphMessage*) rightExpander.consumerMessage;
 	}
 
 	void process(const ProcessArgs& args) override {
@@ -313,7 +325,19 @@ struct Bell : Module {
 				+ inputs[MORPH_CV_INPUT].getVoltage() / 10.f, 0.f, 1.f);
 			int algoB = clamp((int) std::round(params[ALGOB_PARAM].getValue()
 				+ inputs[ALGOB_CV_INPUT].getVoltage() * 3.2f), 0, 31);
-			engine.setMorph(algoB, morph);
+			// An attached OpMorph drives the routing outright; without one, the
+			// panel's own morph applies. Checked every block so unplugging the
+			// expander hands control straight back.
+			OpMorphMessage* xm = nullptr;
+			if (rightExpander.module && rightExpander.module->model == modelOpMorph)
+				xm = (OpMorphMessage*) rightExpander.consumerMessage;
+			if (xm && xm->active) {
+				engine.setMatrixWeights(xm->w, xm->fbSrc, xm->fbDst);
+				hasExpander = true;
+			} else {
+				if (hasExpander) { engine.clearMatrix(); hasExpander = false; }
+				engine.setMorph(algoB, morph);
+			}
 			dispMorph = morph; dispAlgoB = algoB;
 
 			int fbOff = clamp((int) std::round(params[FEEDBACK_PARAM].getValue()

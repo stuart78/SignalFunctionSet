@@ -236,7 +236,12 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay,
   int fb = patchFeedback_ + ctrls->feedbackOffset;
   fb = max(0, min(8, fb));
   int fbshift = fb != 0 ? 8 - fb : 16;
-  // SFS: with no morph asked for, this is the untouched engine path.
+  // SFS: an expander's explicit routing wins; then the morph; then, with
+  // neither, the untouched engine path.
+  if (haveExt_) {
+    mcore_.compute(buf, params_, mtxExt_, fb_buf_, fbshift);
+    return;
+  }
   if (morphT_ <= 0 || morphAlgo_ < 0 || morphAlgo_ == algorithm_) {
     core_.compute(buf, params_, algorithm_, fb_buf_, fbshift);
     return;

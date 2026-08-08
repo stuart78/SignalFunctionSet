@@ -95,7 +95,7 @@
     {
       "slug": "FugueX",
       "name": "Fugue X",
-      "description": "Expander for Fugue — per-voice steps, range, sleep, probability, S&H mode, sorted CV outputs, and per-step trigger outputs",
+      "description": "Expander for Fugue \u2014 per-voice steps, range, sleep, probability, S&H mode, sorted CV outputs, and per-step trigger outputs",
       "manualUrl": "https://signalfunctionset.com/projects/fugue/",
       "tags": [
         "Sequencer",
@@ -195,7 +195,7 @@
     {
       "slug": "Vac",
       "name": "Vac",
-      "description": "Semi-stable A/R envelope with vactrol-like drift. A bipolar STAB control on rise and fall re-randomises the timing each trigger, so it wanders without collapsing. Linear↔exponential curve, latching loop, and an END trigger.",
+      "description": "Semi-stable A/R envelope with vactrol-like drift. A bipolar STAB control on rise and fall re-randomises the timing each trigger, so it wanders without collapsing. Linear\u2194exponential curve, latching loop, and an END trigger.",
       "manualUrl": "https://signalfunctionset.com/projects/vac/",
       "tags": [
         "Envelope generator",
@@ -353,7 +353,7 @@
     {
       "slug": "Crystal",
       "name": "Crystal",
-      "description": "A 3D echo chamber shaped like a real crystal. Sound enters at a movable emitter and reflects inside a genuine crystal habit — cube, dodecahedron, tetrahedron, quartz — heard at four listeners as quad outs. Size sweeps from pitched resonator to hall; rotate the crystal to move the echoes.",
+      "description": "A 3D echo chamber shaped like a real crystal. Sound enters at a movable emitter and reflects inside a genuine crystal habit \u2014 cube, dodecahedron, tetrahedron, quartz \u2014 heard at four listeners as quad outs. Size sweeps from pitched resonator to hall; rotate the crystal to move the echoes.",
       "tags": [
         "Reverb",
         "Delay",
@@ -392,6 +392,17 @@
       "tags": [
         "Physical modeling",
         "Synth voice",
+        "Polyphonic"
+      ],
+      "hidden": true
+    },
+    {
+      "slug": "OpMorph",
+      "name": "OP MORPH",
+      "description": "Expander for Operator: the DX7 operator routing as a matrix, navigated as a wrapping X/Y field of algorithms",
+      "tags": [
+        "Expander",
+        "Oscillator",
         "Polyphonic"
       ],
       "hidden": true

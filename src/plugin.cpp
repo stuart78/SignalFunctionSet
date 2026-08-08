@@ -40,6 +40,7 @@ void init(Plugin* p) {
 	p->addModel(modelLoom);
 	p->addModel(modelKey);
 	p->addModel(modelSlide);
+	p->addModel(modelOpMorph);
 
 	// Add modules here
 	// p->addModel(modelMyModule);
