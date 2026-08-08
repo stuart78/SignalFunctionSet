@@ -39,16 +39,23 @@ static const int OPM_COLS = 4, OPM_ROWS = 4;
 static const int OPM_SLOTS = OPM_COLS * OPM_ROWS;
 
 struct OpMorph : Module {
-	// Indices are stable: HEADING/SPEED replaced an absolute X/Y in place.
+	// Indices are stable across the reworkings: an absolute X/Y became a
+	// heading and a speed, and then a speed and a shape, all in place.
 	enum ParamId {
-		HEADING_PARAM, SPEED_PARAM, SPREAD_PARAM, STEP_PARAM,
+		SPEED_PARAM, SHAPE_PARAM, SPREAD_PARAM, STEP_PARAM,
+		MODE_PARAM,               // appended
 		PARAMS_LEN
 	};
 	enum InputId {
-		HEADING_CV_INPUT, SPEED_CV_INPUT, CLOCK_INPUT, RESET_INPUT,
+		SPEED_CV_INPUT, SHAPE_CV_INPUT, CLOCK_INPUT, RESET_INPUT,
 		PARAMS_UNUSED_INPUT,      // reserved; keeps later appends honest
 		INPUTS_LEN
 	};
+
+	// How the point travels the field. Borrowed from Gravity, which already
+	// solved "make a dot wander somewhere a person would not have drawn".
+	// Nothing bounces: the field is a torus, so everything wraps.
+	enum MoveMode { MOVE_DRIFT, MOVE_TURTLE, MOVE_WALK, MOVE_CIRCLE, MOVE_COUNT };
 	enum OutputId { OUTPUTS_LEN };
 	enum LightId { CONNECTED_LIGHT, LIGHTS_LEN };
 
@@ -64,6 +71,12 @@ struct OpMorph : Module {
 	bool  stepping = false;
 	dsp::SchmittTrigger clockTrig, resetTrig;
 
+	// travel state
+	float heading = (float)M_PI * 0.25f;
+	float cmdTime = 0.f, cmdDur = 0.f, moveRate = 0.f, turnRate = 0.f, turnAccel = 0.f;
+	float circPhase = 0.f, circCx = 2.f, circCy = 2.f;
+	int   lastMode = -1;
+
 	// display
 	float dispW[6][7] = {};
 	bool  dispActive = false;
@@ -75,15 +88,16 @@ struct OpMorph : Module {
 		leftExpander.producerMessage = new OpMorphMessage();
 		leftExpander.consumerMessage = new OpMorphMessage();
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		// A heading and a speed rather than a position. On a torus that is the
-		// natural pair: set a direction and the point travels forever, wrapping,
-		// instead of you steering it into an edge it cannot cross.
-		configParam(HEADING_PARAM, -180.f, 180.f, 30.f, "Heading", "°");
+		// SPEED is always speed; SHAPE is whatever gives that mode its character.
 		configParam(SPEED_PARAM, 0.f, 1.f, 0.15f, "Speed", " slots/s", 0.f, 4.f);
+		configParam(SHAPE_PARAM, 0.f, 1.f, 0.35f, "Shape — heading / turniness / wander / radius");
+		configSwitch(MODE_PARAM, 0.f, (float)(MOVE_COUNT - 1), (float)MOVE_TURTLE, "Movement",
+		             {"Drift", "Turtle", "Random walk", "Circle"});
+		getParamQuantity(MODE_PARAM)->snapEnabled = true;
 		configParam(SPREAD_PARAM, 0.f, 2.f, 1.f, "Depth", "x");
 		configSwitch(STEP_PARAM, 0.f, 1.f, 0.f, "Clock steps the field", {"Off", "On"});
-		configInput(HEADING_CV_INPUT, "Heading CV (±5V = ±180°)");
 		configInput(SPEED_CV_INPUT, "Speed CV (±5V)");
+		configInput(SHAPE_CV_INPUT, "Shape CV (±5V)");
 		configInput(CLOCK_INPUT, "Clock — steps to the next slot");
 		configInput(RESET_INPUT, "Return to the first slot");
 		// A spread of algorithms rather than 1..16: the field is nicer to travel
@@ -111,9 +125,77 @@ struct OpMorph : Module {
 		return v < 0.f ? v + n : v;
 	}
 
+	void advance(float dx, float dy) {
+		posX = wrapf(posX + dx, (float)OPM_COLS);
+		posY = wrapf(posY + dy, (float)OPM_ROWS);
+	}
+
+	// A LOGO turtle, after Gravity's: hold a command for a while, then pick
+	// another. Straight and gentle veers are common, corners and about-faces
+	// rare, and SHAPE tilts the dice toward the rare ones while shortening how
+	// long each command is held.
+	void newTurtleCmd(float speed, float shape) {
+		float u = 1.f - shape;
+		cmdDur = 0.25f + 3.5f * u * u;            // 0.25 .. 3.75 s
+		cmdTime = 0.f;
+		float V = 0.15f + speed;                  // slots/s
+		float W = (40.f + 260.f * shape) * (float)M_PI / 180.f;
+		turnAccel = 0.f;
+		float r = random::uniform();
+		float wild = 0.15f + 0.55f * shape;       // chance of something unusual
+		if (r > wild)            { moveRate = V;        turnRate = 0.f; }
+		else if (r > wild * 0.6f){ moveRate = V;        turnRate = (random::uniform() < .5f ? 1 : -1) * W * .35f; }
+		else if (r > wild * 0.3f){ moveRate = V * .85f; turnRate = (random::uniform() < .5f ? 1 : -1) * W; }
+		else if (r > wild * 0.1f){ moveRate = V * .25f; turnRate = (random::uniform() < .5f ? 1 : -1) * W * 2.6f; }
+		else {                                     // a spiral, tightening as it goes
+			float d = (random::uniform() < .5f) ? 1.f : -1.f;
+			moveRate = V; turnRate = d * W * .25f; turnAccel = d * W * 1.4f;
+		}
+	}
+
+	void travel(int mode, float speed, float shape, float dt) {
+		switch (mode) {
+			case MOVE_DRIFT: {                     // a straight line, forever
+				float th = shape * 2.f * (float)M_PI;
+				advance(std::cos(th) * speed * dt, std::sin(th) * speed * dt);
+				break;
+			}
+			case MOVE_TURTLE: {
+				cmdTime += dt;
+				if (cmdTime >= cmdDur) newTurtleCmd(speed, shape);
+				turnRate += turnAccel * dt;
+				heading  += turnRate * dt;
+				advance(std::sin(heading) * moveRate * dt, std::cos(heading) * moveRate * dt);
+				break;
+			}
+			case MOVE_WALK: {
+				// Brownian in HEADING rather than in position: jittering the
+				// position directly just vibrates in place, while jittering the
+				// direction actually goes somewhere.
+				//
+				// Scaled by sqrt(dt), not dt. A random step per sample accumulates
+				// as sqrt(n), so scaling it linearly makes the wander depend on the
+				// host's sample rate -- the same patch would drift differently at
+				// 96k than at 48k, and far too slowly at either.
+				heading += (2.f * random::uniform() - 1.f) * shape * 6.f * std::sqrt(dt);
+				advance(std::sin(heading) * speed * dt, std::cos(heading) * speed * dt);
+				break;
+			}
+			case MOVE_CIRCLE: {
+				float rad = 0.25f + shape * 1.75f;
+				circPhase += speed * dt / std::max(rad, 0.25f);
+				if (circPhase > 2.f * (float)M_PI) circPhase -= 2.f * (float)M_PI;
+				posX = wrapf(circCx + std::cos(circPhase) * rad, (float)OPM_COLS);
+				posY = wrapf(circCy + std::sin(circPhase) * rad, (float)OPM_ROWS);
+				break;
+			}
+		}
+	}
+
 	void process(const ProcessArgs& args) override {
 		if (resetTrig.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f)) {
 			stepIdx = 0; posX = posY = 0.f;
+			heading = (float)M_PI * 0.25f; circPhase = 0.f; cmdTime = cmdDur = 0.f;
 		}
 		stepping = params[STEP_PARAM].getValue() > 0.5f;
 		if (stepping && clockTrig.process(inputs[CLOCK_INPUT].getVoltage(), 0.1f, 1.f))
@@ -123,13 +205,13 @@ struct OpMorph : Module {
 			posX = (float)(stepIdx % OPM_COLS);
 			posY = (float)(stepIdx / OPM_COLS);
 		} else {
-			float headDeg = params[HEADING_PARAM].getValue()
-			              + inputs[HEADING_CV_INPUT].getVoltage() * 36.f;
 			float speed = clamp(params[SPEED_PARAM].getValue()
-			                  + inputs[SPEED_CV_INPUT].getVoltage() / 5.f, -1.f, 1.f) * 4.f;
-			float th = headDeg * (float)M_PI / 180.f;
-			posX = wrapf(posX + std::cos(th) * speed * args.sampleTime, (float)OPM_COLS);
-			posY = wrapf(posY + std::sin(th) * speed * args.sampleTime, (float)OPM_ROWS);
+			                  + inputs[SPEED_CV_INPUT].getVoltage() / 5.f, 0.f, 1.f) * 4.f;
+			float shape = clamp(params[SHAPE_PARAM].getValue()
+			                  + inputs[SHAPE_CV_INPUT].getVoltage() / 5.f, 0.f, 1.f);
+			int mode = clamp((int)std::round(params[MODE_PARAM].getValue()), 0, MOVE_COUNT - 1);
+			if (mode != lastMode) { cmdTime = cmdDur = 0.f; lastMode = mode; }
+			travel(mode, speed, shape, args.sampleTime);
 		}
 
 		// Bilinear over the four nearest slots, with wraparound indexing — this
@@ -349,15 +431,17 @@ struct OpMorphWidget : ModuleWidget {
 		addChild(disp);
 
 		const float colA = hp(2.75f), colB = hp(9);
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, hp(17))), module, OpMorph::HEADING_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, hp(19))), module, OpMorph::HEADING_CV_INPUT));
-		lbl->pairDown(colA, hp(17), hp(19), "HEADING");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, hp(17))), module, OpMorph::SPEED_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, hp(19))), module, OpMorph::SPEED_CV_INPUT));
-		lbl->pairDown(colB, hp(17), hp(19), "SPEED");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, hp(17))), module, OpMorph::SPEED_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, hp(19))), module, OpMorph::SPEED_CV_INPUT));
+		lbl->pairDown(colA, hp(17), hp(19), "SPEED");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, hp(17))), module, OpMorph::SHAPE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, hp(19))), module, OpMorph::SHAPE_CV_INPUT));
+		lbl->pairDown(colB, hp(17), hp(19), "SHAPE");
 
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, hp(22))), module, OpMorph::SPREAD_PARAM));
 		lbl->trim(colA, hp(22), "DEPTH");
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(6), hp(22))), module, OpMorph::MODE_PARAM));
+		lbl->trim(hp(6), hp(22), "MOVE");
 		addParam(createParamCentered<CKSS>(mm2px(Vec(colB, hp(22))), module, OpMorph::STEP_PARAM));
 		lbl->trim(colB, hp(22), "STEP");
 

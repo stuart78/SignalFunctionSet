@@ -60,8 +60,17 @@ class Dx7Note {
   // An explicit routing, from an expander. nullptr returns to the algorithm /
   // morph path, and with neither set the note runs stock FmCore untouched.
   void setMatrix(const FmMatrix* m) {
-    if (m) { mtxExt_ = *m; haveExt_ = true; } else { haveExt_ = false; }
+    if (!m) { haveExt_ = false; return; }
+    mtxExt_ = *m; haveExt_ = true;
+    // Which operators are CARRIERS now comes from the matrix's output column,
+    // not from the patch's algorithm. Otherwise the patch's own routing keeps
+    // leaking in through everything downstream that asks "is this a carrier":
+    // the BRIGHTNESS macro (which lifts modulators only), the VCO's envBypass
+    // hold, and the envelope the display draws. Changing the voice would then
+    // audibly alter a routing the voice no longer decides.
+    for (int op = 0; op < 6; op++) extCarrier_[op] = mtxExt_.w[op][6] > 0;
   }
+  bool carrierAt(int op) const { return haveExt_ ? extCarrier_[op] : isCarrier_[op]; }
 
   // SFS: a copy of the lowest carrier op's amplitude envelope (for display).
   Env carrierEnv() const;
@@ -75,6 +84,7 @@ class Dx7Note {
   bool    morphDirty_ = true;
   FmMatrix mtxExt_;
   bool     haveExt_ = false;
+  bool     extCarrier_[6] = {false, false, false, false, false, false};
   Env env_[6];
   FmOpParams params_[6];
   PitchEnv pitchenv_;

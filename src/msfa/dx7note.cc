@@ -222,9 +222,9 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay,
     // envBypass (VCO out): hold CARRIERS at peak for constant amplitude, but let
     // MODULATORS run their normal envelope so the timbre settles to the patch's
     // sustained tone instead of every op screaming at full FM index.
-    int32_t level = (envBypass && isCarrier_[op]) ? opPeakLevel_[op]
+    int32_t level = (envBypass && carrierAt(op)) ? opPeakLevel_[op]
                                                   : env_[op].getsample();
-    if (brightShift != 0 && !isCarrier_[op]) level += brightShift;
+    if (brightShift != 0 && !carrierAt(op)) level += brightShift;
     int32_t gain = ctrls->opEnabled[op] ? Exp2::lookup(level - (14 * (1 << 24))) : 0;
     params_[op].freq = Freqlut::lookup(basepitch_[op] + pitchmod);
     params_[op].gain[1] = gain;
@@ -258,7 +258,7 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay,
 
 Env Dx7Note::carrierEnv() const {
   int op = 0;
-  for (int i = 0; i < 6; i++) if (isCarrier_[i]) { op = i; break; }
+  for (int i = 0; i < 6; i++) if (carrierAt(i)) { op = i; break; }
   return env_[op];
 }
 
