@@ -148,6 +148,16 @@ void BellEngine::noteOff(int ch) {
 	p_->keyed[ch] = false;
 }
 
+void BellEngine::setMorph(int algoB, float amount) {
+	if (algoB < 0) algoB = 0; if (algoB > 31) algoB = 31;
+	if (amount < 0.f) amount = 0.f; if (amount > 1.f) amount = 1.f;
+	int32_t t = (int32_t)(amount * 32768.f + 0.5f);
+	for (int ch = 0; ch < MAX_CH; ch++) {
+		p_->notes[ch].setMorph(algoB, t);
+		p_->vco[ch].setMorph(algoB, t);
+	}
+}
+
 void BellEngine::setPitchOffset(int ch, int32_t off) {
 	if (ch < 0 || ch >= MAX_CH) return;
 	p_->notes[ch].setPitchOffset(off);

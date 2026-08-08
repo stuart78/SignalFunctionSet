@@ -33,7 +33,12 @@ public:
 	int  carrierMask() const;                   // bit op set if msfa op is a carrier
 	void getVoiceName(char out[11]) const;      // 10-char DX7 name + NUL
 
-	void setPitchBend14(int v);                 // 0..16383, 8192 = center
+	void setPitchBend14(int v);
+
+	// SFS: morph the operator ROUTING toward another algorithm. amount 0 leaves
+	// every voice on the untouched engine path; algoB is 0..31.
+	void setMorph(int algoB, float amount);
+                 // 0..16383, 8192 = center
 
 	void noteOn(int ch, int midinote, int velocity);
 	void noteOff(int ch);

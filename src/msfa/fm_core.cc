@@ -39,10 +39,6 @@ enum FmOperatorFlags {
   FB_OUT = 1 << 7
 };
 
-struct FmAlgorithm {
-  int ops[6];
-};
-
 const FmAlgorithm algorithms[32] = {
   { { 0xc1, 0x11, 0x11, 0x14, 0x01, 0x14 } }, // 1
   { { 0x01, 0x11, 0x11, 0x14, 0xc1, 0x14 } }, // 2

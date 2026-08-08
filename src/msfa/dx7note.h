@@ -26,6 +26,7 @@
 #include "env.h"
 #include "pitchenv.h"
 #include "fm_core.h"
+#include "fm_matrix.h"
 
 class Dx7Note {
  public:
@@ -49,11 +50,23 @@ class Dx7Note {
   // logfreq units (1 octave = 1<<24). Set each block by the host.
   void setPitchOffset(int32_t off) { pitchOffset_ = off; }
 
+  // SFS: morph the ROUTING toward another algorithm. t is Q15; 0 leaves this
+  // note on FmCore untouched, so an unmorphed voice is bit-identical.
+  void setMorph(int algoB, int32_t t) {
+    if (algoB != morphAlgo_ || t != morphT_) { morphAlgo_ = algoB; morphT_ = t; morphDirty_ = true; }
+  }
+  int  algorithm() const { return algorithm_; }
+
   // SFS: a copy of the lowest carrier op's amplitude envelope (for display).
   Env carrierEnv() const;
 
  private:
   FmCore core_;
+  FmMatrixCore mcore_;
+  FmMatrix     mtx_;
+  int     morphAlgo_ = -1;
+  int32_t morphT_ = 0;
+  bool    morphDirty_ = true;
   Env env_[6];
   FmOpParams params_[6];
   PitchEnv pitchenv_;

@@ -19,6 +19,13 @@
 
 #include "aligned_buf.h"
 
+// SFS: the algorithm table and its shape are exported so fm_matrix.cc can READ
+// them. A namespace-scope `const` has internal linkage in C++, so without this
+// declaration the only way to reach the table is to copy it -- and a second
+// copy of the routing is exactly the thing that goes stale.
+struct FmAlgorithm { int ops[6]; };
+extern const FmAlgorithm algorithms[32];
+
 struct FmOpParams {
   int32_t gain[2];
   int32_t freq;

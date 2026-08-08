@@ -186,6 +186,7 @@ void Dx7Note::init(const char patch[156], int midinote, int velocity,
   pitchenv_.set(rates, levels);
   if (!retrigger) fb_buf_[0] = fb_buf_[1] = 0;  // SFS: was uninitialized → garbage feedback on note 1
   algorithm_ = patch[134];
+  morphDirty_ = true;               // SFS: algorithm_ feeds the blend
   if (algorithm_ < 0 || algorithm_ > 31) algorithm_ = 0;  // SFS: guard bad patches
   int feedback = patch[135];
   fb_shift_ = feedback != 0 ? 8 - feedback : 16;
@@ -235,7 +236,19 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay,
   int fb = patchFeedback_ + ctrls->feedbackOffset;
   fb = max(0, min(8, fb));
   int fbshift = fb != 0 ? 8 - fb : 16;
-  core_.compute(buf, params_, algorithm_, fb_buf_, fbshift);
+  // SFS: with no morph asked for, this is the untouched engine path.
+  if (morphT_ <= 0 || morphAlgo_ < 0 || morphAlgo_ == algorithm_) {
+    core_.compute(buf, params_, algorithm_, fb_buf_, fbshift);
+    return;
+  }
+  if (morphDirty_) {
+    FmMatrix a, b;
+    fmMatrixFromAlgorithm(algorithm_, a);
+    fmMatrixFromAlgorithm(morphAlgo_, b);
+    fmMatrixBlend(a, b, morphT_, mtx_);
+    morphDirty_ = false;
+  }
+  mcore_.compute(buf, params_, mtx_, fb_buf_, fbshift);
 }
 
 Env Dx7Note::carrierEnv() const {

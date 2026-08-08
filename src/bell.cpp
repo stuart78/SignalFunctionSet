@@ -80,11 +80,16 @@ static const struct AlgoOp { uint8_t id, x, y, link, fb; } kAlgo[32][6] = {
 struct Bell : Module {
 	enum ParamId {
 		VOICE_PARAM, BANK_PARAM, VOICE_PREV_PARAM, VOICE_NEXT_PARAM,
-		TUNE_PARAM, BRIGHTNESS_PARAM, FEEDBACK_PARAM, PARAMS_LEN
+		TUNE_PARAM, BRIGHTNESS_PARAM, FEEDBACK_PARAM,
+		// ── appended; Rack serialises by index, so these stay at the end ────
+		MORPH_PARAM, ALGOB_PARAM,
+		PARAMS_LEN
 	};
 	enum InputId {
 		VOCT_INPUT, GATE_INPUT, VEL_INPUT, VOICE_CV_INPUT, BANK_CV_INPUT,
-		TUNE_CV_INPUT, BRIGHTNESS_CV_INPUT, FEEDBACK_CV_INPUT, INPUTS_LEN
+		TUNE_CV_INPUT, BRIGHTNESS_CV_INPUT, FEEDBACK_CV_INPUT,
+		MORPH_CV_INPUT, ALGOB_CV_INPUT,
+		INPUTS_LEN
 	};
 	enum OutputId { AUDIO_OUTPUT, VCO_OUTPUT, ENV_OUTPUT, OUTPUTS_LEN };
 	enum LightId { LIGHTS_LEN };
@@ -115,6 +120,8 @@ struct Bell : Module {
 
 	// display mirrors (GUI thread reads)
 	int  dispVoice = 0, dispBank = 0, dispAlgo = 0, dispCarrier = 0;
+	float dispMorph = 0.f;              // display: how far toward algoB
+	int   dispAlgoB = 0;
 	char dispName[11] = {0};
 	int  screenTab = 0;   // 0 = Operators, 1 = Envelope
 	float outLevelDb = 0.f;   // user output level trim (context menu), -12..+12 dB
@@ -171,6 +178,11 @@ struct Bell : Module {
 		configInput(BANK_CV_INPUT, "Bank select CV (scale set in right-click menu)");
 		configInput(TUNE_CV_INPUT, "Tune CV (1V/oct)");
 		configInput(BRIGHTNESS_CV_INPUT, "Brightness CV (±5V)");
+		configParam(MORPH_PARAM, 0.f, 1.f, 0.f, "Algorithm morph", "%", 0.f, 100.f);
+		configParam(ALGOB_PARAM, 0.f, 31.f, 0.f, "Morph target algorithm", "", 0.f, 1.f, 1.f);
+		getParamQuantity(ALGOB_PARAM)->snapEnabled = true;
+		configInput(MORPH_CV_INPUT, "Algorithm morph CV (0–10V)");
+		configInput(ALGOB_CV_INPUT, "Morph target algorithm CV (0.32V per algorithm)");
 		configInput(FEEDBACK_CV_INPUT, "Feedback CV (±5V)");
 		configOutput(AUDIO_OUTPUT, "VCA — voice audio with its internal envelope (poly)");
 		configOutput(VCO_OUTPUT, "VCO — raw tone, no internal envelope (poly)");
@@ -295,6 +307,15 @@ struct Bell : Module {
 			float brightness = clamp(params[BRIGHTNESS_PARAM].getValue()
 				+ inputs[BRIGHTNESS_CV_INPUT].getVoltage() / 5.f, -1.f, 1.f);
 			engine.setBrightness(brightness);
+			// Routing morph: 0 leaves every voice on the stock engine path, so a
+			// patch that does not use it is bit-identical to before.
+			float morph = clamp(params[MORPH_PARAM].getValue()
+				+ inputs[MORPH_CV_INPUT].getVoltage() / 10.f, 0.f, 1.f);
+			int algoB = clamp((int) std::round(params[ALGOB_PARAM].getValue()
+				+ inputs[ALGOB_CV_INPUT].getVoltage() * 3.2f), 0, 31);
+			engine.setMorph(algoB, morph);
+			dispMorph = morph; dispAlgoB = algoB;
+
 			int fbOff = clamp((int) std::round(params[FEEDBACK_PARAM].getValue()
 				+ inputs[FEEDBACK_CV_INPUT].getVoltage() / 5.f * 7.f), -7, 7);
 			engine.setFeedbackOffset(fbOff);
@@ -816,6 +837,31 @@ struct BellWidget : ModuleWidget {
 	void appendContextMenu(Menu* menu) override {
 		Bell* m = dynamic_cast<Bell*>(module);
 		if (!m) return;
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuLabel("Algorithm morph"));
+		// The routing of two algorithms, blended. At 0 the voice runs the stock
+		// engine path and is bit-identical to before; part-way, an operator can
+		// modulate the one below it AND sound as its own carrier, which is a
+		// structure no DX7 algorithm has a number for.
+		//
+		// Here rather than on the panel because Operator is 10HP and full, and
+		// res/operator.svg is a designed face -- two knobs and two CV jacks is a
+		// panel decision, not one to squeeze in from the code side. The params
+		// and their CV inputs exist, so the jacks are a placement away.
+		{
+			struct MorphSlider : ui::Slider {
+				MorphSlider(Quantity* q) { quantity = q; box.size.x = 200.f; }
+			};
+			menu->addChild(new MorphSlider(m->getParamQuantity(Bell::MORPH_PARAM)));
+			std::vector<std::string> algs;
+			for (int i = 0; i < 32; i++) algs.push_back(string::f("Algorithm %d", i + 1));
+			menu->addChild(createIndexSubmenuItem("Morph toward", algs,
+				[=]() { return (int) std::round(m->params[Bell::ALGOB_PARAM].getValue()); },
+				[=](int i) { m->params[Bell::ALGOB_PARAM].setValue((float) i); }));
+			menu->addChild(createMenuLabel(
+				string::f("   this patch is algorithm %d", m->dispAlgo + 1)));
+		}
+
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Banks"));
 		menu->addChild(createMenuItem("Load bank (.syx)…", "", [m]() {
