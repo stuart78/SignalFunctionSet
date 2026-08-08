@@ -71,6 +71,14 @@ struct OpMorph : Module {
 	bool  stepping = false;
 	dsp::SchmittTrigger clockTrig, resetTrig;
 
+	// Where it has been. Sampled on a timer rather than per frame, so the trail
+	// is the same length whatever the frame rate, and lives on the module so it
+	// survives the display being rebuilt.
+	static const int TRAIL_N = 192;
+	float trailX[TRAIL_N] = {}, trailY[TRAIL_N] = {};
+	int   trailHead = 0, trailFill = 0;
+	float trailTimer = 0.f;
+
 	// travel state
 	float heading = (float)M_PI * 0.25f;
 	float cmdTime = 0.f, cmdDur = 0.f, moveRate = 0.f, turnRate = 0.f, turnAccel = 0.f;
@@ -196,6 +204,7 @@ struct OpMorph : Module {
 		if (resetTrig.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f)) {
 			stepIdx = 0; posX = posY = 0.f;
 			heading = (float)M_PI * 0.25f; circPhase = 0.f; cmdTime = cmdDur = 0.f;
+			trailHead = trailFill = 0;
 		}
 		stepping = params[STEP_PARAM].getValue() > 0.5f;
 		if (stepping && clockTrig.process(inputs[CLOCK_INPUT].getVoltage(), 0.1f, 1.f))
@@ -243,6 +252,14 @@ struct OpMorph : Module {
 		bool motherHere = leftExpander.module && leftExpander.module->model == modelOperator;
 		dispActive = motherHere;
 		lights[CONNECTED_LIGHT].setBrightness(motherHere ? 1.f : 0.f);
+		trailTimer += args.sampleTime;
+		if (trailTimer >= 0.008f) {                 // ~1.5s of trail over 192 points
+			trailTimer = 0.f;
+			trailX[trailHead] = posX; trailY[trailHead] = posY;
+			trailHead = (trailHead + 1) % TRAIL_N;
+			if (trailFill < TRAIL_N) trailFill++;
+		}
+
 		OpMorphMessage* msg = (OpMorphMessage*) leftExpander.producerMessage;
 		if (msg) {
 			msg->active = motherHere;
@@ -282,6 +299,34 @@ struct OpMorphDisplay : Widget {
 	std::shared_ptr<Font> font;
 
 	int selected = -1;
+
+	// The trail, oldest faintest. A segment is DROPPED where the point crossed
+	// a seam: on a torus a wrap is a jump of nearly the whole field, and joining
+	// those two ends draws a line straight back across everything the point did
+	// not travel.
+	void drawTrail(NVGcontext* vg, float x, float y, float cw, float ch) {
+		if (!module || module->trailFill < 2) return;
+		int n = module->trailFill;
+		int oldest = (module->trailHead - n + OpMorph::TRAIL_N) % OpMorph::TRAIL_N;
+		float px = 0.f, py = 0.f;
+		bool have = false;
+		for (int k = 0; k < n; k++) {
+			int i = (oldest + k) % OpMorph::TRAIL_N;
+			float tx = x + module->trailX[i] * cw + cw / 2;
+			float ty = y + module->trailY[i] * ch + ch / 2;
+			if (have && std::fabs(tx - px) < cw * OPM_COLS * 0.5f
+			         && std::fabs(ty - py) < ch * OPM_ROWS * 0.5f) {
+				nvgBeginPath(vg);
+				nvgMoveTo(vg, px, py);
+				nvgLineTo(vg, tx, ty);
+				nvgStrokeColor(vg, nvgTransRGBA(OPM_HOT, (int)(12 + 90.f * k / n)));
+				nvgStrokeWidth(vg, 1.3f);
+				nvgStroke(vg);
+			}
+			px = tx; py = ty; have = true;
+		}
+	}
+
 	void drawField(NVGcontext* vg, float x, float y, float w, float h,
 	               const int* algo, float px, float py, bool live) {
 		float cw = w / OPM_COLS, ch = h / OPM_ROWS;
@@ -308,6 +353,7 @@ struct OpMorphDisplay : Widget {
 		if (!live) return;
 		nvgSave(vg);
 		nvgScissor(vg, x, y, w, h);
+		drawTrail(vg, x, y, cw, ch);
 		float gx = x + px * cw + cw / 2, gy = y + py * ch + ch / 2;
 		nvgBeginPath(vg);
 		nvgCircle(vg, gx, gy, 4.2f);
