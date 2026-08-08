@@ -55,7 +55,10 @@ struct OpMorph : Module {
 	// How the point travels the field. Borrowed from Gravity, which already
 	// solved "make a dot wander somewhere a person would not have drawn".
 	// Nothing bounces: the field is a torus, so everything wraps.
-	enum MoveMode { MOVE_DRIFT, MOVE_TURTLE, MOVE_WALK, MOVE_CIRCLE, MOVE_COUNT };
+	// MOVE_LINEAR is appended, not slotted in front where it reads best: the
+	// mode is a stored param index and inserting would re-point saved patches.
+	enum MoveMode { MOVE_DRIFT, MOVE_TURTLE, MOVE_WALK, MOVE_CIRCLE,
+	                MOVE_LINEAR, MOVE_COUNT };
 	enum OutputId { OUTPUTS_LEN };
 	enum LightId { CONNECTED_LIGHT, LIGHTS_LEN };
 
@@ -65,7 +68,8 @@ struct OpMorph : Module {
 	float slotW[OPM_SLOTS][6][7];
 	int   slotFbSrc[OPM_SLOTS], slotFbDst[OPM_SLOTS];
 
-	float posX = 0.f, posY = 0.f;        // in slot units, wrapped to [0, COLS)
+	float posX = 0.f, posY = 0.f;        // the continuous path, always running
+	float outX = 0.f, outY = 0.f;        // what actually drives the blend
 	int   editSlot = 0;
 	int   stepIdx = 0;                   // clock walks the field slot by slot
 	bool  stepping = false;
@@ -84,6 +88,14 @@ struct OpMorph : Module {
 	float cmdTime = 0.f, cmdDur = 0.f, moveRate = 0.f, turnRate = 0.f, turnAccel = 0.f;
 	float circPhase = 0.f, circCx = 2.f, circCy = 2.f;
 	int   lastMode = -1;
+	bool  everClocked = false;
+
+	// A mask over the matrix, independent of wherever the point is standing:
+	// switching a node off mutes that path across the whole field, so you can
+	// take one modulation edge out of every algorithm at once. Structurally
+	// empty cells (a source cannot modulate itself or anything before it) are
+	// not togglable.
+	bool cellOn[6][7];
 
 	// display
 	float dispW[6][7] = {};
@@ -100,10 +112,14 @@ struct OpMorph : Module {
 		configParam(SPEED_PARAM, 0.f, 1.f, 0.15f, "Speed", " slots/s", 0.f, 4.f);
 		configParam(SHAPE_PARAM, 0.f, 1.f, 0.35f, "Shape — heading / turniness / wander / radius");
 		configSwitch(MODE_PARAM, 0.f, (float)(MOVE_COUNT - 1), (float)MOVE_TURTLE, "Movement",
-		             {"Drift", "Turtle", "Random walk", "Circle"});
+		             {"Drift", "Turtle", "Random walk", "Circle", "Linear"});
 		getParamQuantity(MODE_PARAM)->snapEnabled = true;
 		configParam(SPREAD_PARAM, 0.f, 2.f, 1.f, "Depth", "x");
-		configSwitch(STEP_PARAM, 0.f, 1.f, 0.f, "Clock steps the field", {"Off", "On"});
+		// STEP does not replace the movement, it QUANTIZES it: the path keeps
+		// running underneath and the clock snaps the output to the nearest slot,
+		// so whatever shape the turtle or the walk is drawing comes out on the
+		// beat. Linear is the exception -- there a clock means one slot forward.
+		configSwitch(STEP_PARAM, 0.f, 1.f, 0.f, "Clock quantizes the movement", {"Off", "On"});
 		configInput(SPEED_CV_INPUT, "Speed CV (±5V)");
 		configInput(SHAPE_CV_INPUT, "Shape CV (±5V)");
 		configInput(CLOCK_INPUT, "Clock — steps to the next slot");
@@ -114,6 +130,7 @@ struct OpMorph : Module {
 			0, 1, 4, 6,  7, 9, 13, 15,  17, 18, 20, 21,  24, 27, 29, 31
 		};
 		for (int i = 0; i < OPM_SLOTS; i++) loadSlot(i, SEED[i]);
+		for (int i = 0; i < 6; i++) for (int j = 0; j < 7; j++) cellOn[i][j] = true;
 	}
 
 	~OpMorph() {
@@ -204,29 +221,46 @@ struct OpMorph : Module {
 		if (resetTrig.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f)) {
 			stepIdx = 0; posX = posY = 0.f;
 			heading = (float)M_PI * 0.25f; circPhase = 0.f; cmdTime = cmdDur = 0.f;
-			trailHead = trailFill = 0;
+			trailHead = trailFill = 0; everClocked = false;
 		}
 		stepping = params[STEP_PARAM].getValue() > 0.5f;
-		if (stepping && clockTrig.process(inputs[CLOCK_INPUT].getVoltage(), 0.1f, 1.f))
-			stepIdx = (stepIdx + 1) % OPM_SLOTS;
+		bool clocked = clockTrig.process(inputs[CLOCK_INPUT].getVoltage(), 0.1f, 1.f);
+		if (stepping && clocked) stepIdx = (stepIdx + 1) % OPM_SLOTS;
 
-		if (stepping) {
+		float speed = clamp(params[SPEED_PARAM].getValue()
+		                  + inputs[SPEED_CV_INPUT].getVoltage() / 5.f, 0.f, 1.f) * 4.f;
+		float shape = clamp(params[SHAPE_PARAM].getValue()
+		                  + inputs[SHAPE_CV_INPUT].getVoltage() / 5.f, 0.f, 1.f);
+		int mode = clamp((int)std::round(params[MODE_PARAM].getValue()), 0, MOVE_COUNT - 1);
+		if (mode != lastMode) { cmdTime = cmdDur = 0.f; lastMode = mode; }
+
+		if (mode == MOVE_LINEAR && stepping) {
+			// A plain sequencer: one slot per clock, along the row, on to the next
+			// row, and round to the beginning.
 			posX = (float)(stepIdx % OPM_COLS);
 			posY = (float)(stepIdx / OPM_COLS);
 		} else {
-			float speed = clamp(params[SPEED_PARAM].getValue()
-			                  + inputs[SPEED_CV_INPUT].getVoltage() / 5.f, 0.f, 1.f) * 4.f;
-			float shape = clamp(params[SHAPE_PARAM].getValue()
-			                  + inputs[SHAPE_CV_INPUT].getVoltage() / 5.f, 0.f, 1.f);
-			int mode = clamp((int)std::round(params[MODE_PARAM].getValue()), 0, MOVE_COUNT - 1);
-			if (mode != lastMode) { cmdTime = cmdDur = 0.f; lastMode = mode; }
 			travel(mode, speed, shape, args.sampleTime);
+		}
+
+		if (stepping) {
+			// Snap on the clock and hold. The path underneath never stops, so the
+			// figure it is drawing arrives quantized rather than being replaced by
+			// a different, duller one.
+			if (clocked || !everClocked) {          // snap once on arrival, then on clocks
+				outX = wrapf(std::round(posX), (float)OPM_COLS);
+				outY = wrapf(std::round(posY), (float)OPM_ROWS);
+				everClocked = true;
+			}
+		} else {
+			outX = posX; outY = posY;
+			everClocked = false;               // so re-arming STEP snaps immediately
 		}
 
 		// Bilinear over the four nearest slots, with wraparound indexing — this
 		// is what makes travelling off one edge continuous with the other.
-		int x0 = (int)posX, y0 = (int)posY;
-		float fx = posX - x0, fy = posY - y0;
+		int x0 = (int)outX, y0 = (int)outY;
+		float fx = outX - x0, fy = outY - y0;
 		int x1 = (x0 + 1) % OPM_COLS, y1 = (y0 + 1) % OPM_ROWS;
 		int s00 = y0 * OPM_COLS + x0, s10 = y0 * OPM_COLS + x1;
 		int s01 = y1 * OPM_COLS + x0, s11 = y1 * OPM_COLS + x1;
@@ -242,6 +276,7 @@ struct OpMorph : Module {
 				// DEPTH scales the FM columns only. Scaling the output column too
 				// would just be a volume knob, and there is one of those already.
 				w[i][j] = (j < 6) ? v * depth : v;
+				if (!cellOn[i][j]) w[i][j] = 0.f;
 				dispW[i][j] = w[i][j];
 			}
 		// The loop follows whichever corner is nearest, since a fractional
@@ -255,7 +290,7 @@ struct OpMorph : Module {
 		trailTimer += args.sampleTime;
 		if (trailTimer >= 0.008f) {                 // ~1.5s of trail over 192 points
 			trailTimer = 0.f;
-			trailX[trailHead] = posX; trailY[trailHead] = posY;
+			trailX[trailHead] = outX; trailY[trailHead] = outY;
 			trailHead = (trailHead + 1) % TRAIL_N;
 			if (trailFill < TRAIL_N) trailFill++;
 		}
@@ -276,6 +311,10 @@ struct OpMorph : Module {
 		for (int i = 0; i < OPM_SLOTS; i++) json_array_append_new(slots, json_integer(slotAlgo[i]));
 		json_object_set_new(root, "slots", slots);
 		json_object_set_new(root, "editSlot", json_integer(editSlot));
+		json_t* mask = json_array();
+		for (int i = 0; i < 6; i++)
+			for (int j = 0; j < 7; j++) json_array_append_new(mask, json_boolean(cellOn[i][j]));
+		json_object_set_new(root, "cellOn", mask);
 		return root;
 	}
 	void dataFromJson(json_t* root) override {
@@ -283,6 +322,12 @@ struct OpMorph : Module {
 			for (int i = 0; i < OPM_SLOTS && i < (int)json_array_size(slots); i++)
 				loadSlot(i, (int)json_integer_value(json_array_get(slots, i)));
 		if (json_t* j = json_object_get(root, "editSlot")) editSlot = (int)json_integer_value(j);
+		if (json_t* mask = json_object_get(root, "cellOn"))
+			for (int i = 0; i < 6; i++)
+				for (int j = 0; j < 7; j++) {
+					json_t* v = json_array_get(mask, i * 7 + j);
+					if (v) cellOn[i][j] = json_boolean_value(v);
+				}
 	}
 };
 
@@ -370,12 +415,20 @@ struct OpMorphDisplay : Widget {
 			for (int j = 0; j < 7; j++) {
 				float cx = x + j * cw, cy = y + i * ch;
 				bool usable = (j == 6) || (j > i);       // the rest is structurally empty
+				bool on = !module || module->cellOn[i][j];
 				float v = clamp(ww ? ww[i][j] : 0.f, 0.f, 1.f);
 				nvgBeginPath(vg);
 				nvgRoundedRect(vg, cx + 0.8f, cy + 0.8f, cw - 1.6f, ch - 1.6f, 1.5f);
 				nvgFillColor(vg, usable ? OPM_DIM : nvgRGB(0x22, 0x22, 0x38));
 				nvgFill(vg);
-				if (usable && v > 0.004f) {
+				// A node switched off keeps its outline, so you can see it is a
+				// path you muted rather than one the field is simply not using.
+				if (usable && !on) {
+					nvgBeginPath(vg);
+					nvgMoveTo(vg, cx + 2.2f, cy + ch / 2); nvgLineTo(vg, cx + cw - 2.2f, cy + ch / 2);
+					nvgStrokeColor(vg, OPM_MID); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
+				}
+				if (usable && on && v > 0.004f) {
 					nvgBeginPath(vg);
 					nvgRoundedRect(vg, cx + 0.8f, cy + 0.8f, cw - 1.6f, (ch - 1.6f) * v, 1.5f);
 					// the output column is a level; the rest is FM index
@@ -383,6 +436,18 @@ struct OpMorphDisplay : Widget {
 					nvgFill(vg);
 				}
 			}
+	}
+
+	// Which matrix cell is under a point, packed as i*7+j, or -1.
+	int cellAt(Vec p) {
+		float pad = 4.f, w = box.size.x - 2 * pad, fieldH = box.size.y * 0.46f;
+		float my = pad * 2 + fieldH, mh = box.size.y - fieldH - 3 * pad;
+		if (p.x < pad || p.x > pad + w || p.y < my || p.y > my + mh) return -1;
+		int j = (int)((p.x - pad) / (w / 7.f));
+		int i = (int)((p.y - my) / (mh / 6.f));
+		if (i < 0 || i > 5 || j < 0 || j > 6) return -1;
+		if (!(j == 6 || j > i)) return -1;            // structurally empty
+		return i * 7 + j;
 	}
 
 	// Which slot is under a point, or -1 outside the field.
@@ -401,6 +466,11 @@ struct OpMorphDisplay : Widget {
 		if (module && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT) {
 			int s = slotAt(e.pos);
 			if (s >= 0) { module->editSlot = s; e.consume(this); return; }
+			int c = cellAt(e.pos);
+			if (c >= 0) {
+				module->cellOn[c / 7][c % 7] = !module->cellOn[c / 7][c % 7];
+				e.consume(this); return;
+			}
 		}
 		Widget::onButton(e);
 	}
@@ -437,7 +507,7 @@ struct OpMorphDisplay : Widget {
 		if (!module) { drawPreview(vg, pad, w, fieldH); return; }
 		selected = module->editSlot;
 		drawField(vg, pad, pad, w, fieldH, module->slotAlgo,
-		          module->posX, module->posY, true);
+		          module->outX, module->outY, true);
 		drawMatrix(vg, pad, pad * 2 + fieldH, w, box.size.y - fieldH - 3 * pad, module->dispW);
 		if (!module->dispActive && font && font->handle >= 0) {
 			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
