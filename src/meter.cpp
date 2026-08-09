@@ -137,6 +137,9 @@ struct Meter : Module {
 
 	// --- Encoder-safe pulse width (index into sfs::PULSE_WIDTHS) ---
 	int pulseWidthIdx = 0;   // 0 == 1 ms (legacy default)
+	// Period of each subdivision in samples, refreshed every process() call.
+	float basePeriods[NUM_OUTPUTS] = {};
+	float sampleTimeCached = 1.f / 44100.f;
 
 	// --- External clock measurement ---
 	int samplesSinceLastExtPulse = 0;
@@ -174,6 +177,8 @@ struct Meter : Module {
 			frac = ((float)sixteenthCount + sub) / (float)sixteenthsPerBar;
 		}
 		m->barPos = (float)barsSinceReset + frac;
+		m->quarterSec = lastSamplesPerQuarter * sampleTimeCached;
+		m->barSec     = basePeriods[SUB_BAR] * sampleTimeCached;
 		rightExpander.requestMessageFlip();
 	}
 
@@ -335,7 +340,8 @@ struct Meter : Module {
 		// here would inject an extra CLOCK into modules clocked from a grid
 		// output without a Reset cable.
 		for (int i = 0; i < NUM_OUTPUTS; i++) {
-			pulses[i].trigger(sfs::pulseWidthSec(pulseWidthIdx));
+			pulses[i].trigger(sfs::pulseWidthSec(pulseWidthIdx,
+			                                     basePeriods[i] * sampleTimeCached));
 		}
 		displayedSixteenth = 0;
 		barsSinceReset = 0;
@@ -388,6 +394,8 @@ struct Meter : Module {
 			&& resetInputTrigger.process(inputs[RESET_INPUT].getVoltage());
 		if (resetBtn || resetIn) {
 			doReset();
+			// RESET stays a trigger whatever the gate setting says -- a reset with a
+			// duty cycle is not a thing, and a downstream module wants the edge.
 			resetOutPulse.trigger(sfs::pulseWidthSec(pulseWidthIdx));
 		}
 
@@ -530,13 +538,15 @@ struct Meter : Module {
 			for (int i = 0; i < 5; i++) samplesSinceGrid[i] *= ratio;
 		}
 		lastSamplesPerQuarter = samplesPerQuarter;
-		float basePeriods[NUM_OUTPUTS];
-		basePeriods[SUB_BAR] = samplesPerQuarter * (float)sixteenthsPerBar / 4.f; // not used directly
+		// Member, not a local: doReset() fires a downbeat outside process() and a
+		// duty-cycle gate needs a period to be a fraction of.
+		basePeriods[SUB_BAR] = samplesPerQuarter * (float)sixteenthsPerBar / 4.f;
 		basePeriods[SUB_QUARTER] = samplesPerQuarter;
 		basePeriods[SUB_EIGHTH] = samplesPerQuarter / 2.f;
 		basePeriods[SUB_SIXTEENTH] = samplesPerQuarter / 4.f;
 		basePeriods[SUB_QTRIP] = samplesPerQuarter / 3.f;
 		basePeriods[SUB_ETRIP] = samplesPerQuarter / 6.f;
+		sampleTimeCached = args.sampleTime;
 
 		// --- Advance per-subdivision sample counters ---
 		samplesSinceQuarter += 1.f;
@@ -559,7 +569,8 @@ struct Meter : Module {
 		for (int i = 0; i < 5; i++) {
 			if (samplesSinceGrid[i] >= gridBase[i]) {
 				samplesSinceGrid[i] -= gridBase[i];
-				pulses_grid[i].trigger(sfs::pulseWidthSec(pulseWidthIdx));
+				pulses_grid[i].trigger(sfs::pulseWidthSec(pulseWidthIdx,
+					gridBase[i] * args.sampleTime));
 			}
 		}
 
@@ -576,8 +587,14 @@ struct Meter : Module {
 		bool firedThisSample[NUM_OUTPUTS] = {false, false, false, false, false, false};
 
 		// Helper to fire a pulse and update its flash state
-		auto firePulse = [&](int outIdx) {
-			pulses[outIdx].trigger(sfs::pulseWidthSec(pulseWidthIdx));
+		// `nextPeriod` is the gap to this output's NEXT pulse, in samples, and is
+		// what a duty-cycle gate is a fraction of. It has to be the next one and
+		// not the one just served: swing makes them differ by up to 3x, and a
+		// gate scaled from the long interval would still be high when the short
+		// one ended.
+		auto firePulse = [&](int outIdx, float nextPeriod) {
+			pulses[outIdx].trigger(sfs::pulseWidthSec(pulseWidthIdx,
+			                                          nextPeriod * args.sampleTime));
 			if (outIdx == SUB_BAR) msgBar = true;   // notify the expander
 			pulseFlashIdx[outIdx] = pulseInBar[outIdx];
 			pulseInBar[outIdx]++;
@@ -591,7 +608,7 @@ struct Meter : Module {
 		if (samplesSinceQuarter >= qTarget) {
 			samplesSinceQuarter -= qTarget;
 			pulseCountQuarter++;
-			firePulse(SUB_QUARTER);
+			firePulse(SUB_QUARTER, swingAdjustedPeriod(pulseCountQuarter, basePeriods[SUB_QUARTER], activeSwing[SUB_QUARTER]));
 		}
 
 		// Eighth
@@ -599,7 +616,7 @@ struct Meter : Module {
 		if (samplesSinceEighth >= eTarget) {
 			samplesSinceEighth -= eTarget;
 			pulseCountEighth++;
-			firePulse(SUB_EIGHTH);
+			firePulse(SUB_EIGHTH, swingAdjustedPeriod(pulseCountEighth, basePeriods[SUB_EIGHTH], activeSwing[SUB_EIGHTH]));
 		}
 
 		// Quarter triplet
@@ -607,7 +624,7 @@ struct Meter : Module {
 		if (samplesSinceQTrip >= qtTarget) {
 			samplesSinceQTrip -= qtTarget;
 			pulseCountQTrip++;
-			firePulse(SUB_QTRIP);
+			firePulse(SUB_QTRIP, swingAdjustedPeriod(pulseCountQTrip, basePeriods[SUB_QTRIP], activeSwing[SUB_QTRIP]));
 		}
 
 		// Eighth triplet
@@ -615,7 +632,7 @@ struct Meter : Module {
 		if (samplesSinceETrip >= etTarget) {
 			samplesSinceETrip -= etTarget;
 			pulseCountETrip++;
-			firePulse(SUB_ETRIP);
+			firePulse(SUB_ETRIP, swingAdjustedPeriod(pulseCountETrip, basePeriods[SUB_ETRIP], activeSwing[SUB_ETRIP]));
 		}
 
 		// Sixteenth (drives bar tracking)
@@ -623,7 +640,7 @@ struct Meter : Module {
 		if (samplesSinceSixteenth >= sTarget) {
 			samplesSinceSixteenth -= sTarget;
 			pulseCountSixteenth++;
-			firePulse(SUB_SIXTEENTH);
+			firePulse(SUB_SIXTEENTH, swingAdjustedPeriod(pulseCountSixteenth, basePeriods[SUB_SIXTEENTH], activeSwing[SUB_SIXTEENTH]));
 
 			sixteenthCount++;
 			if (sixteenthCount >= sixteenthsPerBar) {
@@ -648,7 +665,7 @@ struct Meter : Module {
 						pulseInBar[i] = 0;
 					}
 				}
-				firePulse(SUB_BAR);
+				firePulse(SUB_BAR, basePeriods[SUB_BAR]);
 				// Reset triplet phases on bar boundary
 				samplesSinceQTrip = 0.f;
 				samplesSinceETrip = 0.f;
@@ -658,7 +675,8 @@ struct Meter : Module {
 				// the downbeat straight pulses, mirroring the swung set).
 				for (int i = 0; i < 5; i++) {
 					samplesSinceGrid[i] = 0.f;
-					pulses_grid[i].trigger(sfs::pulseWidthSec(pulseWidthIdx));
+					pulses_grid[i].trigger(sfs::pulseWidthSec(pulseWidthIdx,
+						gridBase[i] * args.sampleTime));
 				}
 				// Commit pending swing → active for the new bar. Doing it
 				// only on bar boundaries prevents mid-period accumulator
@@ -1179,7 +1197,8 @@ struct MeterWidget : ModuleWidget {
 
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Outputs"));
-		sfs::addPulseWidthMenu(menu, &module->pulseWidthIdx);
+		// true == offer the duty-cycle gates: every output here has a known period.
+		sfs::addPulseWidthMenu(menu, &module->pulseWidthIdx, "Gate/trigger width", true);
 
 		if (module->extClockConnected && module->extClockHasMeasurement) {
 			menu->addChild(new MenuSeparator);

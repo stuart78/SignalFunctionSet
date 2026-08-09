@@ -51,16 +51,22 @@ struct MeterX : Module {
 		outputs[RUN_OUTPUT].setVoltage(msg.running ? 10.f : 0.f);
 		lights[RUN_LIGHT].setBrightness(msg.running ? 1.f : 0.f);
 
-		// 24 PPQN
-		const float pw = sfs::pulseWidthSec(pulseWidthIdx);
-		if (msg.ppqn24) { ppqnPulse.trigger(pw); flash[0] = 1.f; }
+		// 24 PPQN. Each output is scaled by ITS OWN period, so "50% gate" is half
+		// a 24th of a quarter here and half of 128 bars eight jacks down --
+		// otherwise one setting would mean eight unrelated lengths.
+		if (msg.ppqn24)
+			{ ppqnPulse.trigger(sfs::pulseWidthSec(pulseWidthIdx, msg.quarterSec / 24.f)); flash[0] = 1.f; }
 		outputs[PPQN24_OUTPUT].setVoltage(ppqnPulse.process(dt) ? 10.f : 0.f);
 		flash[0] = std::max(0.f, flash[0] - decay);
 		lights[PPQN24_LIGHT].setBrightness(flash[0]);
 
 		// Bar divisions
+		static const int NB[8] = {1, 2, 4, 8, 16, 32, 64, 128};
 		for (int k = 0; k < 8; k++) {
-			if (msg.bar[k]) { barPulse[k].trigger(pw); flash[2 + k] = 1.f; }
+			if (msg.bar[k]) {
+				barPulse[k].trigger(sfs::pulseWidthSec(pulseWidthIdx, msg.barSec * NB[k]));
+				flash[2 + k] = 1.f;
+			}
 			outputs[BAR_OUTPUT + k].setVoltage(barPulse[k].process(dt) ? 10.f : 0.f);
 			flash[2 + k] = std::max(0.f, flash[2 + k] - decay);
 			lights[BAR_LIGHT + k].setBrightness(flash[2 + k]);
@@ -147,7 +153,8 @@ struct MeterXWidget : ModuleWidget {
 		if (!module) return;
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Outputs"));
-		sfs::addPulseWidthMenu(menu, &module->pulseWidthIdx);
+		// true == offer the duty-cycle gates: every output here has a known period.
+		sfs::addPulseWidthMenu(menu, &module->pulseWidthIdx, "Gate/trigger width", true);
 	}
 };
 
