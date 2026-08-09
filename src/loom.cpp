@@ -276,6 +276,10 @@ struct Loom : Module {
 	int   tab = 0;                  // 0 = PLAY, then TUNE DECAY STIFF POS EXCITE LEVEL
 	int   quantScale = -1;          // -1 = free tuning; else index into sfs::SCALES
 	float stereoWidth = 0.6f;
+	// Off by default: hover events arrive whether or not Rack is the front
+	// application, so without this the instrument plays while you are in a
+	// browser and the pointer crosses the rack.
+	bool  hoverInBackground = false;
 	int   mouseMode = 0;            // 0 = hover strums, 1 = click-drag only
 	float internalHz = 6.f;         // auto-play fallback when CLOCK is unpatched
 
@@ -914,6 +918,7 @@ struct Loom : Module {
 		json_object_set_new(root, "quantScale", json_integer(quantScale));
 		json_object_set_new(root, "stereoWidth", json_real(stereoWidth));
 		json_object_set_new(root, "mouseMode", json_integer(mouseMode));
+		json_object_set_new(root, "hoverInBackground", json_boolean(hoverInBackground));
 		json_object_set_new(root, "internalHz", json_real(internalHz));
 
 		json_t* sa = json_array();
@@ -938,6 +943,7 @@ struct Loom : Module {
 			quantScale = clamp((int)json_integer_value(j), -1, sfs::NUM_SCALES - 1);
 		if (json_t* j = json_object_get(root, "stereoWidth")) stereoWidth = json_number_value(j);
 		if (json_t* j = json_object_get(root, "mouseMode")) mouseMode = (int)json_integer_value(j);
+		if (json_t* j = json_object_get(root, "hoverInBackground")) hoverInBackground = json_boolean_value(j);
 		if (json_t* j = json_object_get(root, "internalHz")) internalHz = json_number_value(j);
 
 		json_t* sa = json_object_get(root, "strings");
@@ -1127,6 +1133,7 @@ struct LoomDisplay : OpaqueWidget {
 	void onHover(const HoverEvent& e) override {
 		OpaqueWidget::onHover(e);            // consumed so we keep receiving moves
 		if (!module || module->tab != 0 || module->mouseMode != 0) return;
+		if (!module->hoverInBackground && !sfs::windowFocused()) return;
 		crossStrings(layout(), e.pos, e.mouseDelta);
 	}
 
@@ -1437,6 +1444,7 @@ struct LoomWidget : ModuleWidget {
 
 		menu->addChild(createIndexPtrSubmenuItem("Mouse strum",
 			{"Hover over the strings", "Click and drag only"}, &m->mouseMode));
+		menu->addChild(createBoolPtrMenuItem("Hover plays when Rack is in the background", "", &m->hoverInBackground));
 
 		menu->addChild(createSubmenuItem("Stereo width", string::f("%.0f%%", m->stereoWidth * 100.f),
 			[=](Menu* sub) {

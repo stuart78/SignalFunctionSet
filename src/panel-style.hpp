@@ -94,6 +94,15 @@ static const float LABEL_GAP_TRIM = 4.4f;
 static const float PLATE_PAD      = 2.6f;    // inset padding around a grouped section
 static const float PLATE_RADIUS   = 2.0f;
 
+// Whether Rack's own window has focus. Hover events keep arriving while another
+// application is in front, so an instrument that plays on hover plays whenever
+// the pointer happens to cross it -- while you are reading a manual, or dragging
+// a file past. Nobody expects a synth in the background to make a noise.
+static inline bool windowFocused() {
+	return APP && APP->window && APP->window->win
+	    && glfwGetWindowAttrib(APP->window->win, GLFW_FOCUSED) != 0;
+}
+
 static inline std::shared_ptr<Font> panelFont() {
 	return APP->window->loadFont(asset::plugin(pluginInstance, "res/fonts/Figtree-Regular.ttf"));
 }

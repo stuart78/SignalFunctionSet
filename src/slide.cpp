@@ -280,6 +280,10 @@ struct Slide : Module {
 	float lastNote[SLIDE_NCH] = {};
 	float lastSolvedBar = 0.f;
 	float stereoWidth = 0.35f;
+	// Off by default: hover events arrive whether or not Rack is the front
+	// application, so without this the instrument plays while you are in a
+	// browser and the pointer crosses the rack.
+	bool  hoverInBackground = false;
 	int   mouseMode = 0;                 // 0 = hover strums, 1 = click-drag only
 
 	dsp::SchmittTrigger gateTrig, clockTrig, resetTrig, resetBtn;
@@ -948,6 +952,7 @@ struct Slide : Module {
 		json_object_set_new(r, "pickupType", json_integer(pickupType));
 		json_object_set_new(r, "stereoWidth", json_real(stereoWidth));
 		json_object_set_new(r, "mouseMode", json_integer(mouseMode));
+		json_object_set_new(r, "hoverInBackground", json_boolean(hoverInBackground));
 		json_object_set_new(r, "internalHz", json_real(internalHz));
 		json_t* t = json_array();
 		for (int i = 0; i < SLIDE_NCH; i++) json_array_append_new(t, json_real(tune[i]));
@@ -960,6 +965,7 @@ struct Slide : Module {
 		if (json_t* j = json_object_get(r, "pickupType")) pickupType = (int)json_integer_value(j);
 		if (json_t* j = json_object_get(r, "stereoWidth")) stereoWidth = json_number_value(j);
 		if (json_t* j = json_object_get(r, "mouseMode")) mouseMode = (int)json_integer_value(j);
+		if (json_t* j = json_object_get(r, "hoverInBackground")) hoverInBackground = json_boolean_value(j);
 		if (json_t* j = json_object_get(r, "internalHz")) internalHz = json_number_value(j);
 		if (json_t* t = json_object_get(r, "tune"))
 			for (int i = 0; i < SLIDE_NCH && i < (int)json_array_size(t); i++)
@@ -1033,6 +1039,7 @@ struct SlideDisplay : OpaqueWidget {
 	void onHover(const HoverEvent& e) override {
 		OpaqueWidget::onHover(e);
 		if (!module || module->mouseMode != 0 || draggingBar) return;
+		if (!module->hoverInBackground && !sfs::windowFocused()) return;
 		Lay L = layout();
 		float speed = std::fabs(e.mouseDelta.y);
 		if (speed < 0.35f) return;
@@ -1291,6 +1298,7 @@ struct SlideWidget : ModuleWidget {
 			{"Modern single coil", "Horseshoe (bark and midrange honk)"}, &m->pickupType));
 		menu->addChild(createIndexPtrSubmenuItem("Mouse",
 			{"Hover strums the strings", "Click and drag only"}, &m->mouseMode));
+		menu->addChild(createBoolPtrMenuItem("Hover plays when Rack is in the background", "", &m->hoverInBackground));
 	}
 };
 
