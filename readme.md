@@ -13,16 +13,24 @@ Modules grouped by function:
 - [Intone](#intone) — CHANT/FOF formant synthesis voice
 - [Phase](#phase) — Dual sample looper with sleep/rotate phase drift
 - [Play](#play) — Polyphonic multisample player (SFZ / DecentSampler)
+- [Loom](#loom) — Eight-string waveguide resonator you strum with the mouse
+- [Slide](#slide) — Electric lap steel: a steel bar across eight strings
+  - [SLIDE XP (Expander)](#slide-xp-expander) — the eight strings on eight jacks
+- [Chime](#chime) — Eight-note drone machine with rotating resonator tubes
 
 **Filters & Resonators**
 - [Band](#band) — Harmonic bandpass bank (isolate individual harmonics)
 - [Tine](#tine) — Tunable pingable resonator (Gamelan Resonator circuit)
+
+**Effects**
+- [Crystal](#crystal) — Quad echo chamber shaped like a real crystal
 
 **Clocks & Sequencers**
 - [Arrange](#arrange) — Song-form sequencer: 8 phrases, 4 per-instrument clock buses
 - [Meter](#meter) — Time-signature-aware musical clock with swing
   - [Meter X (Expander)](#meter-x-expander) — 24 PPQN, run gate, 1–128 bar triggers
 - [Beat](#beat) — Per-voice pattern sequencer (8 patterns × 16 steps)
+- [Fill](#fill) — Auto-playing 8-channel drum sequencer with a pressure engine
 - [Note](#note) — Pitched CV/gate sequencer with 19 scales
 - [Chance](#chance) — Generative melodic walk sequencer (8 seeded patterns)
 - [Fugue](#fugue) — 8-step harmonic deviation sequencer (3 voices)
@@ -242,7 +250,8 @@ A polyphonic multisample player. Loads an `.sfz` or DecentSampler `.dspreset` in
 - **16-voice polyphony** — one voice per V/OCT + GATE cable channel. A mono cable broadcasts to all voices, so a single velocity cable applies to the whole chord.
 - **SFZ subset** — `sample`, `lokey`/`hikey`/`key`, `pitch_keycenter`, `lovel`/`hivel`, `tune`, `volume`, `loop_mode`/`loop_start`/`loop_end`, `default_path`, `seq_length`/`seq_position`; note-name or numeric keys, cascading global → group → region.
 - **DecentSampler** — `.dspreset` parsing with the convention-correct accumulating tuning/volume, loops, and round-robins mapped onto the same engine.
-- **Gate-controlled duration** — note-off releases the voice by default; a "One-shot (play through)" option lets drums run to their natural end. Looped regions loop while held.
+- **Gate-controlled duration** — note-off releases the voice by default; a "One-shot (play through)" option lets drums run to their natural end.
+- **Loop modes** — `loop_continuous` keeps wrapping through the release, so the note fades out inside the loop. `loop_sustain` (and DecentSampler's `loopMode="sustain"`) only loops while the note is held: at note-off the voice leaves the loop when it next reaches `loop_end` and plays the recorded tail — the string ringing off, the room — under the release envelope.
 - **Multiple instruments** — keep several loaded and select with the INSTR knob or CV.
 - **Playable display** — 88-key map (mapped = blue, playing = cyan) or a 12×8 Push-style pad grid with three layouts; tap a pad to audition the instrument with nothing patched.
 
@@ -251,6 +260,88 @@ A polyphonic multisample player. Loads an `.sfz` or DecentSampler `.dspreset` in
 **Outputs:** L / R.
 
 See [docs/play-manual.md](docs/play-manual.md) for the full manual.
+
+#### Loom
+
+<img src="screenshots/Loom.png" alt="Loom panel" height="320"> 
+
+Eight strings sharing a bridge. Each is a digital waveguide — a delay loop for pitch, a lowpass inside the loop, a four-section allpass chain for stiffness, and a comb on the output tap for where along the string you pick it. The display *is* the instrument: strum it with the mouse, or drive the strings from gates.
+
+**Features:**
+- **EXCITE is a continuous axis**, not a menu — HAMMER · PLUCK · BOW · WIND are nodes on it, and you can sit anywhere between them. At a pure node the code path is identical to the single-exciter version (down to how many random numbers it draws), so pluck and hammer are bit-exact with where they started.
+- **A bow that works everywhere.** The friction curve's input is normalised by the string's own envelope, so its operating point doesn't drift with pitch or damping, and a pressure regulator holds the string at a target amplitude. Bow speed sets loudness, not whether the string speaks. Hair noise is load-bearing — without it the string locks to its sub-octave.
+- **WIND is an aeolian harp.** Vortex shedding drives a narrow band that *moves with the gust* (Strouhal), so the harp climbs and falls between partials rather than sitting on one. The fundamental is ~26 dB down and the dominant partial roams from the 3rd to the 8th.
+- **COUPLE — a real bridge.** String motion feeds a shared bus and each string takes back a band-limited fraction. Only the transmitted band is damped and the in-phase mode has gain 1, so it is unconditionally stable.
+- **Seven display tabs** — PLAY strums with the mouse (Y = where along the string), and TUNE · DECAY · STIFF · POS · EXCITE · LEVEL each edit one attribute per string by height.
+- **Eighteen patterns** for the clocked auto-player — twelve shapes (up, down, converge, thumb, strum…) plus six built from a wrapping 4-bit adder, where two chained operations (+3, ×5) walk the eight strings around a 16-step ring.
+- Output is soft-clipped (linear to ±6 V, asymptotic to ±10) — eight bowed strings have a crest factor no pluck approaches.
+
+**Controls:** Body, Couple, Decay, Damp, Pick, Spread, Root, Octave, Scale, Pattern, Density, Auto, Reset.
+**Inputs:** V/Oct, Gate, Velocity (poly), Clock, Reset, 8 × per-string gate, and CV for Body / Couple / Decay / Damp / Pick / Spread / Root / Octave / Scale / Density.
+**Outputs:** Mix L, Mix R, 8 × per-string audio.
+
+**Context menu:** Tuning (with quantize), Mouse strum (hover or click-drag only), Stereo width, Auto rate when no clock is patched, and *Hover plays when Rack is in the background* (off by default — an instrument that plays on hover shouldn't make a noise while you're reading a manual).
+
+> **Note:** DAMP is floored at 10× each string's own pitch. As an absolute cutoff it filtered a high string below its second partial, and with so few partials left the pick-position comb's null removed what was left — a dark, high, bowed string made almost no sound.
+
+#### Slide
+
+<img src="screenshots/Slide.png" alt="Slide panel" height="320"> 
+
+An electric lap steel. Eight waveguide strings stopped by a **steel bar** instead of frets — one rigid object lying across every string, moving them all by the same ratio, so the tuning's intervals survive wherever you put it. That is why lap steel lives in 6th and 7th tunings (C6, E7, E13, A6): a straight bar is already a chord.
+
+**Features:**
+- **SLANT** angles the bar across the strings — the technique that gets major, minor and dominant voicings out of one tuning without retuning. It is the reason this is its own module rather than a glide mode on Loom.
+- **Rate-based glide, not time-based.** A hand crosses the neck at roughly constant speed, so a twelfth takes 2.4× as long as a fifth. Nearly every synth portamento is constant-time-per-interval, and that is most of why synth glides don't sound like slides. Bar travel is an S-curve scaled to the distance, so a short move isn't all ease and a long one isn't a hard ramp.
+- **The pickup is fixed in space** while the speaking length changes, so its position as a fraction of the string runs 14%→48% up the neck and the comb null walks from the 7th harmonic down to the 2nd. The tone hollows as you climb. (Loom's comb is a fixed fraction — right for a fretted instrument, wrong for this one.)
+- **A volume pedal** — SWELL per note plus a VOL input — that swells in *past* the pick attack. The missing transient is what makes a steel cry, and it's the one thing a slide model can do that a portamento cannot fake.
+- **Vibrato is a rocking motion**, wide and centred on the pitch, rather than a bend up to it. The bar is a lossy, mass-loaded termination, returning less treble than a fret clamping against wood.
+- **The body is a magnetic pickup**, not a soundboard: a resonant lowpass (coil inductance against cable capacitance) with TONE moving the peak 1.6–6.2 kHz, then amp DRIVE.
+- **The display is a fretboard lying flat** — strings horizontal, logarithmic fret spacing, the bar drawn as a line whose *angle* is the slant, and the segment behind the bar drawn dead. Drag the bar with the mouse; hover across the strings to pick them.
+- **Sixteen fingerpicking rolls** — forward, backward, alternating, thumb & index, inside out, climb, fall, pinch, random, strum, and six from the same wrapping 4-bit adder Loom uses — with per-step accents — the thumb is a heavier finger than the index, so bass strokes land harder and the stroke that starts a roll hardest. DYN brings in that shape first and note-to-note jitter second.
+- **Ten tunings:** C6, C6 add 9, E7, E13, A6, Open major, Open minor, Dobro G, Fourths, Unison.
+
+**Controls:** Pos (bar position), Slant, Glide, Vibrato depth + speed, Decay, Damp, Pick, Pickup, Tone, Drive, Block, Swell, Couple, Root, Scale, Octave, Roll, Density, Dyn, Auto, Reset.
+**Inputs:** Bar (1V/oct — the POS trimpot then transposes it *in key*), Slant, V/Oct, Gate (poly), Velocity (poly), Clock, Reset, Vol, and CV for Decay / Damp / Pick / Tone / Roll / Density / Root / Scale.
+**Outputs:** Mix L, Mix R, Even strings, Odd strings.
+
+**Context menu:** Tuning, V/oct behaviour (transpose the instrument vs place the bar and pick the string), Pickup character (modern single coil, or Horseshoe for bark and midrange honk), Mouse behaviour, Auto roll moves the bar, and *Hover plays when Rack is in the background*.
+
+> **Getting the crying Hawaiian sound:** SWELL up so the volume pedal hides the pick attack, GLIDE around 0.5–0.7 so moves take real time, VIBRATO shallow and slow (≈5 Hz), DAMP fairly high, and a C6 or E7 tuning. Then move the bar between two chord positions rather than picking new notes.
+
+##### SLIDE XP (Expander)
+
+<img src="screenshots/SlideX.png" alt="SLIDE XP panel" height="320"> 
+
+Place it to the **right** of Slide. The eight strings get a jack each — out, gate in, velocity in, and a level trimpot.
+
+Slide used to carry the strings on a polyphonic output. A poly cable is the right answer when eight channels are one voice played polyphonically; it is the wrong one here, because these are eight strings of a single instrument that you want to send to eight different places — separate amps, a per-string filter, a mixer with its own pan. Splitting a poly cable back out costs a module and a row of cables anyway, so the jacks belong on the instrument.
+
+The **gates address strings**. That is *not* what Slide's own poly GATE does — there, channel N is the Nth note and which string it lands on is the bar solver's business, because on a real steel you don't choose. Here a jack labelled 3 plays string 3.
+
+Each **velocity trimpot** is more than an attenuator: with nothing patched it *is* that string's velocity, so the eight of them are a picking-balance control on their own — quieter bass, a leaning-on inner voice — and once a jack is patched the same trimpot scales it.
+
+**Inputs:** 8 × gate, 8 × velocity (0–10V).
+**Controls:** 8 × velocity / attenuator trimpot.
+**Outputs:** 8 × string audio, each with an activity LED.
+
+#### Chime
+
+<img src="screenshots/Chime.png" alt="Chime panel" height="320"> 
+
+An eight-note resonating drone machine, after a xylophone whose resonator tubes rotate beneath the bars. Each note has a semi-free bidirectional LFO — its "tube rotation" — and the note blooms as its tube swings through centre. Nothing here is clocked in the usual sense; the eight rotations drift against each other and the pattern is whatever their periods happen to make.
+
+**Features:**
+- **Excitation is a continuous bow ↔ strike blend.** Struck notes fire at every centre crossing — two per rotation, as the mechanism gives.
+- **RELATE sets how the eight rates relate** — ramp, stepped, random, or **ripple**, where a crossing excites its neighbours and blooms travel down the row.
+- **Per-note weight** is strike probability; **per-note arc width** trades width for strike rate, so a narrow arc strikes more often.
+- **Pitch latches at note boundaries**, so retuning never bends a sounding note.
+- **SHAPE** bends the rotation curve from exponential through linear to logarithmic — how long the tube lingers at the extremes versus rushing through centre.
+- Root and scale in the plugin's shared convention, so one key change travels to Note, Chance, Arrange and the rest.
+
+**Controls:** Rate, Spread, Drift, Relate, Shape, Octave, Excite, Decay, Root, Scale, Reseed, and per note — degree, weight, arc width.
+**Inputs:** Rate, Spread, Drift, Root, Scale, Reseed, Clock, Excite, Octave, Relate, Shape, Decay.
+**Outputs:** 8 × tube LFO (±5V), 8 × note audio, Mix L, Mix R, V/Oct (poly, 8ch), Gate (poly, 8ch — high while a note blooms).
 
 ### Filters & Resonators
 
@@ -307,6 +398,30 @@ A tunable 3rd-order pingable resonator based on the Gamelan Resonator circuit fr
 
 **Context Menu:**
 - VCA Mode (anti-click): Toggle crossfade envelope on retrigger (default: on)
+
+### Effects
+
+#### Crystal
+
+<img src="screenshots/Crystal.png" alt="Crystal panel" height="320"> 
+
+A 3D echo chamber shaped like a real crystal. Stereo in, **quad out** — the four outputs are four listeners standing inside the thing.
+
+Sixteen crystal habits are built as intersections of half-spaces from symmetry-expanded Miller-index normals — cube {100}, octahedron {111}, dodecahedron {110}, the sphalerite tetrahedron, pyrite's {210} pyritohedron, quartz, and the low-symmetry systems — ordered simple to complex. The last four are **clusters**: several whole crystals intergrown, so a ray can be trapped in one point or wander between them.
+
+**Features:**
+- **Traced by letting rays loose.** Seven rays × 26 bounces per emitter, a deterministic fan. Every wall strike sheds an echo toward each of the four interior listeners, and that set of arrivals *is* the quad output. Tracing runs on a worker thread (~50 ms) and the audio thread adopts the new tap set with a crossfade.
+- **Per sample** it reads a multitap delay, six recirculating "pockets" per emitter, and an FDN tail sized by Sabine's equation on the crystal's own volume and surface area — so a bigger habit really does ring longer.
+- **CHAMBER keeps real acoustic timing. DELAY keeps the geometry's arrival ratios but stretches them to musical times**, with SIZE becoming the delay time. Same shape, two ways to hear it.
+- **Two emitters** (stereo in → quad out), each navigable by X/Y **velocity** CV, so you steer where the sound is coming from rather than jumping it.
+- **An internal exciter** — Chime's struck bar — so with nothing patched and MIX fully wet it is a bare resonator you can ping.
+- **Rotation is camera-only.** Turning the display doesn't move the acoustics; the shape you hear is the shape that's there.
+
+**Controls:** Size, Damp, Material (habit), Tail, Mix, Echoes, Feedback, Decay, Ping, Mode (chamber / delay), emitter A + B azimuth / elevation / heading, emitter axis X / Y / Z, spin X / Y / Z, nav speed, view yaw + pitch.
+**Inputs:** Audio, Audio B, Ping, V/Oct, Size, Damp, Material, Tail, Mix, Echoes, Feedback, and X/Y velocity for each emitter.
+**Outputs:** Quad A / B / C / D.
+
+**Context menu:** Solid faces (occlusion), Draw on the panel (no screen), Ping alternates A / B, Repeat pitch.
 
 ### Clocks & Sequencers
 
@@ -372,6 +487,7 @@ A time-signature-aware musical clock. Most VCV clocks output evenly-spaced pulse
 - External Clock PPQN selector (1, 2, 4, 8, 12, 16, 24)
 - Apply time signature changes immediately (default: queue for next bar)
 - Reset on play (default: resume from current position)
+- **Gate/trigger width** — either a fixed width (1 / 2 / 5 / 10 ms, for keeping triggers alive through a multiplexed Expert Sleepers path) or a **duty cycle** (12.5 / 25 / 50 / 75 / 87.5%). A duty-cycle gate is a share of *that output's own* period, so 50% is half a sixteenth on the sixteenth jack and half a bar on BAR, and it tracks the tempo. Swing is accounted for: each gate is scaled by the interval it is actually heading into, so a 75% gate on a heavily swung output still falls before the next pulse. RESET OUT stays a trigger regardless.
 
 #### Meter X (Expander)
 
@@ -389,6 +505,9 @@ An expander for Meter that covers the long game. Meter's own panel handles the m
 - **Activity LEDs** on every row.
 
 **Outputs:** 24 PPQN, Run, Bar, 2 / 4 / 8 / 16 / 32 / 64 / 128 bars.
+
+**Context Menu:**
+- **Gate/trigger width** — the same fixed widths and duty cycles as Meter, each output scaled by its own period. A 50% gate is half a 24th of a quarter on the PPQN jack and half of 128 bars on the last one. Meter X gets the tempo over the expander bus.
 
 See [docs/meterx-manual.md](docs/meterx-manual.md) for the full manual.
 
@@ -422,6 +541,31 @@ A single-voice pattern sequencer designed to pair with Meter (or any clock + bar
 **Context Menu:**
 - "Advance only on bar trigger" (default ON)
 - Patterns: Randomize current pattern / Clear current / Clear all
+
+#### Fill
+
+<img src="screenshots/Fill.png" alt="Fill panel" height="320"> 
+
+An auto-playing eight-channel drum sequencer. Where Beat is one voice you program, Fill is a whole kit that plays itself from a library of 343 pattern sets and decides on its own when to break.
+
+The idea it is built around is **pressure**. One internal value accumulates a little every bar and vents as a fill. That single number drives two things at once: the intensity tier — sparse, main, or lift, latched per phrase so it doesn't flicker mid-idea — and a seeded variation layer on top of the pattern. Turn ACCUM up and it gets restless; turn DISCHARGE up and each fill spends more of what it has built.
+
+**Features:**
+- **Playback is clock-driven.** Steps fire on CLOCK edges and `clocksPerBar` is measured between BARs, so it freezes the moment the clock stops rather than free-running away from the rest of the patch.
+- **Three shipped banks** — a canonical set, a General MIDI set, and a disco bank built from Rothman's method rather than his exercises — plus your own from `<Rack user dir>/SignalFunctionSet/patterns/`. **drum-patterns.com `.txt` exports import natively.**
+- **EXTRAS is a hard cap** on engine-added notes per bar, and each set's own `vary` value limits how far its identity may bend. The generator can decorate a pattern; it can't turn it into a different one.
+- **Five-tab browser** — PATTERN · GENRE · REGION · USER · FAVS. Favourites persist plugin-wide in `fill-favorites.json`, not per patch.
+- **A pattern queue** with a play button per row and drag to reorder, so you can line up an arrangement by hand.
+- **Per-channel swing** on the off-beats, independent per channel.
+- **NUM and DEN outputs** feed Meter's "Time signature CV absolute", so a set in 5/4 retimes the whole patch.
+
+**Channels:** Kick, Snare, Closed hat, Open hat, Low perc, High perc, Clap/rim, Bell.
+
+**Controls:** Accumulate, Discharge, Tier offset, Phrase (4 / 8 / 16 bars), Extras, Set, Reset, Next, Reseed, and per channel — swing.
+**Inputs:** Clock (required), Bar, Reset, Next, Reseed, Phrase CV, Accum CV, Discharge CV, Tier CV, Set CV, Extras CV.
+**Outputs:** Per channel — gate, velocity, accent (8 × 3); plus Fill gate (high during a fill), Set, Num, Den, BPM.
+
+**Context menu:** Clock resolution, Fills, Play fills, Queue advance, Tier balance, Tier follows.
 
 #### Note
 
