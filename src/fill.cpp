@@ -409,8 +409,15 @@ static inline float fhashF(uint32_t a, uint32_t b) { return (fhash(a, b) & 0xFFF
 static inline uint32_t strHash(const std::string& s) { uint32_t h = 2166136261u; for (char c : s) { h ^= (uint8_t)c; h *= 16777619u; } return h; }
 
 struct Fill : Module {
-	enum ParamId { ACCUM_PARAM, DISCHARGE_PARAM, TIER_PARAM, PHRASE_PARAM, SYNC_PARAM, SET_PARAM, EXTRAS_PARAM, ENUMS(SWING_PARAM, FILL_NCH), RESET_PARAM, PARAMS_LEN };
-	enum InputId { CLOCK_INPUT, BAR_INPUT, RESET_INPUT, RESEED_INPUT, ACCUM_CV_INPUT, DISCHARGE_CV_INPUT, TIER_CV_INPUT, SET_CV_INPUT, EXTRAS_CV_INPUT, NEXT_INPUT, INPUTS_LEN };
+	// APPEND ONLY. Rack serialises params and ports by index.
+	// SYNC_PARAM is off the 2026-08 panel and lives in the context menu; the slot
+	// stays where it is.
+	enum ParamId { ACCUM_PARAM, DISCHARGE_PARAM, TIER_PARAM, PHRASE_PARAM, SYNC_PARAM, SET_PARAM, EXTRAS_PARAM, ENUMS(SWING_PARAM, FILL_NCH), RESET_PARAM,
+		NEXT_PARAM, RESEED_PARAM,
+		PARAMS_LEN };
+	enum InputId { CLOCK_INPUT, BAR_INPUT, RESET_INPUT, RESEED_INPUT, ACCUM_CV_INPUT, DISCHARGE_CV_INPUT, TIER_CV_INPUT, SET_CV_INPUT, EXTRAS_CV_INPUT, NEXT_INPUT,
+		PHRASE_CV_INPUT,
+		INPUTS_LEN };
 	enum OutputId { ENUMS(GATE_OUTPUT, FILL_NCH), ENUMS(VEL_OUTPUT, FILL_NCH), ENUMS(ACC_OUTPUT, FILL_NCH), FILL_OUTPUT, SET_OUTPUT, NUM_OUTPUT, DEN_OUTPUT,
 		BPM_OUTPUT, OUTPUTS_LEN };
 	enum LightId { SYNC_LIGHT, FILL_LIGHT, LIGHTS_LEN };
@@ -430,6 +437,7 @@ struct Fill : Module {
 	int  advanceMode = 0;           // 0 = by repeat count, 1 = NEXT jack only
 	bool queueStep = false;         // NEXT fired: move on at the next cycle
 	int  queueJumpTo = -1;          // play pressed on a row: take THAT one next cycle
+	dsp::SchmittTrigger nextBtnTrig, reseedBtnTrig;
 	dsp::SchmittTrigger nextTrig, resetBtnTrig;
 
 	void queueAdd(int set) { queue.push_back({set, 1}); }
@@ -551,6 +559,9 @@ struct Fill : Module {
 		configInput(RESET_INPUT, "Reset");
 		configInput(NEXT_INPUT, "Next queue entry (advances at the next cycle)");
 		configButton(RESET_PARAM, "Reset");
+		configButton(NEXT_PARAM, "Next queue entry");
+		configButton(RESEED_PARAM, "Reseed variation");
+		configInput(PHRASE_CV_INPUT, "Fill frequency CV (1V per phrase length)");
 		configInput(RESEED_INPUT, "Reseed variation");
 		configInput(ACCUM_CV_INPUT, "Accumulate CV");
 		configInput(DISCHARGE_CV_INPUT, "Discharge CV");
@@ -588,7 +599,11 @@ struct Fill : Module {
 		resolveCycle();
 	}
 
-	int phraseLen() { static const int P[3] = {4, 8, 16}; return P[(int)clamp(std::round(params[PHRASE_PARAM].getValue()), 0.f, 2.f)]; }
+	int phraseLen() {
+		static const int P[3] = {4, 8, 16};
+		float v = params[PHRASE_PARAM].getValue() + inputs[PHRASE_CV_INPUT].getVoltage();
+		return P[(int)clamp(std::round(v), 0.f, 2.f)];
+	}
 
 	const LibPattern* pat(int idx) { return (idx >= 0 && idx < (int)lib.pats.size()) ? &lib.pats[idx] : nullptr; }
 
@@ -950,8 +965,14 @@ struct Fill : Module {
 		float dt = args.sampleTime;
 		if (resetTrig.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f)) onReset();
 		if (resetBtnTrig.process(params[RESET_PARAM].getValue())) onReset();
-		if (nextTrig.process(inputs[NEXT_INPUT].getVoltage(), 0.1f, 1.f)) queueStep = true;
-		if (reseedTrig.process(inputs[RESEED_INPUT].getVoltage(), 0.1f, 1.f)) reseedBase = random::u32();
+		// Button or jack, either fires it -- the panel puts them side by side and
+		// a player should not have to know which one the patch is using.
+		if (nextTrig.process(inputs[NEXT_INPUT].getVoltage(), 0.1f, 1.f)
+		    || nextBtnTrig.process(params[NEXT_PARAM].getValue() > 0.5f ? 10.f : 0.f, 0.1f, 1.f))
+			queueStep = true;
+		if (reseedTrig.process(inputs[RESEED_INPUT].getVoltage(), 0.1f, 1.f)
+		    || reseedBtnTrig.process(params[RESEED_PARAM].getValue() > 0.5f ? 10.f : 0.f, 0.1f, 1.f))
+			reseedBase = random::u32();
 
 		bool barConn = inputs[BAR_INPUT].isConnected();
 		bool bar = barConn && barTrig.process(inputs[BAR_INPUT].getVoltage(), 0.1f, 1.f);
@@ -1648,58 +1669,77 @@ struct FillWidget : ModuleWidget {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/fill.svg")));
 
-		// Panel is 32HP (162.56mm): free margin on the left (art / future controls),
-		// display right of it, drum outputs in three columns at the right edge,
-		// controls spread across the wider lower area.
+		// NO sfs::PanelLabels. res/fill.svg is the designer's own file, published
+		// by `figma_panel_template.py --publish fill`, and it carries every label,
+		// both plates and the logo. This places components and nothing else.
+		//
+		// Positions are in MILLIMETRES from that file rather than on the hp()
+		// grid: the eight channel rows are evenly distributed at 11.866mm, which
+		// is 2.336HP and on no quarter of anything.
 		FillDisplay* disp = new FillDisplay();
 		disp->module = module;
-		disp->box.pos = mm2px(Vec(4.f, 11.f));
-		disp->box.size = mm2px(Vec(104.f, 52.f));
+		disp->box.pos  = mm2px(Vec(3.39f, 10.16f));
+		disp->box.size = mm2px(Vec(104.99f, 52.83f));
 		addChild(disp);
 
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(12.f, 74.f)), module, Fill::ACCUM_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(29.6f, 74.f)), module, Fill::DISCHARGE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(47.2f, 74.f)), module, Fill::TIER_PARAM));
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(64.8f, 74.f)), module, Fill::PHRASE_PARAM));
-		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(mm2px(Vec(82.4f, 74.f)), module, Fill::SYNC_PARAM, Fill::SYNC_LIGHT));
-		addParam(createParamCentered<RoundSmallBlackKnob>(mm2px(Vec(100.f, 74.f)), module, Fill::SET_PARAM));
-
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.f, 90.f)), module, Fill::ACCUM_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(29.6f, 90.f)), module, Fill::DISCHARGE_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(47.2f, 90.f)), module, Fill::TIER_CV_INPUT));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(64.8f, 90.f)), module, Fill::EXTRAS_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(82.4f, 90.f)), module, Fill::EXTRAS_CV_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(100.f, 90.f)), module, Fill::SET_CV_INPUT));
-
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(12.f, 108.f)), module, Fill::CLOCK_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(28.f, 108.f)), module, Fill::BAR_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(44.f, 108.f)), module, Fill::RESET_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(60.f, 108.f)), module, Fill::RESEED_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(72.f, 108.f)), module, Fill::NEXT_INPUT));
-		addParam(createParamCentered<VCVButton>(mm2px(Vec(44.f, 120.f)), module, Fill::RESET_PARAM));
-		addChild(createLightCentered<MediumLight<RedLight>>(mm2px(Vec(86.f, 102.f)), module, Fill::FILL_LIGHT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(86.f, 108.f)), module, Fill::FILL_OUTPUT));
-
-		const float gateX = 136.2f, velX = 147.2f, accX = 158.2f;
+		// ── the eight channels: swing, then gate / velocity / accent ───────────
+		const float xSw = 120.18f, xG = 132.04f, xV = 143.89f, xA = 155.74f;
+		const float cy0 = 20.28f, cdy = 11.866f;
 		for (int c = 0; c < FILL_NCH; c++) {
-			float y = 14.f + c * 13.f;
-			// per-channel swing trimpot in the left margin, row-aligned with the outputs
-			addParam(createParamCentered<Trimpot>(mm2px(Vec(123.f, y)), module, Fill::SWING_PARAM + c));
-			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(gateX, y)), module, Fill::GATE_OUTPUT + c));
-			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(velX, y)),  module, Fill::VEL_OUTPUT + c));
-			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(accX, y)),  module, Fill::ACC_OUTPUT + c));
+			float y = cy0 + cdy * c;
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(xSw, y)), module, Fill::SWING_PARAM + c));
+			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(xG, y)), module, Fill::GATE_OUTPUT + c));
+			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(xV, y)), module, Fill::VEL_OUTPUT + c));
+			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(xA, y)), module, Fill::ACC_OUTPUT + c));
 		}
-		// bottom-right row: time-signature NUM / DEN (→ Meter) + pattern-set CV
-		const float yb = 14.f + FILL_NCH * 13.f;
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(gateX, yb)), module, Fill::NUM_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(velX, yb)),  module, Fill::DEN_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(accX, yb)),  module, Fill::SET_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(123.f, yb)), module, Fill::BPM_OUTPUT));
+
+		// ── row A: reset, and the three pressure controls ──────────────────────
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(10.20f, 76.20f)), module, Fill::RESET_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(22.14f, 76.20f)), module, Fill::RESET_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(42.71f, 76.20f)), module, Fill::ACCUM_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(53.04f, 76.20f)), module, Fill::ACCUM_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(65.91f, 76.20f)), module, Fill::PHRASE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(76.24f, 76.20f)), module, Fill::PHRASE_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(91.40f, 76.20f)), module, Fill::SET_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(101.73f, 76.20f)), module, Fill::SET_CV_INPUT));
+
+		// ── row B: the clock in, and the rest of the engine ────────────────────
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.24f, 91.49f)), module, Fill::BAR_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(22.01f, 91.49f)), module, Fill::CLOCK_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(42.21f, 91.49f)), module, Fill::DISCHARGE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(52.54f, 91.49f)), module, Fill::DISCHARGE_CV_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(65.91f, 91.49f)), module, Fill::EXTRAS_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(76.24f, 91.49f)), module, Fill::EXTRAS_CV_INPUT));
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(91.40f, 91.49f)), module, Fill::NEXT_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(101.73f, 91.49f)), module, Fill::NEXT_INPUT));
+
+		// ── row C ──────────────────────────────────────────────────────────────
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(10.20f, 106.69f)), module, Fill::BPM_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(21.97f, 106.69f)), module, Fill::NUM_OUTPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(42.71f, 106.69f)), module, Fill::TIER_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(53.04f, 106.69f)), module, Fill::TIER_CV_INPUT));
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(65.91f, 106.69f)), module, Fill::RESEED_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(76.24f, 106.69f)), module, Fill::RESEED_INPUT));
+
+		// ── row D: the tempo/time-signature plate, and the fill gate ───────────
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(10.12f, 121.88f)), module, Fill::SET_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(21.97f, 121.88f)), module, Fill::DEN_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(143.98f, 121.88f)), module, Fill::FILL_OUTPUT));
+		addChild(createLightCentered<MediumLight<GreenLight>>(
+			mm2px(Vec(152.19f, 121.88f)), module, Fill::FILL_LIGHT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
 		Fill* module = dynamic_cast<Fill*>(this->module);
 		if (!module) return;
+		menu->addChild(new MenuSeparator);
+		// SYNC came off the 2026-08 panel. It is a two-way choice set once and
+		// left, so the menu is the right home -- but it must have one, or the
+		// param is stranded at whatever a patch happened to be saved with.
+		menu->addChild(createIndexSubmenuItem("Fills",
+			{"Free (russian roulette)", "Synced to phrase"},
+			[module]() { return module->params[Fill::SYNC_PARAM].getValue() > 0.5f ? 1 : 0; },
+			[module](int i) { module->params[Fill::SYNC_PARAM].setValue((float)i); }));
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Clock"));
 		{
