@@ -37,7 +37,13 @@ struct SfzRegion {
 	std::string sample;
 	int   lokey = 0, hikey = 127, keycenter = 60, lovel = 0, hivel = 127;
 	float tuneCents = 0.f, volumeDb = 0.f;
-	int   loopMode = 0;              // 0 = one-shot / no loop, 1 = loop
+	// A loop that runs through the release and a loop that stops at note-off are
+	// different instruments: the first fades out inside the loop, the second
+	// leaves it at loop_end and plays the recorded tail -- the string ringing
+	// off, the room, the key noise. Collapsing them into one "looping" flag threw
+	// that tail away on every sustain-looped library.
+	enum { LOOP_NONE = 0, LOOP_CONTINUOUS = 1, LOOP_SUSTAIN = 2 };
+	int   loopMode = LOOP_NONE;
 	long  loopStart = -1, loopEnd = -1;
 	long  offsetFrames = 0;          // SFZ `offset` — playback starts here, not at 0
 	int   seqLength = 1, seqPos = 1; // round-robin
@@ -148,7 +154,9 @@ static bool parseSfz(const std::string& path, Instrument& inst) {
 		r.egSustain = clamp(getf(m, "ampeg_sustain", 100.f) / 100.f, 0.f, 1.f);
 		r.egRelease = getf(m, "ampeg_release", 0.f);
 		std::string lm = m.count("loop_mode") ? m["loop_mode"] : "";
-		r.loopMode = (lm == "loop_continuous" || lm == "loop_sustain") ? 1 : 0;
+		r.loopMode = (lm == "loop_sustain")    ? SfzRegion::LOOP_SUSTAIN
+		           : (lm == "loop_continuous") ? SfzRegion::LOOP_CONTINUOUS
+		                                       : SfzRegion::LOOP_NONE;
 		r.loopStart = m.count("loop_start") ? atol(m["loop_start"].c_str()) : -1;
 		r.loopEnd   = m.count("loop_end")   ? atol(m["loop_end"].c_str())   : -1;
 		r.seqLength = geti(m, "seq_length", 1); r.seqPos = geti(m, "seq_position", 1);
@@ -299,7 +307,16 @@ static bool parseDecentSampler(const std::string& path, Instrument& inst) {
 		}
 		r.tuneCents = tuning * 100.f;
 		r.volumeDb = volDb; r.volGain = std::pow(10.f, volDb / 20.f);
-		{ std::string s = pick("loopEnabled"); r.loopMode = (s == "true" || s == "1") ? 1 : 0; }
+		// DecentSampler states looping with loopEnabled, and names the kind in
+		// loopMode. A file may carry loopMode="sustain" with no loopEnabled at
+		// all, so naming the mode counts as enabling it.
+		{
+			std::string en = pick("loopEnabled"), md = string::lowercase(pick("loopMode"));
+			bool on = (en == "true" || en == "1") || md == "sustain" || md == "forward";
+			r.loopMode = !on ? SfzRegion::LOOP_NONE
+			           : (md == "sustain") ? SfzRegion::LOOP_SUSTAIN
+			                               : SfzRegion::LOOP_CONTINUOUS;
+		}
 		{ std::string s = pick("loopStart"); if (!s.empty()) r.loopStart = atol(s.c_str()); }
 		{ std::string s = pick("loopEnd"); if (!s.empty()) r.loopEnd = atol(s.c_str()); }
 		{ std::string s = pick("seqLength"); r.seqLength = s.empty() ? 1 : atoi(s.c_str()); }
@@ -641,9 +658,17 @@ struct Play : Module {
 			float ggain = v.amp * v.env * r.volGain;
 			outL += sl * ggain; outR += sr * ggain;
 			v.pos += v.ratio;
-			// Keep looping through the release too (so a sustain loop fades out rather than
-			// jumping to the post-loop tail); one-shot never releases, so it plays through.
-			if (r.loopMode == 1 && (v.held || v.envStage == 3) && r.loopEnd > r.loopStart && v.pos >= r.loopEnd)
+			// A continuous loop keeps wrapping through the release, so the note
+			// fades out inside the loop. A SUSTAIN loop only wraps while the note
+			// is held: at note-off it runs on past loop_end into the recorded
+			// tail, under the release envelope. That is what loop_mode=loop_sustain
+			// and DecentSampler's loopMode="sustain" mean, and Play used to treat
+			// both kinds the same -- so every sustain-looped library lost its tail.
+			// The break happens AT loop_end, not at note-off: the voice finishes
+			// the pass it is in, exactly as the spec reads.
+			bool wrapping = (r.loopMode == SfzRegion::LOOP_CONTINUOUS)
+			              || (r.loopMode == SfzRegion::LOOP_SUSTAIN && v.held);
+			if (wrapping && r.loopEnd > r.loopStart && v.pos >= r.loopEnd)
 				v.pos -= (r.loopEnd - r.loopStart);
 		}
 		float lvl = params[LEVEL_PARAM].getValue();
