@@ -1,5 +1,4 @@
 #include "plugin.hpp"
-#include "panel-style.hpp"
 #include <cmath>
 #include <vector>
 #include <deque>
@@ -2059,20 +2058,17 @@ struct GravityWidget : ModuleWidget {
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colL, lc[i].jy)), module, lc[i].input));
 		}
 
-		// Derived gates along the bottom, clear of the mandala's lowest LEDs.
-		const float yD = 121.93f;
-		const float dx[4] = {30.f, 45.f, 60.f, 75.f};
-		const int dout[4] = {Gravity::ANY_GATE_OUTPUT, Gravity::ODD_GATE_OUTPUT,
-		                     Gravity::EVEN_GATE_OUTPUT, Gravity::NEW_GATE_OUTPUT};
-		const char* dlbl[4] = {"ANY", "ODD", "EVEN", "NEW"};
-		for (int i = 0; i < 4; i++)
-			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(dx[i], yD)), module, dout[i]));
-		// This panel keeps its labels in the artwork, so the new row brings its
-		// own rather than shipping four unlabelled jacks.
-		sfs::PanelLabels* lbl = new sfs::PanelLabels();
-		lbl->box.size = box.size;
-		for (int i = 0; i < 4; i++) lbl->jack(dx[i], yD, dlbl[i]);
-		addChild(lbl);
+		// Derived gates: 2x2 plate, top-right, mirroring the position outputs at
+		// the bottom-right. They lived in a loose row along the foot when they
+		// were added, because the panel had no home for them; res/gravity.svg now
+		// gives them one, and the labels come with it -- so no PanelLabels here.
+		// Reading order across the plate is ANY / NEW, ODD / EVEN, which is what
+		// the artwork says: the two that fire on every crossing on top, the two
+		// that split the ring by parity below.
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(127.00f,  22.01f)), module, Gravity::ANY_GATE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(142.24f,  22.01f)), module, Gravity::NEW_GATE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(127.00f,  37.25f)), module, Gravity::ODD_GATE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(142.24f,  37.25f)), module, Gravity::EVEN_GATE_OUTPUT));
 
 		// Right outputs: 2x2 plate, bottom-right. X Y on top, ANGLE RADIUS below.
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(127.00f, 106.67f)), module, Gravity::X_OUTPUT));

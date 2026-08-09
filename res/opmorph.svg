@@ -1,4 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="60.9600mm" height="128.5000mm" viewBox="0 0 180.0000 379.4252">
   <rect width="180.0000" height="379.4252" fill="#f0f0f0"/>
-  <g id="Reticules" style="display:none"></g>
+  <g id="PanelArt">
+    <rect x="11.25" y="30.00" width="157.50" height="195.00" rx="3.00" fill="#1a1a32"/>
+  </g>
+  <g id="Reticules" style="display:none">
+    <circle cx="41.25" cy="255.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="41.25" cy="285.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="135.00" cy="255.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="135.00" cy="285.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="41.25" cy="330.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="90.00" cy="330.00" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <rect x="128.07" y="319.78" width="13.86" height="20.43" rx="1.68" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="41.25" cy="375.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="135.00" cy="375.00" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+  </g>
 </svg>

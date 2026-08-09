@@ -13,6 +13,8 @@ Conventions it enforces (see docs/conventions/panel-reticules.md):
   * screens at 100%, filled with the display blue
 """
 import glob
+import keyword
+import math
 import os
 import re
 import sys
@@ -67,8 +69,19 @@ def evaluate(expr, env):
     # strip C++ float suffixes: 76.31f, 4.f and .5f all appear in these widgets
     e = re.sub(r"(?<=[\d.])f\b", "", expr)
     e = e.replace("M_PI", "3.141592653589793")
+    e = re.sub(r"\(\s*(?:float|int|double)\s*\)", "", e)
+    e = e.replace("std::", "").replace("::", "_")
     ns = dict(env)
+    # A C++ local may be named `as`, `is`, `in`, `not`, `lambda`... all legal
+    # there and all reserved here. Gravity names its sector angle `as`, and the
+    # SyntaxError that caused took twelve controls off the panel in silence.
+    for name in [n for n in ns if keyword.iskeyword(n)]:
+        ns[name + "__kw"] = ns.pop(name)
+        e = re.sub(r"\b%s\b" % re.escape(name), name + "__kw", e)
     ns.setdefault("hp", hp)
+    for fn in ("sin", "cos", "tan", "sqrt", "floor", "ceil", "fabs", "pow", "atan2"):
+        ns.setdefault(fn, getattr(math, fn))
+    ns.setdefault("M_PI", math.pi)
     return float(eval(e, {"__builtins__": {}}, ns))
 
 
@@ -98,6 +111,37 @@ def constants(seed, *sources):
     return env
 
 
+def struct_arrays(*sources):
+    """`const S arr[N] = {{...}, ...}` as {(arr, field): [v0, v1, ...]}.
+
+    A widget that states a column as a table of structs is not being clever, it
+    is being readable -- but `lc[i].py` is opaque to an expression evaluator, so
+    without this every control in such a loop is dropped without a word."""
+    out = {}
+    for text in sources:
+        for sm in re.finditer(r"struct\s+(\w+)\s*\{([^}]*)\}\s*;", text):
+            sname, fields = sm.group(1), re.findall(r"\b(?:int|float)\s+([\w,\s]+);", sm.group(2))
+            names = [f.strip() for grp in fields for f in grp.split(",") if f.strip()]
+            if not names:
+                continue
+            for am in re.finditer(r"(?:static\s+)?const\s+%s\s+(\w+)\s*\[[^\]]*\]\s*=\s*\{(.*?)\}\s*;"
+                                  % re.escape(sname), text, re.S):
+                arr, body = am.group(1), am.group(2)
+                rows = re.findall(r"\{([^{}]*)\}", body)
+                for fi, fname in enumerate(names):
+                    vals = []
+                    for row in rows:
+                        cells = [c.strip() for c in row.split(",")]
+                        if fi >= len(cells):
+                            vals.append(None); continue
+                        try:
+                            vals.append(float(cells[fi].rstrip("f")))
+                        except ValueError:
+                            vals.append(None)      # an enum name, not a coordinate
+                    out[(arr, fname)] = vals
+    return out
+
+
 def vec_args(text, start=0):
     """The two expressions inside the first mm2px(Vec( ... )) at or after `start`.
     Split on the top-level comma with balanced parens -- a naive [^)]+ truncates
@@ -120,6 +164,28 @@ def vec_args(text, start=0):
     if comma < 0 or depth != 0:
         return None
     return text[i:comma], text[comma + 1:j], j
+
+
+def vec_var(name, scope):
+    """`Vec gp(x, y);` or `Vec gp = Vec(x, y);` -> the two expressions.
+
+    Gravity builds its sector ring in polar coordinates and passes the Vec, so
+    mm2px(gp) carries no coordinates at the call site at all. Twelve jacks and
+    twelve lights were missing from its export because of it."""
+    m = re.search(r"Vec\s+%s\s*(?:=\s*Vec\s*)?\(" % re.escape(name), scope)
+    if not m:
+        return None
+    i, depth, j, comma = m.end(), 1, m.end(), -1
+    while j < len(scope):
+        if scope[j] == "(": depth += 1
+        elif scope[j] == ")":
+            depth -= 1
+            if depth == 0: break
+        elif scope[j] == "," and depth == 1: comma = j
+        j += 1
+    if comma < 0 or depth != 0:
+        return None
+    return scope[i:comma], scope[comma + 1:j]
 
 
 def loop_ranges(body, env, extra_defs):
@@ -163,6 +229,7 @@ def collect(body, env, extra_defs):
     out = []
     env = dict(env)
     env.update(extra_defs)
+    tables = struct_arrays(body)
 
     # displays / custom children: box.pos + box.size in mm
     for m in re.finditer(r"(\w+)->box\.pos\s*=\s*(mm2px.*?);\s*\1->box\.size\s*=\s*(mm2px.*?);",
@@ -184,8 +251,15 @@ def collect(body, env, extra_defs):
         text = call.group(2)
         pos = vec_args(text)
         comp = component(text)
-        if not pos or not comp:
+        if not comp:
             continue
+        # the position may have been built into a Vec first
+        indirect = None
+        if not pos:
+            vm = re.search(r"mm2px\s*\(\s*(\w+)\s*\)", text)
+            indirect = vm.group(1) if vm else None
+            if not indirect:
+                continue
         size = None
         for key, val in SIZES.items():
             if key in comp:
@@ -201,19 +275,33 @@ def collect(body, env, extra_defs):
                 var, count = lv, lc
                 locals_src = body[ls:le]
         decls = re.findall(r"float\s+(\w+)\s*=\s*([^;]+);", locals_src) if var else []
+        if indirect:
+            pos = vec_var(indirect, locals_src) or vec_var(indirect, body)
+            if not pos:
+                continue
 
         for i in range(count):
             e = dict(env)
+            px, py = pos[0], pos[1]
             if var:
                 e[var] = i
+                # `lc[i].py` -> the value in row i of the table
+                for (arr, field), vals in tables.items():
+                    if i < len(vals) and vals[i] is not None:
+                        pat = r"\b%s\s*\[\s*%s\s*\]\s*\.\s*%s\b" % (
+                            re.escape(arr), re.escape(var), re.escape(field))
+                        px = re.sub(pat, repr(vals[i]), px)
+                        py = re.sub(pat, repr(vals[i]), py)
                 for name, expr in decls:
                     try:
                         e[name] = evaluate(expr, e)
                     except Exception:
                         pass
             try:
-                x, y = evaluate(pos[0], e), evaluate(pos[1], e)
-            except Exception:
+                x, y = evaluate(px, e), evaluate(py, e)
+            except Exception as err:
+                print("    DROPPED %s at %s: cannot evaluate (%s, %s) -- %s"
+                      % (comp, call.group(1), px.strip(), py.strip(), err))
                 break
             kind = "round" if any(r in comp for r in ROUND) else "flat"
             out.append((kind, x * MM, y * MM, size[0], size[1]))
@@ -301,7 +389,7 @@ PLATES = {
     # the eight string columns, and the mix pair at the foot
     "loom": [(hp(6.2), hp(15.8), hp(19.0), hp(4.7)),
              (hp(23.5), hp(20.9), hp(4.2), hp(2.9))],
-    "slidex": [], "opmorph": [],
+    "slidex": [], "opmorph": [], "gravity": [],
 }
 
 MODULES = {
@@ -312,6 +400,7 @@ MODULES = {
     "key":     ("Key",     "src/key.cpp",     "res/key.svg",     {"KEY_NCH": 4}),
     "slide":   ("Slide",   "src/slide.cpp",   "res/slide.svg",   {"SLIDE_NCH": 8}),
     "loom":    ("Loom",    "src/loom.cpp",    "res/loom.svg",    {"LOOM_N": 8}),
+    "gravity": ("Gravity", "src/gravity.cpp", "res/gravity.svg", {}),
     "slidex":  ("SlideX",  "src/slidex.cpp",  "res/slidex.svg",  {"NCH": 8}),
     "opmorph": ("OpMorph", "src/opmorph.cpp", "res/opmorph.svg", {"OPM_COLS": 4, "OPM_ROWS": 4, "OPM_SLOTS": 16}),
 }
@@ -320,7 +409,7 @@ MODULES = {
 # than a target for it. Splicing generated reticules into these would draw
 # circles straight over the design. Named explicitly on the command line they
 # still run, so the guard is against the bare sweep, not against intent.
-FINISHED = {"crystal", "chime", "loom", "slide", "slidex", "fill"}
+FINISHED = {"crystal", "chime", "loom", "slide", "slidex", "fill", "gravity"}
 
 if __name__ == "__main__":
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

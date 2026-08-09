@@ -1,10 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="152.4mm" height="128.5mm" viewBox="0 0 432 364.25">
-  <g id="Background">
-    <g id="Background-2" data-name="Background">
-      <rect y="0" width="432" height="364.25" fill="#efefef"/>
-    </g>
-  </g>
   <g id="UI">
     <g>
       <path id="path12" d="M376.99,22.78h1.2v-1.2h1.2v2.4h1.2v-3.6h1.2v4.8h1.2v-6h1.2v6h1.2v-3.6h1.2v2.4h1.2v-1.2h1.2" fill="none" stroke="#b2b2b2" stroke-linecap="round" stroke-linejoin="round" stroke-width=".5"/>
@@ -100,6 +95,36 @@
     <g isolation="isolate">
       <path d="M357.86,285.58l1.76-2.49-1.74-2.41h.83l1.31,1.86,1.29-1.86h.83l-1.74,2.41,1.75,2.49h-.84l-1.29-1.93-1.31,1.93h-.84Z" fill="#fff"/>
     </g>
+    <rect x="345.6" y="33.58" width="72" height="86.4" rx="3" ry="3" fill="#2a2a2a"/>
+    <g isolation="isolate">
+      <g>
+        <path d="M394.52,88.78v-4.9h2.95v.63h-2.26v1.46h2.04v.62h-2.04v1.57h2.27v.63h-2.96Z" fill="#fff"/>
+        <path d="M400.11,88.78l-2.01-4.9h.73l1.65,4.1,1.66-4.1h.74l-2.01,4.9h-.76Z" fill="#fff"/>
+        <path d="M403.57,88.78v-4.9h2.95v.63h-2.26v1.46h2.04v.62h-2.04v1.57h2.27v.63h-2.96Z" fill="#fff"/>
+        <path d="M407.7,88.78v-4.9h.71l2.77,3.75v-3.75h.69v4.9h-.69l-2.79-3.79v3.79h-.69Z" fill="#fff"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M355.18,88.87c-.48,0-.9-.11-1.27-.32-.37-.21-.66-.51-.87-.9-.21-.38-.31-.82-.31-1.31s.1-.94.31-1.32c.21-.38.49-.68.86-.9.36-.22.78-.33,1.26-.33s.9.11,1.26.33c.36.22.65.52.85.9.21.38.31.82.31,1.31s-.1.93-.31,1.32c-.21.38-.49.68-.85.9-.36.21-.78.32-1.25.32ZM355.19,88.24c.33,0,.63-.08.88-.25.26-.16.46-.39.6-.67s.22-.61.22-.99-.07-.7-.22-.98c-.15-.29-.35-.51-.61-.68-.26-.16-.56-.25-.89-.25s-.63.08-.9.25c-.26.16-.46.39-.61.68-.15.29-.22.62-.22.98s.08.7.22.99.36.51.62.67c.26.16.57.25.91.25Z" fill="#fff"/>
+        <path d="M358.51,88.78v-4.9h1.51c.47,0,.88.1,1.24.31.36.21.64.5.85.86.21.37.31.79.31,1.27s-.1.9-.31,1.27c-.21.37-.49.66-.85.87-.36.21-.78.31-1.24.31h-1.51ZM359.2,88.14h.83c.24,0,.46-.05.67-.14.21-.09.39-.22.54-.39s.28-.36.36-.58c.09-.22.13-.46.13-.71s-.04-.49-.13-.71c-.09-.22-.21-.41-.36-.58s-.34-.29-.54-.39c-.21-.09-.43-.14-.67-.14h-.83v3.61Z" fill="#fff"/>
+        <path d="M363.35,88.78v-4.9h1.51c.47,0,.88.1,1.24.31.36.21.64.5.85.86.21.37.31.79.31,1.27s-.1.9-.31,1.27c-.21.37-.49.66-.85.87-.36.21-.78.31-1.24.31h-1.51ZM364.04,88.14h.83c.24,0,.46-.05.67-.14.21-.09.39-.22.54-.39s.28-.36.36-.58c.09-.22.13-.46.13-.71s-.04-.49-.13-.71c-.09-.22-.21-.41-.36-.58s-.34-.29-.54-.39c-.21-.09-.43-.14-.67-.14h-.83v3.61Z" fill="#fff"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M395.11,45.58v-4.9h.75l2.93,3.75v-3.75h.73v4.9h-.73l-2.95-3.79v3.79h-.72Z" fill="#fff"/>
+        <path d="M400.84,45.58v-4.9h3.11v.63h-2.39v1.46h2.15v.62h-2.15v1.57h2.4v.63h-3.13Z" fill="#fff"/>
+        <path d="M406.18,45.58l-1.57-4.9h.74l1.22,3.84,1.18-3.84h.73l1.16,3.81,1.24-3.81h.73l-1.59,4.9h-.78l-1.14-3.79-1.16,3.79h-.78Z" fill="#fff"/>
+      </g>
+    </g>
+    <g isolation="isolate">
+      <g>
+        <path d="M352.79,45.58l1.97-4.9h.74l1.97,4.9h-.73l-.53-1.31h-2.16l-.53,1.31h-.73ZM354.29,43.66h1.69l-.84-2.11-.85,2.11Z" fill="#fff"/>
+        <path d="M358.16,45.58v-4.9h.71l2.77,3.75v-3.75h.69v4.9h-.69l-2.79-3.79v3.79h-.69Z" fill="#fff"/>
+        <path d="M364.77,45.58v-2.05l-1.75-2.85h.79l1.3,2.14,1.3-2.14h.8l-1.75,2.84v2.06h-.69Z" fill="#fff"/>
+      </g>
+    </g>
     <circle cx="215.43" cy="289.14" r="15.56" fill="#231f20"/>
     <line x1="215.43" y1="181.42" x2="215.43" y2="289.13" fill="none" stroke="#dbdbe4" stroke-width=".85"/>
     <circle cx="308.72" cy="235.28" r="15.56" fill="#231f20"/>
@@ -188,6 +213,26 @@
       <line x1="354.33" y1="302.38" x2="365.67" y2="302.38" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
       <line x1="360" y1="296.71" x2="360" y2="308.05" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
       <circle cx="360" cy="302.38" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="397.53" y1="105.58" x2="408.87" y2="105.58" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="403.2" y1="99.91" x2="403.2" y2="111.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="403.2" cy="105.58" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="354.33" y1="105.58" x2="365.67" y2="105.58" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="360" y1="99.91" x2="360" y2="111.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="360" cy="105.58" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="397.53" y1="62.38" x2="408.87" y2="62.38" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="403.2" y1="56.71" x2="403.2" y2="68.05" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="403.2" cy="62.38" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
+    </g>
+    <g>
+      <line x1="354.33" y1="62.38" x2="365.67" y2="62.38" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <line x1="360" y1="56.71" x2="360" y2="68.05" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
+      <circle cx="360" cy="62.38" r="4.25" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".43"/>
     </g>
     <g>
       <line x1="209.76" y1="289.13" x2="221.1" y2="289.13" fill="none" stroke="red" stroke-miterlimit="11.34" stroke-width=".57"/>
