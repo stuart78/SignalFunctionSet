@@ -661,7 +661,11 @@ def publish(key):
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     name, cpp, out, defs = pr.MODULES[key]
-    src_svg = os.path.join(root, "design", f"{key}.svg")
+    # design/<key>.svg by default; a module whose panel is named for the module
+    # rather than for its slug gets an entry here rather than having the
+    # designer's file renamed under them.
+    DESIGN_FILE = {"slidex": "slide-xp.svg"}
+    src_svg = os.path.join(root, "design", DESIGN_FILE.get(key, f"{key}.svg"))
     if not os.path.exists(src_svg):
         print(f"{key}: no design/{key}.svg"); return
     svg = open(src_svg).read()
@@ -748,7 +752,7 @@ def publish(key):
     open(os.path.join(root, out), "w").write(svg)
     hp_units = (w / upmm) / 5.08
     warn = "" if abs(hp_units - round(hp_units)) < 1e-4 else "  ** not a whole HP **"
-    print(f"{key}: design/{key}.svg -> {out}   {w / upmm:.2f}mm = {hp_units:.3f}HP "
+    print(f"{key}: {os.path.relpath(src_svg, root)} -> {out}   {w / upmm:.2f}mm = {hp_units:.3f}HP "
           f"at {upmm / MM:.4g}x, {n - len(movers)}/{len(spots)} guides + "
           f"{len(movers)} live part(s) hidden{warn}")
     # A control with no guide is usually fine -- a slider's real artwork is in

@@ -25,7 +25,6 @@
 
 #include "plugin.hpp"
 #include "slide-messages.hpp"
-#include "panel-style.hpp"
 
 struct SlideX : Module {
 	enum ParamId  { ENUMS(VELATT_PARAM, SlideXMessage::NCH), PARAMS_LEN };
@@ -98,19 +97,18 @@ struct SlideXWidget : ModuleWidget {
 	SlideXWidget(SlideX* module) {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/slidex.svg")));
-		using sfs::hp;
 
-		sfs::PanelLabels* lbl = new sfs::PanelLabels();
-		lbl->box.size = box.size;
-		addChild(lbl);
-		lbl->title(hp(0.75f), hp(1.6f), "STR");
-
-		// Eight rows on the same 2.5HP pitch the strings use on Slide's own rows,
-		// so the two read as one instrument side by side. Gate in, then out, with
-		// the string number between them and the activity light on the out.
-		const float xn = hp(0.95f), xg = hp(2.5f), xv = hp(5), xa = hp(7.25f),
-		            xo = hp(9.75f), xl = hp(11.2f);
-		const float y0 = hp(4), dy = hp(2.5f);
+		// NO sfs::PanelLabels. res/slidex.svg is the designer's own file,
+		// published by `figma_panel_template.py --publish slidex`, and it carries
+		// the column headings, the string numbers, the OUT plate and the logo.
+		//
+		// Positions are in MILLIMETRES straight from that file rather than on the
+		// hp() grid, because the rows are evenly distributed down the panel and
+		// not grid-snapped: 13.543mm apart, which is 2.666HP. Fitting an even
+		// spacing to the eight measured rows lands within 0.014mm, so this is one
+		// distribution rather than eight independent placements.
+		const float xg = 10.13f, xv = 23.58f, xa = 33.74f, xo = 47.29f, xl = 54.10f;
+		const float y0 = 27.15f, dy = 13.543f;
 		for (int i = 0; i < SlideXMessage::NCH; i++) {
 			float y = y0 + dy * i;
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(xg, y)), module,
@@ -123,12 +121,7 @@ struct SlideXWidget : ModuleWidget {
 			                                           SlideX::STRING_OUTPUT + i));
 			addChild(createLightCentered<SmallLight<GreenLight>>(
 				mm2px(Vec(xl, y)), module, SlideX::STRING_LIGHT + i));
-			lbl->add(xn, y, string::f("%d", i + 1), sfs::PanelLabels::LABEL);
 		}
-		lbl->add(xg, y0 - sfs::LABEL_GAP_JACK, "GATE");
-		lbl->add(xv, y0 - sfs::LABEL_GAP_JACK, "VEL");
-		lbl->add(xa, y0 - sfs::LABEL_GAP_TRIM, "LVL");
-		lbl->add(xo, y0 - sfs::LABEL_GAP_JACK, "OUT");
 	}
 };
 
