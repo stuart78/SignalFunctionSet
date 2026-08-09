@@ -84,6 +84,8 @@ def constants(seed, *sources):
                                    for v in m.group(2).split(",") if v.strip()]
             except Exception:
                 pass
+        for m in re.finditer(r"(?:static\s+)?const\s+int\s+(\w+)\s*=\s*(-?\d+)\s*;", text):
+            env.setdefault(m.group(1), float(m.group(2)))
         for m in re.finditer(r"(?:static\s+)?const\s+float\s+([^;\[]+);", text):
             for decl in m.group(1).split(","):
                 if "=" not in decl:
@@ -125,9 +127,16 @@ def loop_ranges(body, env, extra_defs):
     range is found by matching braces — testing whether the loop variable appears
     in the position text instead would fire on the `c` in `Vec`."""
     out = []
-    for m in re.finditer(r"for\s*\(\s*int\s+(\w+)\s*=\s*0;\s*\1\s*<\s*([A-Za-z0-9_]+)\s*;", body):
+    # The bound may be qualified -- `i < SlideXMessage::NCH` is how an expander
+    # states its own width. Without the `::` this matched nothing and every row
+    # in the loop was dropped in silence, which is the one thing this tool must
+    # not do; SLIDE X exported with zero reticules that way.
+    for m in re.finditer(r"for\s*\(\s*int\s+(\w+)\s*=\s*0;\s*\1\s*<\s*([A-Za-z0-9_:]+)\s*;", body):
         n = m.group(2)
-        n = int(n) if n.isdigit() else int(env.get(n, extra_defs.get(n, 0)) or 0)
+        if not n.isdigit():
+            bare = n.split("::")[-1]
+            n = env.get(n, extra_defs.get(n, env.get(bare, extra_defs.get(bare, 0))))
+        n = int(n or 0)
         if not n:
             continue
         i = body.find("{", m.end())
@@ -292,6 +301,7 @@ PLATES = {
     # the eight string columns, and the mix pair at the foot
     "loom": [(hp(6.2), hp(15.8), hp(19.0), hp(4.7)),
              (hp(23.5), hp(20.9), hp(4.2), hp(2.9))],
+    "slidex": [], "opmorph": [],
 }
 
 MODULES = {
@@ -302,6 +312,8 @@ MODULES = {
     "key":     ("Key",     "src/key.cpp",     "res/key.svg",     {"KEY_NCH": 4}),
     "slide":   ("Slide",   "src/slide.cpp",   "res/slide.svg",   {"SLIDE_NCH": 8}),
     "loom":    ("Loom",    "src/loom.cpp",    "res/loom.svg",    {"LOOM_N": 8}),
+    "slidex":  ("SlideX",  "src/slidex.cpp",  "res/slidex.svg",  {"NCH": 8}),
+    "opmorph": ("OpMorph", "src/opmorph.cpp", "res/opmorph.svg", {"OPM_COLS": 4, "OPM_ROWS": 4, "OPM_SLOTS": 16}),
 }
 
 # Panels whose artwork is hand-made and is now the SOURCE of the layout rather

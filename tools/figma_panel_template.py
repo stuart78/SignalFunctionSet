@@ -513,7 +513,16 @@ def module_svg(key):
     texts, links, skipped = labels(body, ev) if shared else ([], [], [])
     plates = [(x * MM, y * MM, w * MM, h * MM) for (x, y, w, h) in pr.PLATES.get(key, [])]
 
-    wmm = float(re.search(r'width="([0-9.]+)mm"', open(os.path.join(root, svg)).read()).group(1))
+    head = open(os.path.join(root, svg)).read()
+    m = re.search(r'width="([0-9.]+)mm"', head)
+    if not m:
+        # A px header (Figma's default) rather than the mm one Rack and these
+        # tools expect. Raised rather than guessed, and named rather than
+        # crashing the whole batch, because it stops at the FIRST such module
+        # and every later one silently never runs -- which is how this went
+        # unnoticed for crystal.
+        raise ValueError("%s has no width in mm -- run --fixup on it first" % svg)
+    wmm = float(m.group(1))
     # From HP rather than mm x MM: 28HP is exactly 1680u at 4x, and rounding the
     # truncated mm-per-unit constant leaves 1680.0001 in the header instead.
     hp_units = int(round(wmm / 5.08))
@@ -591,8 +600,14 @@ def fixup(path):
     if not vb:
         print(f"{path}: no viewBox"); return
     w, h = float(vb.group(1)), float(vb.group(2))
+    # Snap the scale, exactly as --publish does. A designer's file often carries
+    # a rounded viewBox height (1518 where 4x is 1517.7166), and carrying that
+    # 0.02% through makes a 25HP panel come out 24.995HP -- off the grid by a
+    # hair, which is invisible in the file and visible in the rack.
     scale = h / PANEL_H
-    if abs(scale - round(scale, 3)) > 1e-6 or scale <= 0:
+    if abs(scale - round(scale)) < 0.01 and round(scale) > 0:
+        scale = float(round(scale))
+    elif abs(scale - round(scale, 3)) > 1e-6 or scale <= 0:
         print(f"{path}: height {h:.2f} is not a 3U panel at any clean scale")
     wmm = w / (MM * scale)
     svg = re.sub(r'width="[^"]+"', f'width="{wmm:.4f}mm"', svg, count=1)
@@ -780,7 +795,11 @@ if __name__ == "__main__":
           f"({raw(HP / SNAP * S)}u), rounding {ROUND}, gaps from {GAPS}")
     if args and args[0] == "--from":
         for key in args[1:]:
-            svg, hpn, nret, nlab, audit = module_svg(key)
+            try:
+                svg, hpn, nret, nlab, audit = module_svg(key)
+            except ValueError as e:
+                print(f"{key}: SKIPPED -- {e}")
+                continue
             open(os.path.join(out, f"{key}-panel.svg"), "w").write(svg)
             print(f"{key}-panel.svg    {hpn}HP   {nret} reticules   {nlab} labels")
             for a in audit:
