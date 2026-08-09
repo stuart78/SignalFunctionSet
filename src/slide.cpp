@@ -287,6 +287,7 @@ struct Slide : Module {
 	int   mouseMode = 0;                 // 0 = hover strums, 1 = click-drag only
 
 	dsp::SchmittTrigger gateTrig, clockTrig, resetTrig, resetBtn;
+	dsp::SchmittTrigger xGate[SLIDE_NCH];      // Slide X's per-string gates
 	dsp::SchmittTrigger polyGate[SLIDE_NCH];
 	int   rollIdx = 0, rollWalk = 0;
 	float intPhase = 0.f;
@@ -770,6 +771,17 @@ struct Slide : Module {
 					bool melodic = (playMode == 1 && inputs[VOCT_INPUT].isConnected());
 					pick(melodic ? voiceString[std::min(i, SLIDE_NCH - 1)] : i, gv);
 				}
+		}
+
+		// Slide X's gates address STRINGS, one jack each -- unlike the poly GATE
+		// above, where channel N is the Nth note and which string it lands on is
+		// the solver's business. A jack labelled "3" has to play string 3.
+		if (rightExpander.module && rightExpander.module->model == modelSlideX) {
+			auto* xg = (SlideXMessage*) rightExpander.module->leftExpander.consumerMessage;
+			if (xg && xg->active)
+				for (int i = 0; i < SLIDE_NCH; i++)
+					if (xGate[i].process(xg->gate[i], 0.1f, 1.f))
+						pick(i, clamp(xg->vel[i], 0.03f, 1.f));
 		}
 
 		bool autoOn = params[AUTO_PARAM].getValue() > 0.5f;
