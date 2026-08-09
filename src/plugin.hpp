@@ -43,3 +43,4 @@ extern Model* modelLoom;
 extern Model* modelKey;
 extern Model* modelSlide;
 extern Model* modelOpMorph;
+extern Model* modelSlideX;

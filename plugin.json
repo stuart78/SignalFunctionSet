@@ -406,6 +406,16 @@
         "Polyphonic"
       ],
       "hidden": true
+    },
+    {
+      "slug": "SlideX",
+      "name": "SLIDE X",
+      "description": "Expander for Slide: the eight strings on eight jacks",
+      "tags": [
+        "Expander",
+        "Polyphonic"
+      ],
+      "hidden": true
     }
   ]
 }

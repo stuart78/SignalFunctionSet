@@ -2,6 +2,7 @@
 #include "panel-style.hpp"
 #include "waveguide.hpp"
 #include "scales.hpp"
+#include "slide-messages.hpp"
 #include <cmath>
 #include <string>
 #include <vector>
@@ -210,9 +211,11 @@ struct Slide : Module {
 		ROOT_CV_INPUT, SCALE_CV_INPUT,
 		INPUTS_LEN
 	};
-	// POLY_OUTPUT is RETIRED from the panel -- per-string audio moves to an
-	// expander -- but stays in the enum, because Rack serialises outputs by
-	// index and removing it would re-point every cable in a saved patch.
+	// POLY_OUTPUT is RETIRED. Per-string audio comes out of Slide X now, one
+	// jack each. The slot STAYS, because Rack serialises outputs by index and
+	// deleting it would re-point every cable in a saved patch onto its
+	// neighbour -- the enum is append-only, and retiring in place is how you
+	// remove something from it.
 	enum OutputId { MIX_L_OUTPUT, MIX_R_OUTPUT, POLY_OUTPUT,
 	                EVEN_OUTPUT, ODD_OUTPUT, OUTPUTS_LEN };
 	enum LightId { AUTO_LIGHT, LIGHTS_LEN };
@@ -289,6 +292,10 @@ struct Slide : Module {
 	float shownBar[SLIDE_NCH] = {};
 
 	Slide() {
+		// The mother owns these because it is the one WRITING them.
+		rightExpander.producerMessage = new SlideExpanderMessage();
+		rightExpander.consumerMessage = new SlideExpanderMessage();
+
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
 		// Defaults to the seventh rather than the nut: in melody mode this is the
@@ -383,7 +390,7 @@ struct Slide : Module {
 
 		configOutput(MIX_L_OUTPUT, "Mix left");
 		configOutput(MIX_R_OUTPUT, "Mix right");
-		configOutput(POLY_OUTPUT,  "Per-string audio (polyphonic, 8 channels)");
+		configOutput(POLY_OUTPUT,  "(retired — per-string audio is on the Slide X expander)");
 		configOutput(EVEN_OUTPUT, "Even strings (2, 4, 6, 8) summed");
 		configOutput(ODD_OUTPUT,  "Odd strings (1, 3, 5, 7) summed");
 
@@ -393,6 +400,11 @@ struct Slide : Module {
 	void applyTuning(int t) {
 		t = clamp(t, 0, SLIDE_NTUNINGS - 1);
 		for (int i = 0; i < SLIDE_NCH; i++) tune[i] = SLIDE_TUNINGS[t].semis[i];
+	}
+
+	~Slide() {
+		delete (SlideExpanderMessage*) rightExpander.producerMessage;
+		delete (SlideExpanderMessage*) rightExpander.consumerMessage;
 	}
 
 	void onReset() override {
@@ -778,7 +790,11 @@ struct Slide : Module {
 		// ── the strings ───────────────────────────────────────────────────────
 		float bus = 0.f;
 		float mixL = 0.f, mixR = 0.f, sumEven = 0.f, sumOdd = 0.f;
-		outputs[POLY_OUTPUT].setChannels(SLIDE_NCH);
+		SlideExpanderMessage* xmsg = nullptr;
+		if (rightExpander.module && rightExpander.module->model == modelSlideX)
+			xmsg = (SlideExpanderMessage*) rightExpander.producerMessage;
+		if (xmsg) xmsg->active = true;
+		outputs[POLY_OUTPUT].setChannels(0);        // retired; Slide X carries these
 
 		for (int i = 0; i < SLIDE_NCH; i++) {
 			SlideString& s = str[i];
@@ -868,7 +884,7 @@ struct Slide : Module {
 			float th = (p + 1.f) * (float)M_PI_4;
 			mixL += s.out * std::cos(th);
 			mixR += s.out * std::sin(th);
-			outputs[POLY_OUTPUT].setVoltage(sfs::softClip(s.out * 10.f), i);
+			if (xmsg) xmsg->string[i] = sfs::softClip(s.out * 10.f);
 			// String 1 is index 0, so the ODD strings are the even indices.
 			(i % 2 ? sumEven : sumOdd) += s.out;
 
@@ -906,6 +922,7 @@ struct Slide : Module {
 		yL = std::tanh(yL * dr) / std::sqrt(dr);
 		yR = std::tanh(yR * dr) / std::sqrt(dr);
 
+		if (xmsg) rightExpander.requestMessageFlip();
 		outputs[EVEN_OUTPUT].setVoltage(sfs::softClip(sumEven * 10.f));
 		outputs[ODD_OUTPUT].setVoltage(sfs::softClip(sumOdd * 10.f));
 		outputs[MIX_L_OUTPUT].setVoltage(sfs::softClip(yL * 11.f));
