@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="152.4mm" height="128.5mm" viewBox="0 0 432 364.25">
+  <g id="Background">
+    <g id="Background-2" data-name="Background">
+      <rect y="0" width="432" height="364.25" fill="#efefef"/>
+    </g>
+  </g>
   <g id="UI">
     <g>
       <path id="path12" d="M376.99,22.78h1.2v-1.2h1.2v2.4h1.2v-3.6h1.2v4.8h1.2v-6h1.2v6h1.2v-3.6h1.2v2.4h1.2v-1.2h1.2" fill="none" stroke="#b2b2b2" stroke-linecap="round" stroke-linejoin="round" stroke-width=".5"/>
