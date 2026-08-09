@@ -238,6 +238,26 @@ struct Slide : Module {
 	// rather than each string, because the bar is one rigid object -- moving
 	// strings independently would break the tuning's intervals, which is the
 	// whole reason a lap steel is tuned to a chord.
+	// Move a bar position by N steps of the current scale. Transposing by
+	// SEMITONES leaves the key -- +3 on a C major pattern gives you E flat -- so
+	// with a scale set the offset counts DEGREES, and a pattern keeps its
+	// harmony wherever you put it. With no scale there are no degrees, so it
+	// falls back to semitones, which is then the only thing it can mean.
+	float transposeDegrees(float semis, int steps) const {
+		if (steps == 0) return semis;
+		if (curScale < 0 || curScale >= sfs::NUM_SCALES) return semis + (float)steps;
+		const sfs::Scale& sc = sfs::SCALES[curScale];
+		int bestOct = 0, bestD = 0; float bestErr = 1e9f;
+		for (int oct = -3; oct <= 4; oct++)
+			for (int d = 0; d < sc.size; d++) {
+				float e = std::fabs(sc.intervals[d] + 12.f * oct - semis);
+				if (e < bestErr) { bestErr = e; bestOct = oct; bestD = d; }
+			}
+		int idx = bestOct * sc.size + bestD + steps;
+		int oct = (int)std::floor((float)idx / (float)sc.size);
+		return sc.intervals[idx - oct * sc.size] + 12.f * oct;
+	}
+
 	float snapBar(float semis) const {
 		if (curScale < 0 || curScale >= sfs::NUM_SCALES) return semis;
 		const sfs::Scale& sc = sfs::SCALES[curScale];
@@ -306,7 +326,12 @@ struct Slide : Module {
 		// Defaults to the seventh rather than the nut: in melody mode this is the
 		// home position the hand works around, and at the nut there is no room to
 		// reach anything below the open strings.
-		configParam(BAR_PARAM, 0.f, (float)SLIDE_FRETS, 7.f, "Bar position (melody: home position)",
+		// Range starts below zero so the offset can transpose DOWN; unpatched the
+		// negative half simply clamps at the nut, so no travel is lost. Default 0
+		// means both readings agree out of the box -- the bar at the nut with
+		// nothing patched, and no transposition once something is.
+		configParam(BAR_PARAM, -12.f, (float)SLIDE_FRETS, 0.f,
+		            "Bar position / transpose (scale steps when a CV is patched)",
 		            " semitones");
 		configParam(SLANT_PARAM, -6.f, 6.f, 0.f, "Bar slant", " semitones across the strings");
 		configParam(GLIDE_PARAM, 0.f, 1.f, 0.35f, "Glide (bar travel rate)", "%", 0.f, 100.f);
@@ -376,7 +401,7 @@ struct Slide : Module {
 		configSwitch(AUTO_PARAM, 0.f, 1.f, 0.f, "Auto roll", {"Off", "On"});
 		configButton(RESET_PARAM, "Reset the roll");
 
-		configInput(BAR_CV_INPUT,   "Bar position CV (1V per octave of travel)");
+		configInput(BAR_CV_INPUT,   "Bar position (1V/oct — POS then transposes it in key)");
 		configInput(SLANT_CV_INPUT, "Slant CV (±5V)");
 		configInput(DECAY_CV_INPUT, "Decay CV (±5V)");
 		configInput(DAMP_CV_INPUT,  "Damping CV (±5V)");
@@ -522,11 +547,20 @@ struct Slide : Module {
 		const float sr = args.sampleRate;
 
 		// ── the bar ───────────────────────────────────────────────────────────
-		float barTarget = params[BAR_PARAM].getValue();
-		if (inputs[BAR_CV_INPUT].isConnected())
-			barTarget += inputs[BAR_CV_INPUT].getVoltage() * 12.f;
 		curScale = clamp((int)std::round(params[SCALE_PARAM].getValue()
 		                 + inputs[SCALE_CV_INPUT].getVoltage()), 0, sfs::NUM_SCALES) - 1;
+		// POS is 1V/oct and the trimpot is an offset on it -- the same shape as
+		// V/OCT plus a tune knob everywhere else. The bar position IS pitch here
+		// (fret n is n semitones, because a bar at the 12th halves the string),
+		// so 1V/oct is not a convention, it is the only scaling that tracks.
+		float posKnob = params[BAR_PARAM].getValue();
+		float barTarget;
+		if (inputs[BAR_CV_INPUT].isConnected()) {
+			barTarget = transposeDegrees(snapBar(inputs[BAR_CV_INPUT].getVoltage() * 12.f),
+			                             (int)std::round(posKnob));
+		} else {
+			barTarget = posKnob;      // nothing to offset; the knob IS the position
+		}
 		if (params[AUTO_PARAM].getValue() > 0.5f && autoMovesBar) barTarget += autoBarOff;
 		barTarget = snapBar(barTarget);
 
