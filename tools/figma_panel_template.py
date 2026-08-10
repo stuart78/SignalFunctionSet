@@ -664,7 +664,7 @@ def publish(key):
     # design/<key>.svg by default; a module whose panel is named for the module
     # rather than for its slug gets an entry here rather than having the
     # designer's file renamed under them.
-    DESIGN_FILE = {"slidex": "slide-xp.svg"}
+    DESIGN_FILE = {"slidex": "slide-xp.svg", "key": "Key/key.svg"}
     src_svg = os.path.join(root, "design", DESIGN_FILE.get(key, f"{key}.svg"))
     if not os.path.exists(src_svg):
         print(f"{key}: no design/{key}.svg"); return

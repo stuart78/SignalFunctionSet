@@ -41,13 +41,12 @@ static const int KEY_EDITDEG = 24;     // degrees the sub-scale rows can reach
 
 static const char* KEY_NOTES[12] =
 	{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-static const char* KEY_SUBNAME[KEY_NSUB + 1] = {"FULL", "A", "B", "C"};
-
-// Which of the twelve semitones each white / black key is.
-static const int KEY_WHITE[7] = {0, 2, 4, 5, 7, 9, 11};
-static const int KEY_BLACK[5] = {1, 3, 6, 8, 10};
-// Black key n sits after white key KEY_BLACK_AFTER[n].
-static const int KEY_BLACK_AFTER[5] = {0, 1, 3, 4, 5};
+// What a channel's SUB setting is called. The screen has room for one glyph, and
+// the sub-scale rows are numbered 1-3 in the design, so the short form matches
+// the rows; the long form is what the parameter tooltip says.
+static const char* KEY_SUBNAME[KEY_NSUB + 1]  = {"M", "1", "2", "3"};
+static const char* KEY_SUBLONG[KEY_NSUB + 1]  = {"Full scale", "Sub-scale 1",
+                                                 "Sub-scale 2", "Sub-scale 3"};
 
 enum KeyRound { KR_NEAREST, KR_DOWN, KR_UP, KR_COUNT };
 
@@ -223,7 +222,8 @@ struct Key : Module {
 
 	KeyScale parent;                     // the selected scale
 	KeyScale sub[KEY_NSUB];              // parent filtered by each sub-scale mask
-	uint32_t subMask[KEY_NSUB] = {0, 0, 0};
+	uint32_t subMask[KEY_NSUB] = {0, 0, 0};    // over parent DEGREE indices
+	uint16_t subChrom[KEY_NSUB] = {0, 0, 0};   // free mode: SEMITONES from the root
 	int   keyGen = 0;                    // bumped whenever anything about the key moves
 
 	// ── Scala ─────────────────────────────────────────────────────────────────
@@ -239,6 +239,18 @@ struct Key : Module {
 	bool  offsetInDegrees = true;
 	int   roundMode = KR_NEAREST;
 	float hysteresisCents = 12.f;
+	bool  freeSub = false;               // sub-scales may reach outside the key
+
+	// Whether the key can be drawn, and edited, on twelve keys: the period is an
+	// octave and every degree lands on a semitone. Pelog, Slendro, the harmonic
+	// series and most Scala files fail this, and for them a chromatic pick has no
+	// meaning -- there is no chromatic to pick from.
+	bool chromaticKey() const {
+		if (std::fabs(parent.period - 12.f) > 0.02f) return false;
+		for (int k = 0; k < parent.n; k++)
+			if (std::fabs(parent.iv[k] - std::round(parent.iv[k])) > 0.02f) return false;
+		return true;
+	}
 
 	// ── per-channel state ─────────────────────────────────────────────────────
 	float held[KEY_NCH][KEY_MAXPOLY] = {};
@@ -268,10 +280,13 @@ struct Key : Module {
 			getParamQuantity(OFFSET_PARAM + c)->snapEnabled = true;
 			configSwitch(SUB_PARAM + c, 0.f, (float)KEY_NSUB, 0.f,
 			             string::f("Channel %d scale", c + 1),
-			             {"Full scale", "Sub A", "Sub B", "Sub C"});
+			             {KEY_SUBLONG[0], KEY_SUBLONG[1], KEY_SUBLONG[2], KEY_SUBLONG[3]});
 			configInput(IN_INPUT + c, string::f("Channel %d pitch (1V/oct, poly)", c + 1));
 			configOutput(OUT_OUTPUT + c, string::f("Channel %d quantized pitch", c + 1));
-			configOutput(CHG_OUTPUT + c, string::f("Channel %d note-change trigger", c + 1));
+			// RETIRED: the note-change triggers lost their jacks in the panel
+			// redesign. The enum slots stay, because outputs serialise by index and
+			// deleting these would re-point every cable patched to ROOT/SCALE OUT.
+			configOutput(CHG_OUTPUT + c, "(retired)");
 			configBypass(IN_INPUT + c, OUT_OUTPUT + c);
 		}
 
@@ -397,11 +412,35 @@ struct Key : Module {
 		}
 		if (parent.n == 0) { parent.iv[0] = 0.f; parent.n = 1; }   // never mute
 
+		// A sub-scale is built from TWO stores, and they are different kinds of
+		// thing on purpose.
+		//
+		// subMask holds DEGREE INDICES, which is what makes a sub-scale a role in
+		// the key rather than a set of notes: {0,2,4} is a triad in Major (C E G),
+		// still a triad in Minor (C D# G), and D# G A# in E flat.
+		//
+		// subChrom holds SEMITONE OFFSETS from the root, and exists only for the
+		// notes free mode can reach -- the ones outside the parent scale, which
+		// have no degree index to be stored as. They follow the ROOT, because a
+		// flat 5th should still be a flat 5th when you transpose, but they do not
+		// follow a SCALE change, because there is nothing for them to follow: the
+		// note was chosen for being outside the scale in the first place.
 		for (int k = 0; k < KEY_NSUB; k++) {
 			sub[k] = KeyScale();
 			sub[k].period = parent.period;
 			for (int d = 0; d < parent.n && d < KEY_EDITDEG; d++)
 				if (subMask[k] & (1u << d)) sub[k].iv[sub[k].n++] = parent.iv[d];
+			if (freeSub && chromaticKey()) {
+				for (int s = 0; s < 12 && sub[k].n < KEY_MAXDEG; s++) {
+					if (!((subChrom[k] >> s) & 1)) continue;
+					float v = (float)s;
+					bool dup = false;                      // it may also be a degree
+					for (int a = 0; a < sub[k].n; a++)
+						if (std::fabs(sub[k].iv[a] - v) < 0.01f) dup = true;
+					if (!dup) sub[k].iv[sub[k].n++] = v;
+				}
+				std::sort(sub[k].iv, sub[k].iv + sub[k].n);
+			}
 			// An empty sub-scale falls back to the parent rather than going silent.
 			if (sub[k].n == 0) sub[k] = parent;
 		}
@@ -527,6 +566,10 @@ struct Key : Module {
 		json_t* sm = json_array();
 		for (int k = 0; k < KEY_NSUB; k++) json_array_append_new(sm, json_integer(subMask[k]));
 		json_object_set_new(root, "subMask", sm);
+		json_t* sc = json_array();
+		for (int k = 0; k < KEY_NSUB; k++) json_array_append_new(sc, json_integer(subChrom[k]));
+		json_object_set_new(root, "subChrom", sc);
+		json_object_set_new(root, "freeSub", json_boolean(freeSub));
 
 		// The PARSED scale is saved as well as the path: a patch opened on another
 		// machine, or after the .scl has moved, still sounds right.
@@ -549,6 +592,10 @@ struct Key : Module {
 			roundMode = clamp((int)json_integer_value(j), 0, KR_COUNT - 1);
 		if (json_t* j = json_object_get(root, "hysteresisCents"))
 			hysteresisCents = clamp((float)json_number_value(j), 0.f, 50.f);
+		if (json_t* fs = json_object_get(root, "freeSub")) freeSub = json_boolean_value(fs);
+		if (json_t* sc = json_object_get(root, "subChrom"))
+			for (int k = 0; k < KEY_NSUB && k < (int)json_array_size(sc); k++)
+				subChrom[k] = (uint16_t)json_integer_value(json_array_get(sc, k));
 		if (json_t* sm = json_object_get(root, "subMask"))
 			for (int k = 0; k < KEY_NSUB && k < (int)json_array_size(sm); k++)
 				subMask[k] = (uint32_t)json_integer_value(json_array_get(sm, k));
@@ -575,54 +622,74 @@ struct KeyDisplay : OpaqueWidget {
 	Key* module = nullptr;
 	std::shared_ptr<Font> font;
 
-	struct Lay {
-		float w, h;
-		float readY;
-		float kbY, kbH, wkw, bkw, bkh;
-		float stripY, stripH;
-		float subY, subH, subGap, subX;
-		float footY;
-	};
+	// The screen is drawn in the DESIGN's own coordinates and scaled once, rather
+	// than in fractions of the widget. design/Key/*.svg are 760 x 480 and the
+	// panel's screen is 64.35 x 40.64mm, the same ratio to three places, so every
+	// number below is the number in the design file and can be checked against it.
+	static constexpr float DW = 760.f, DH = 480.f;
+	static constexpr float MARGIN = 36.f, RIGHT = 724.f;
+	static constexpr float RULE_HEAD = 37.5f, RULE_SUB = 224.5f, RULE_FOOT = 424.5f;
+	static constexpr float KEY_X0 = 71.f, KEY_DX = 51.5f, KEY_R = 35.f;
+	static constexpr float ROW_BLACK = 84.5f, ROW_WHITE = 174.5f;
+	static constexpr float STRIP_Y = 56.f, STRIP_H = 140.f;
+	static constexpr float SUB_Y0 = 259.f, SUB_DY = 61.75f, SUB_R = 21.f;
+	static constexpr float SUB_LABEL_X = 22.f;
+	static constexpr float HEAD_Y = 18.f, FOOT_Y = 450.f;
 
-	Lay layout() const {
-		Lay L;
-		L.w = box.size.x; L.h = box.size.y;
-		L.readY  = L.h * 0.055f;
-		L.kbY    = L.h * 0.105f;  L.kbH = L.h * 0.235f;
-		L.wkw    = L.w / 7.f;
-		L.bkw    = L.wkw * 0.62f; L.bkh = L.kbH * 0.62f;
-		L.stripY = L.h * 0.375f;  L.stripH = L.h * 0.110f;
-		L.subY   = L.h * 0.545f;  L.subH = L.h * 0.085f;  L.subGap = L.h * 0.030f;
-		L.subX   = L.w * 0.115f;                          // room for the A/B/C label
-		L.footY  = L.h * 0.945f;
-		return L;
+	float sc() const { return box.size.x / DW; }
+	float X(float u) const { return u * sc(); }
+
+	// Twelve pitch classes on THIRTEEN slots. The gap is the black key that is
+	// not there between E and F, and keeping it is what makes the row read as a
+	// keyboard rather than as twelve anonymous dots.
+	static int slotOf(int pc) { return pc + (pc >= 5 ? 1 : 0); }
+	static float keyU(int pc) { return KEY_X0 + KEY_DX * (float)slotOf(pc); }
+	static bool isBlack(int pc) {
+		return pc == 1 || pc == 3 || pc == 6 || pc == 8 || pc == 10;
 	}
 
-	int keyHit(const Lay& L, Vec p) const {
-		if (p.y < L.kbY || p.y > L.kbY + L.kbH) return -1;
-		if (p.y <= L.kbY + L.bkh) {
-			for (int b = 0; b < 5; b++) {
-				float x = (float)(KEY_BLACK_AFTER[b] + 1) * L.wkw - L.bkw * 0.5f;
-				if (p.x >= x && p.x <= x + L.bkw) return KEY_BLACK[b];
-			}
+	// Sub-row cell centres. On a chromatic key they sit under their own note on
+	// the keyboard; otherwise the scale has no chromatic to align to, so the row
+	// is just its own degrees, spread across the same span.
+	float subCellU(int i, int n, bool chromatic) const {
+		if (chromatic) return keyU(i);
+		if (n <= 1) return (MARGIN + RIGHT) * 0.5f;
+		float span = RIGHT - MARGIN - 2.f * SUB_R;
+		return MARGIN + SUB_R + span * (float)i / (float)(n - 1);
+	}
+	float subCellR(int n, bool chromatic) const {
+		if (chromatic || n <= 12) return SUB_R;
+		float pitch = (RIGHT - MARGIN) / (float)n;          // keep them from touching
+		return std::min(SUB_R, pitch * 0.42f);
+	}
+
+	// How many cells a sub row shows, and whether they are chromatic.
+	int subCellCount(bool chromatic) const {
+		if (chromatic) return 12;
+		return module ? std::min(module->parent.n, KEY_EDITDEG) : 7;
+	}
+
+	// ── hit testing ──────────────────────────────────────────────────────────
+	int keyHit(Vec p) const {
+		for (int pc = 0; pc < 12; pc++) {
+			float cx = X(keyU(pc)), cy = X(isBlack(pc) ? ROW_BLACK : ROW_WHITE);
+			float dx = p.x - cx, dy = p.y - cy, r = X(KEY_R);
+			if (dx * dx + dy * dy <= r * r) return pc;
 		}
-		int wi = (int)std::floor(p.x / L.wkw);
-		if (wi < 0 || wi > 6) return -1;
-		return KEY_WHITE[wi];
+		return -1;
 	}
 
-	// Which sub-scale row and which degree cell, or (-1, -1).
-	void subHit(const Lay& L, Vec p, int& row, int& deg, int nDeg) const {
-		row = deg = -1;
+	void subHit(Vec p, bool chromatic, int& row, int& cell) const {
+		row = cell = -1;
+		int n = subCellCount(chromatic);
+		float r = X(subCellR(n, chromatic));
 		for (int k = 0; k < KEY_NSUB; k++) {
-			float y = L.subY + (float)k * (L.subH + L.subGap);
-			if (p.y < y || p.y > y + L.subH) continue;
-			if (p.x < L.subX) return;
-			int nd = std::min(nDeg, KEY_EDITDEG);
-			float cw = (L.w - L.subX) / (float)std::max(nd, 1);
-			int d = (int)std::floor((p.x - L.subX) / cw);
-			if (d < 0 || d >= nd) return;
-			row = k; deg = d;
+			float cy = X(SUB_Y0 + SUB_DY * (float)k);
+			if (std::fabs(p.y - cy) > r * 1.15f) continue;
+			for (int i = 0; i < n; i++) {
+				float cx = X(subCellU(i, n, chromatic));
+				if (std::fabs(p.x - cx) <= r * 1.15f) { row = k; cell = i; return; }
+			}
 			return;
 		}
 	}
@@ -632,21 +699,37 @@ struct KeyDisplay : OpaqueWidget {
 			OpaqueWidget::onButton(e);
 			return;
 		}
-		Lay L = layout();
+		bool chromatic = module->chromaticKey();
 
-		int row, deg;
-		subHit(L, e.pos, row, deg, module->parent.n);
+		int row, cell;
+		subHit(e.pos, chromatic, row, cell);
 		if (row >= 0) {
 			e.consume(this);
-			module->subMask[row] ^= (1u << deg);
+			if (!chromatic) {                        // cell IS the degree index
+				module->subMask[row] ^= (1u << cell);
+				module->rebuild();
+				return;
+			}
+			// A chromatic cell is a pitch class. If the parent scale has a degree
+			// there it toggles that DEGREE, which is what keeps a sub-scale a role
+			// in the key. If it does not, the cell is outside the key and only free
+			// mode may have it, stored as a semitone offset from the root.
+			int sfr = ((cell - module->rootNote) % 12 + 12) % 12;
+			int deg = -1;
+			for (int d = 0; d < module->parent.n && d < KEY_EDITDEG; d++)
+				if (std::fabs(module->parent.iv[d] - (float)sfr) < 0.02f) deg = d;
+			if (deg >= 0) module->subMask[row] ^= (1u << deg);
+			else if (module->freeSub) module->subChrom[row] ^= (uint16_t)(1u << sfr);
+			else return;                              // out of key, and not allowed
 			module->rebuild();
 			return;
 		}
 
-		int s = keyHit(L, e.pos);
-		if (s < 0) return;                        // a miss falls through to the panel
+		if (!chromatic) return;                       // no keyboard to click
+		int s = keyHit(e.pos);
+		if (s < 0) return;                            // a miss falls through
 		e.consume(this);
-		if (!module->customMask) {                // the first edit forks off the preset
+		if (!module->customMask) {                    // the first edit forks the preset
 			module->mask = module->keyboardMask();
 			module->customMask = true;
 		}
@@ -677,117 +760,111 @@ struct KeyDisplay : OpaqueWidget {
 		nvgText(args.vg, x, y, t.c_str(), NULL);
 	}
 
-	void drawKeyboard(const DrawArgs& args, const Lay& L, uint16_t m, int root,
-	                  const bool* lit, bool approximate) {
-		NVGcontext* vg = args.vg;
-		// A microtonal scale cannot be told the truth on twelve keys, so the
-		// keyboard steps back and the region strip below becomes the real display.
-		float aOn = approximate ? 0.55f : 1.f;
-		for (int i = 0; i < 7; i++) {
-			int s = KEY_WHITE[i];
-			bool in = (m >> s) & 1;
-			nvgBeginPath(vg);
-			nvgRoundedRect(vg, i * L.wkw + 0.6f, L.kbY, L.wkw - 1.2f, L.kbH, 1.6f);
-			NVGcolor c = lit[s] ? sfs::SCREEN_HOT
-			           : in     ? sfs::SCREEN_BLUE : nvgRGB(0x2B, 0x2B, 0x44);
-			if (in && !lit[s]) c = nvgTransRGBAf(c, aOn);
-			nvgFillColor(vg, c);
-			nvgFill(vg);
-			if (s == root) {
-				nvgBeginPath(vg);
-				nvgRoundedRect(vg, i * L.wkw + 0.6f, L.kbY, L.wkw - 1.2f, L.kbH, 1.6f);
-				nvgStrokeColor(vg, sfs::SCREEN_TEXT);
-				nvgStrokeWidth(vg, 1.4f);
-				nvgStroke(vg);
-			}
-		}
-		for (int b = 0; b < 5; b++) {
-			int s = KEY_BLACK[b];
-			bool in = (m >> s) & 1;
-			float x = (float)(KEY_BLACK_AFTER[b] + 1) * L.wkw - L.bkw * 0.5f;
-			nvgBeginPath(vg);
-			nvgRoundedRect(vg, x, L.kbY, L.bkw, L.bkh, 1.4f);
-			NVGcolor c = lit[s] ? sfs::SCREEN_HOT
-			           : in     ? sfs::SCREEN_DEEP : nvgRGB(0x16, 0x16, 0x26);
-			if (in && !lit[s]) c = nvgTransRGBAf(c, aOn);
-			nvgFillColor(vg, c);
-			nvgFill(vg);
-			if (s == root) {
-				nvgBeginPath(vg);
-				nvgRoundedRect(vg, x, L.kbY, L.bkw, L.bkh, 1.4f);
-				nvgStrokeColor(vg, sfs::SCREEN_TEXT);
-				nvgStrokeWidth(vg, 1.2f);
-				nvgStroke(vg);
-			}
+	void rule(const DrawArgs& args, float u) {
+		nvgBeginPath(args.vg);
+		nvgMoveTo(args.vg, X(MARGIN), X(u));
+		nvgLineTo(args.vg, X(RIGHT), X(u));
+		nvgStrokeColor(args.vg, sfs::SCREEN_LINE);
+		nvgStrokeWidth(args.vg, std::max(X(2.f), 1.f));
+		nvgStroke(args.vg);
+	}
+
+	void dot(const DrawArgs& args, float ux, float uy, float ur, NVGcolor c) {
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, X(ux), X(uy), X(ur));
+		nvgFillColor(args.vg, c);
+		nvgFill(args.vg);
+	}
+
+	void header(const DrawArgs& args, const std::string& rootName,
+	            const std::string& scaleName) {
+		sfs::screenFont(args.vg, font, sfs::TYPE_SCREEN);
+		float w = nvgTextBounds(args.vg, 0, 0, rootName.c_str(), NULL, NULL);
+		text(args, X(MARGIN), X(HEAD_Y), sfs::SCREEN_TEXT, rootName,
+		     sfs::TYPE_SCREEN, NVG_ALIGN_LEFT);
+		text(args, X(MARGIN) + w + X(14.f), X(HEAD_Y), sfs::SCREEN_HOT, scaleName,
+		     sfs::TYPE_SCREEN, NVG_ALIGN_LEFT);
+		rule(args, RULE_HEAD);
+	}
+
+	// ── the western state: a keyboard ────────────────────────────────────────
+	// Drawn from C whatever the root is, because a keyboard that starts somewhere
+	// else is not a keyboard any more — you read it by its shape. The root is
+	// marked where it falls instead.
+	void drawKeyboard(const DrawArgs& args, uint16_t mask, int root, const bool* lit) {
+		for (int pc = 0; pc < 12; pc++) {
+			bool in = (mask >> pc) & 1;
+			NVGcolor c = lit[pc] ? sfs::SCREEN_HOT
+			           : in      ? sfs::SCREEN_BLUE : sfs::SCREEN_DEEP;
+			dot(args, keyU(pc), isBlack(pc) ? ROW_BLACK : ROW_WHITE, KEY_R, c);
+			if (pc == root)
+				dot(args, keyU(pc), isBlack(pc) ? ROW_BLACK : ROW_WHITE,
+				    KEY_R * 0.29f, sfs::SCREEN_TEXT);
 		}
 	}
 
-	// The region strip. x is LINEAR in pitch across one period, so equal pitch
-	// spans are equal widths — which is the point: you can see that Pelog's second
-	// degree sits at 1.20 semitones, just above C#, and see how wide the band of
-	// input pitches that lands on it actually is. The keyboard above can only
-	// round; this cannot.
-	void drawRegions(const DrawArgs& args, const Lay& L, const KeyScale& sc,
-	                 int root, const float* sounding, int nSounding) {
+	// ── the arbitrary state: the scale as it really is ───────────────────────
+	// x is LINEAR in pitch across one period, so equal pitch spans are equal
+	// widths and the gaps between lines are the snap regions. This is the only
+	// honest picture of Pelog's 1.20-semitone second degree, or of a Scala file
+	// that repeats at 19.02 semitones instead of 12.
+	void drawStrip(const DrawArgs& args, const KeyScale& s,
+	               const float* sounding, int nSounding) {
 		NVGcontext* vg = args.vg;
-		float per = std::max(sc.period, 0.01f);
-		float y0 = L.stripY, hh = L.stripH;
-
 		nvgBeginPath(vg);
-		nvgRect(vg, 0.f, y0, L.w, hh);
+		nvgRect(vg, X(MARGIN), X(STRIP_Y), X(RIGHT - MARGIN), X(STRIP_H));
 		nvgFillColor(vg, nvgRGB(0x12, 0x12, 0x20));
 		nvgFill(vg);
 
-		// Alternating snap regions: the boundaries are the midpoints between
-		// neighbouring degrees, so a band is literally the set of input pitches
-		// that land on that degree.
-		for (int k = 0; k < sc.n; k++) {
-			float prev = (k == 0) ? sc.iv[sc.n - 1] - per : sc.iv[k - 1];
-			float next = (k == sc.n - 1) ? sc.iv[0] + per : sc.iv[k + 1];
-			float lo = 0.5f * (prev + sc.iv[k]);
-			float hi = 0.5f * (sc.iv[k] + next);
-			float xa = std::max(lo / per * L.w, 0.f);
-			float xb = std::min(hi / per * L.w, L.w);
-			if (xb <= xa) continue;
+		float per = std::max(s.period, 0.01f);
+		float span = RIGHT - MARGIN;
+		// n degrees plus the closing line at the period, which is the first degree
+		// of the next repeat and is what shows the last region's width.
+		for (int k = 0; k <= s.n; k++) {
+			float v = (k < s.n) ? s.iv[k] : per;
+			float u = MARGIN + span * v / per;
 			nvgBeginPath(vg);
-			nvgRect(vg, xa, y0, xb - xa, hh);
-			nvgFillColor(vg, (k % 2) ? nvgRGB(0x1D, 0x2E, 0x3E) : nvgRGB(0x15, 0x22, 0x30));
-			nvgFill(vg);
-		}
-
-		// the twelve keys, as a ruler behind the degrees
-		for (int s = 0; s <= (int)std::ceil(per); s++) {
-			float x = (float)s / per * L.w;
-			if (x > L.w) break;
-			bool natural = false;
-			for (int i = 0; i < 7; i++) if (KEY_WHITE[i] == (((s + root) % 12) + 12) % 12) natural = true;
-			nvgBeginPath(vg);
-			nvgMoveTo(vg, x, y0);
-			nvgLineTo(vg, x, y0 + hh * (natural ? 1.f : 0.5f));
-			nvgStrokeColor(vg, nvgRGBA(0x8A, 0x8A, 0xA5, natural ? 110 : 55));
-			nvgStrokeWidth(vg, 1.f);
-			nvgStroke(vg);
-		}
-
-		// the degrees themselves
-		for (int k = 0; k < sc.n; k++) {
-			float x = sc.iv[k] / per * L.w;
-			nvgBeginPath(vg);
-			nvgMoveTo(vg, x, y0 + 1.f);
-			nvgLineTo(vg, x, y0 + hh - 1.f);
+			nvgMoveTo(vg, X(u), X(STRIP_Y));
+			nvgLineTo(vg, X(u), X(STRIP_Y + STRIP_H));
 			nvgStrokeColor(vg, sfs::SCREEN_BLUE);
-			nvgStrokeWidth(vg, 1.7f);
+			nvgStrokeWidth(vg, std::max(X(3.f), 1.f));
 			nvgStroke(vg);
 		}
-
-		// where the channels currently sit
 		for (int i = 0; i < nSounding; i++) {
 			float within = sounding[i] - per * std::floor(sounding[i] / per);
-			float x = within / per * L.w;
-			nvgBeginPath(vg);
-			nvgCircle(vg, x, y0 + hh * 0.5f, 2.1f);
-			nvgFillColor(vg, sfs::SCREEN_HOT);
-			nvgFill(vg);
+			dot(args, MARGIN + span * within / per, STRIP_Y + STRIP_H * 0.5f,
+			    12.f, sfs::SCREEN_TEXT);
+		}
+	}
+
+	// ── the sub-scale rows ───────────────────────────────────────────────────
+	// `inParent` / `on` / `lit` are per cell. `outside` marks a cell that is ON
+	// but is not in the parent scale, i.e. a free-mode pick: it gets a ring, so
+	// an accidental is visible as an accidental rather than looking like a
+	// degree.
+	void drawSubRows(const DrawArgs& args, int n, bool chromatic, const bool* used,
+	                 const bool* on, const bool* inParent, const bool* lit,
+	                 const bool* outside) {
+		float r = subCellR(n, chromatic);
+		for (int k = 0; k < KEY_NSUB; k++) {
+			float cy = SUB_Y0 + SUB_DY * (float)k;
+			text(args, X(SUB_LABEL_X), X(cy),
+			     used[k] ? sfs::SCREEN_TEXT : sfs::SCREEN_PMID, std::to_string(k + 1));
+			for (int i = 0; i < n; i++) {
+				int f = k * KEY_EDITDEG + i;
+				NVGcolor c = lit[f]      ? sfs::SCREEN_HOT
+				           : on[f]       ? (used[k] ? sfs::SCREEN_BLUE : sfs::SCREEN_DEEP)
+				           : inParent[f] ? sfs::SCREEN_PURP
+				                         : nvgRGB(0x23, 0x23, 0x3C);
+				dot(args, subCellU(i, n, chromatic), cy, r, c);
+				if (outside[f]) {
+					nvgBeginPath(args.vg);
+					nvgCircle(args.vg, X(subCellU(i, n, chromatic)), X(cy), X(r) - 1.f);
+					nvgStrokeColor(args.vg, sfs::SCREEN_TEXT);
+					nvgStrokeWidth(args.vg, std::max(X(2.5f), 1.f));
+					nvgStroke(args.vg);
+				}
+			}
 		}
 	}
 
@@ -804,33 +881,38 @@ struct KeyDisplay : OpaqueWidget {
 		return (bd < 0.05f) ? best : -1;
 	}
 
-	// `lit` is KEY_NSUB × KEY_EDITDEG, flat.
-	void drawSubRows(const DrawArgs& args, const Lay& L, int nDeg,
-	                 const uint32_t* masks, const bool* used, const bool* lit) {
-		NVGcontext* vg = args.vg;
-		int nd = std::min(nDeg, KEY_EDITDEG);
-		float cw = (L.w - L.subX) / (float)std::max(nd, 1);
-		for (int k = 0; k < KEY_NSUB; k++) {
-			float y = L.subY + (float)k * (L.subH + L.subGap);
-			text(args, L.subX * 0.5f, y + L.subH * 0.5f,
-			     used[k] ? sfs::SCREEN_TEXT : sfs::SCREEN_PMID, KEY_SUBNAME[k + 1]);
-			for (int d = 0; d < nd; d++) {
-				bool on = (masks[k] >> d) & 1;
-				bool hot = lit && lit[k * KEY_EDITDEG + d];
-				nvgBeginPath(vg);
-				nvgRoundedRect(vg, L.subX + (float)d * cw + 0.7f, y,
-				               std::max(cw - 1.4f, 1.f), L.subH, 1.2f);
-				nvgFillColor(vg, hot ? sfs::SCREEN_HOT
-				               : on  ? (used[k] ? sfs::SCREEN_BLUE : sfs::SCREEN_DEEP)
-				                     : nvgRGB(0x23, 0x23, 0x38));
-				nvgFill(vg);
+	void footer(const DrawArgs& args, const char* const* subLabel,
+	            const std::string* note, const bool* active) {
+		rule(args, RULE_FOOT);
+		float cw = (RIGHT - MARGIN) / (float)KEY_NCH;
+		for (int c = 0; c < KEY_NCH; c++) {
+			float cx = MARGIN + cw * ((float)c + 0.5f);
+			sfs::screenFont(args.vg, font, sfs::TYPE_SCREEN);
+			std::string l = subLabel[c], nn = note[c];
+			float lw = nvgTextBounds(args.vg, 0, 0, l.c_str(), NULL, NULL);
+			float nw = nvgTextBounds(args.vg, 0, 0, nn.c_str(), NULL, NULL);
+			float gap = X(10.f);
+			float x0 = X(cx) - (lw + gap + nw) * 0.5f;
+			text(args, x0, X(FOOT_Y),
+			     active[c] ? sfs::SCREEN_TEXT : sfs::SCREEN_PMID, l,
+			     sfs::TYPE_SCREEN, NVG_ALIGN_LEFT);
+			text(args, x0 + lw + gap, X(FOOT_Y),
+			     active[c] ? sfs::SCREEN_HOT : sfs::SCREEN_PMID, nn,
+			     sfs::TYPE_SCREEN, NVG_ALIGN_LEFT);
+			if (c) {                                  // cell separators
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, X(MARGIN + cw * (float)c), X(RULE_FOOT + 1.f));
+				nvgLineTo(args.vg, X(MARGIN + cw * (float)c), X(RULE_FOOT + 52.f));
+				nvgStrokeColor(args.vg, sfs::SCREEN_LINE);
+				nvgStrokeWidth(args.vg, std::max(X(2.f), 1.f));
+				nvgStroke(args.vg);
 			}
 		}
 	}
 
 	void drawLive(const DrawArgs& args) {
-		Lay L = layout();
 		Key* m = module;
+		bool chromatic = m->chromaticKey();
 
 		bool lit[12] = {};
 		float sounding[KEY_NCH];
@@ -842,84 +924,104 @@ struct KeyDisplay : OpaqueWidget {
 			lit[((s % 12) + 12) % 12] = true;
 		}
 
-		bool micro = std::fabs(m->parent.period - 12.f) > 0.02f;
-		for (int k = 0; k < m->parent.n; k++)
-			if (std::fabs(m->parent.iv[k] - std::round(m->parent.iv[k])) > 0.02f) micro = true;
-
-		std::string sname = m->busActive ? string::f("BUS  %d", m->parent.n)
-		    : m->customMask ? std::string("CUSTOM")
-		    : m->scaleIsScala() ? (m->scalaLoaded ? m->scalaName : std::string("NO SCALA FILE"))
+		std::string sname = m->busActive ? string::f("BUS %d", m->parent.n)
+		    : m->customMask ? std::string("Custom")
+		    : m->scaleIsScala() ? (m->scalaLoaded ? m->scalaName : std::string("No Scala file"))
 		    : std::string(sfs::SCALES[clamp(m->scaleIndex, 0, sfs::NUM_SCALES - 1)].shortName);
-		if (sname.size() > 20) sname = sname.substr(0, 20);
-		text(args, L.w * 0.5f, L.readY, sfs::SCREEN_TEXT,
-		     std::string(KEY_NOTES[m->rootNote]) + "  " + sname);
+		if (sname.size() > 22) sname = sname.substr(0, 22);
+		header(args, KEY_NOTES[m->rootNote], sname);
 
-		drawKeyboard(args, L, m->keyboardMask(), m->rootNote, lit, micro);
-		drawRegions(args, L, m->parent, m->rootNote, sounding, nSound);
+		if (chromatic) drawKeyboard(args, m->keyboardMask(), m->rootNote, lit);
+		else           drawStrip(args, m->parent, sounding, nSound);
+		rule(args, RULE_SUB);
 
-		// A sub-scale row lights the degree its own channels are sounding, the
-		// same way the keyboard lights the note — the rows showed structure but
-		// no activity, which made them the one part of the screen you could not
-		// read at a glance while playing.
-		bool used[KEY_NSUB] = {};
-		bool litCell[KEY_NSUB * KEY_EDITDEG] = {};
+		// Which sub-scales are actually driving a channel, and what each is
+		// sounding — the rows showed structure but no activity, which made them
+		// the one part of the screen you could not read while playing.
+		bool used[KEY_NSUB] = {}, subLive[KEY_NSUB] = {};
+		int  litDeg[KEY_NSUB] = {-1, -1, -1};
+		int  litPc[KEY_NSUB]  = {-1, -1, -1};
 		for (int c = 0; c < KEY_NCH; c++) {
 			int s = (int)std::round(m->params[Key::SUB_PARAM + c].getValue());
 			if (s < 1 || s > KEY_NSUB) continue;
 			used[s - 1] = true;
 			if (!m->shownActive[c]) continue;
-			int d = degreeIndexOf(m->parent,
-			                      m->shownVolts[c] * 12.f - (float)m->rootNote);
-			if (d >= 0 && d < KEY_EDITDEG) litCell[(s - 1) * KEY_EDITDEG + d] = true;
+			subLive[s - 1] = true;
+			float semi = m->shownVolts[c] * 12.f - (float)m->rootNote;
+			litDeg[s - 1] = degreeIndexOf(m->parent, semi);
+			litPc[s - 1]  = (((int)std::lround(m->shownVolts[c] * 12.f) % 12) + 12) % 12;
 		}
-		drawSubRows(args, L, m->parent.n, m->subMask, used, litCell);
 
-		float cw = L.w / (float)KEY_NCH;
+		int n = subCellCount(chromatic);
+		bool on[KEY_NSUB * KEY_EDITDEG] = {}, inP[KEY_NSUB * KEY_EDITDEG] = {};
+		bool litC[KEY_NSUB * KEY_EDITDEG] = {}, outC[KEY_NSUB * KEY_EDITDEG] = {};
+		for (int k = 0; k < KEY_NSUB; k++) {
+			for (int i = 0; i < n; i++) {
+				int f = k * KEY_EDITDEG + i;
+				if (!chromatic) {
+					on[f]   = (m->subMask[k] >> i) & 1;
+					inP[f]  = true;                      // every cell IS a degree here
+					litC[f] = subLive[k] && litDeg[k] == i;
+					continue;
+				}
+				int sfr = ((i - m->rootNote) % 12 + 12) % 12;
+				int deg = -1;
+				for (int d = 0; d < m->parent.n && d < KEY_EDITDEG; d++)
+					if (std::fabs(m->parent.iv[d] - (float)sfr) < 0.02f) deg = d;
+				inP[f]  = (deg >= 0);
+				on[f]   = (deg >= 0) ? (((m->subMask[k] >> deg) & 1) != 0)
+				                     : (m->freeSub && ((m->subChrom[k] >> sfr) & 1) != 0);
+				outC[f] = on[f] && deg < 0;
+				litC[f] = subLive[k] && litPc[k] == i;
+			}
+		}
+		drawSubRows(args, n, chromatic, used, on, inP, litC, outC);
+
+		const char* sl[KEY_NCH];
+		std::string note[KEY_NCH];
+		bool act[KEY_NCH];
 		for (int c = 0; c < KEY_NCH; c++) {
 			int sIdx = (int)std::round(m->params[Key::SUB_PARAM + c].getValue());
-			std::string t = "–";
-			if (m->shownActive[c]) {
+			sl[c] = KEY_SUBNAME[clamp(sIdx, 0, KEY_NSUB)];
+			act[c] = m->shownActive[c];
+			if (act[c]) {
 				int s = (int)std::lround(m->shownVolts[c] * 12.f);
-				int pc = ((s % 12) + 12) % 12;
-				t = std::string(KEY_NOTES[pc]) + std::to_string(4 + (int)std::floor(s / 12.f));
-				if (sIdx > 0) t += " " + std::string(KEY_SUBNAME[sIdx]);
-			}
-			text(args, cw * ((float)c + 0.5f), L.footY,
-			     m->shownActive[c] ? sfs::SCREEN_BLUE : sfs::SCREEN_PMID, t);
+				note[c] = std::string(KEY_NOTES[((s % 12) + 12) % 12])
+				        + std::to_string(4 + (int)std::floor(s / 12.f));
+			} else note[c] = "–";
 		}
+		footer(args, sl, note, act);
 	}
 
 	// The thumbnail shows Pelog, because the region strip is the reason this
 	// module looks different from every other quantizer.
 	void drawPreview(const DrawArgs& args) {
-		Lay L = layout();
 		KeyScale pel;
 		static const float PEL[7] = {0.f, 1.2f, 2.7f, 5.4f, 7.0f, 8.0f, 10.4f};
 		for (int i = 0; i < 7; i++) pel.iv[i] = PEL[i];
 		pel.n = 7; pel.period = 12.f;
 
-		bool lit[12] = {}; lit[0] = lit[5] = true;
+		header(args, "C", "Pelog");
 		float sounding[2] = {0.f, 5.4f};
-		// Derived, not hand-written: a literal here drifts from the intervals
-		// above the moment either is touched, and mine already had.
-		uint16_t pm = 0;
-		for (int i = 0; i < 7; i++)
-			pm |= (uint16_t)(1u << ((((int)std::lround(PEL[i])) % 12 + 12) % 12));
-		text(args, L.w * 0.5f, L.readY, sfs::SCREEN_TEXT, "C  Pelog");
-		drawKeyboard(args, L, pm, 0, lit, true);
-		drawRegions(args, L, pel, 0, sounding, 2);
+		drawStrip(args, pel, sounding, 2);
+		rule(args, RULE_SUB);
 
-		static const uint32_t sm[KEY_NSUB] = {0b0010101, 0b0011001, 0b1010101};
 		static const bool used[KEY_NSUB] = {true, false, false};
-		bool litCell[KEY_NSUB * KEY_EDITDEG] = {};
-		litCell[0 * KEY_EDITDEG + 0] = true;          // sub A sounding its root
-		drawSubRows(args, L, 7, sm, used, litCell);
+		bool on[KEY_NSUB * KEY_EDITDEG] = {}, inP[KEY_NSUB * KEY_EDITDEG] = {};
+		bool litC[KEY_NSUB * KEY_EDITDEG] = {}, outC[KEY_NSUB * KEY_EDITDEG] = {};
+		static const uint32_t sm[KEY_NSUB] = {0b0010101, 0b0011001, 0b1010101};
+		for (int k = 0; k < KEY_NSUB; k++)
+			for (int i = 0; i < 7; i++) {
+				on[k * KEY_EDITDEG + i] = (sm[k] >> i) & 1;
+				inP[k * KEY_EDITDEG + i] = true;
+			}
+		litC[0] = true;                                  // sub 1 sounding its root
+		drawSubRows(args, 7, false, used, on, inP, litC, outC);
 
-		static const char* n[KEY_NCH] = {"C3 A", "F3", "–", "–"};
-		float fw = L.w / (float)KEY_NCH;
-		for (int c = 0; c < KEY_NCH; c++)
-			text(args, fw * ((float)c + 0.5f), L.footY,
-			     c < 2 ? sfs::SCREEN_BLUE : sfs::SCREEN_PMID, n[c]);
+		static const char* sl[KEY_NCH] = {"1", "M", "M", "M"};
+		std::string note[KEY_NCH] = {"C3", "F3", "–", "–"};
+		bool act[KEY_NCH] = {true, true, false, false};
+		footer(args, sl, note, act);
 	}
 };
 
@@ -934,52 +1036,47 @@ struct KeyWidget : ModuleWidget {
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/key.svg")));
 		using sfs::hp;
 
-		sfs::PanelLabels* lbl = new sfs::PanelLabels();
-		lbl->box.size = box.size;
-		addChild(lbl);
-		lbl->title(hp(1), hp(1.6f), "KEY");
+		// NO sfs::PanelLabels. res/key.svg is the designer's own file, published
+		// by `figma_panel_template.py --publish key`, and it carries the title,
+		// the row labels and the logo.
+		//
+		// Positions are in MILLIMETRES read straight out of that file rather than
+		// on the hp() grid: the four channel columns sit on an 11.855mm pitch,
+		// which is 2.334HP, and the rows are distributed down the panel rather
+		// than grid-snapped.
+		const float col[KEY_NCH] = {16.04f, 27.90f, 39.75f, 51.60f};
+		const float yIn = 58.50f, ySub = 70.40f, yOff = 82.30f, yOut = 94.10f;
+		const float yPot = 110.60f, yJack = 121.00f;
 
 		KeyDisplay* disp = new KeyDisplay();
 		disp->module = module;
-		disp->box.pos  = mm2px(Vec(hp(0.8f), hp(2.4f)));
-		disp->box.size = mm2px(Vec(hp(12.4f), hp(11.0f)));
+		disp->box.pos  = mm2px(Vec(3.387f, 11.854f));
+		disp->box.size = mm2px(Vec(64.35f, 40.64f));
 		addChild(disp);
 
-		// ── the key ────────────────────────────────────────────────────────────
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(2), hp(15))), module, Key::ROOT_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(4), hp(15))), module, Key::ROOT_INPUT));
-		lbl->pair(hp(2), hp(15), "ROOT");
-
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(6), hp(15))), module, Key::SCALE_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(8), hp(15))), module, Key::SCALE_INPUT));
-		lbl->pair(hp(6), hp(15), "SCALE");
-
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(10), hp(15))), module, Key::TRIG_INPUT));
-		lbl->jack(hp(10), hp(15), "TRIG");
-
-		// ── four channels, one key ─────────────────────────────────────────────
-		// These sit ON the plate: plate ink is light, so above it on the light
-		// faceplate they would be invisible.
-		lbl->jackOnPlate(hp(2),  hp(17.8f), "IN");
-		lbl->jackOnPlate(hp(4),  hp(17.8f), "SUB");
-		lbl->jackOnPlate(hp(6),  hp(17.8f), "OFF");
-		lbl->jackOnPlate(hp(8),  hp(17.8f), "CHG");
-		lbl->jackOnPlate(hp(10), hp(17.8f), "OUT");
-		// The key on its way out, in a column of its own: these are not per-channel
-		// like everything to their left, and sharing a row would say they were.
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(12.5f), hp(18.8f))), module, Key::ROOT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(12.5f), hp(21.8f))), module, Key::SCALE_OUTPUT));
-		lbl->jackOnPlate(hp(12.5f), hp(18.8f), "ROOT");
-		lbl->jackOnPlate(hp(12.5f), hp(21.8f), "SCALE");
-
 		for (int c = 0; c < KEY_NCH; c++) {
-			float y = hp(17.8f + 2.f * c);
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(hp(2), y)), module, Key::IN_INPUT + c));
-			addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(4), y)), module, Key::SUB_PARAM + c));
-			addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(6), y)), module, Key::OFFSET_PARAM + c));
-			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(8), y)), module, Key::CHG_OUTPUT + c));
-			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(hp(10), y)), module, Key::OUT_OUTPUT + c));
+			addInput (createInputCentered <PJ301MPort>(mm2px(Vec(col[c], yIn)),  module, Key::IN_INPUT + c));
+			addParam (createParamCentered <Trimpot>   (mm2px(Vec(col[c], ySub)), module, Key::SUB_PARAM + c));
+			addParam (createParamCentered <Trimpot>   (mm2px(Vec(col[c], yOff)), module, Key::OFFSET_PARAM + c));
+			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(col[c], yOut)), module, Key::OUT_OUTPUT + c));
 		}
+
+		// ── the key, in and out ────────────────────────────────────────────────
+		addParam (createParamCentered <Trimpot>   (mm2px(Vec(col[0], yPot)),  module, Key::ROOT_PARAM));
+		addInput (createInputCentered <PJ301MPort>(mm2px(Vec(col[0], yJack)), module, Key::ROOT_INPUT));
+		addParam (createParamCentered <Trimpot>   (mm2px(Vec(col[1], yPot)),  module, Key::SCALE_PARAM));
+		addInput (createInputCentered <PJ301MPort>(mm2px(Vec(col[1], yJack)), module, Key::SCALE_INPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(col[2], yJack)), module, Key::ROOT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(col[3], yJack)), module, Key::SCALE_OUTPUT));
+
+		// TRIG sits in the empty corner left of ROOT IN. The column pitch would
+		// put it at 4.19mm, which leaves its bezel 0.2mm off the panel edge, so it
+		// is nudged in to 6.4mm — the art has not been drawn around it yet.
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.40f, yJack)), module, Key::TRIG_INPUT));
+		sfs::PanelLabels* lbl = new sfs::PanelLabels();
+		lbl->box.size = box.size;
+		addChild(lbl);
+		lbl->jack(6.40f, yJack, "TRIG");
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -1022,6 +1119,18 @@ struct KeyWidget : ModuleWidget {
 			&m->offsetInDegrees));
 		menu->addChild(createIndexPtrSubmenuItem("Rounding",
 			{"Nearest", "Down", "Up"}, &m->roundMode));
+
+		// Off by default, because the whole idea of a sub-scale is that it cannot
+		// take you out of the key. Turned on, the dark cells in a sub row become
+		// clickable and a sub-scale can carry an accidental — a flat 5th under a
+		// walking line, a passing tone the rest of the patch never sees. Those
+		// picks are stored as semitones from the root, so they transpose with ROOT
+		// but do not follow a SCALE change: there is no degree for them to follow.
+		// A ring around the cell marks one, so an accidental reads as an accidental.
+		menu->addChild(createBoolPtrMenuItem("Sub-scales may leave the key", "",
+			&m->freeSub));
+		if (!m->chromaticKey())
+			menu->addChild(createMenuLabel("   (this scale is not 12-tone; rows show its degrees)"));
 
 		menu->addChild(createSubmenuItem("Hysteresis",
 			string::f("%.0f cents", m->hysteresisCents), [=](Menu* sub) {
