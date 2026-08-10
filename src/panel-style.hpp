@@ -78,6 +78,20 @@ static const float TYPE_TITLE = 5.6f;   // mm — the module name
 static const float TYPE_SCREEN       = 2.38f;  // mm
 static const float TYPE_SCREEN_SMALL = 1.90f;  // mm
 
+// SCREENS ARE SET IN SHARE TECH MONO, panels in Figtree. Two faces, two jobs:
+// the faceplate is print and the screen is a readout, and a readout wants a
+// mono face so a changing number does not shuffle the characters either side of
+// it. Every other module in the plugin already loads this one — Note, Beat,
+// Chance and 26 more — and TYPE_SCREEN was measured against it, so a display
+// that reaches for panelFont() instead comes out in the wrong face at a size
+// chosen for a different one. Key, Loom, Slide and OP MORPH all did.
+//
+// It comes from Rack's own res/, not ours: it ships with Rack, so bundling a
+// second copy would only add a way for the two to disagree.
+static inline std::shared_ptr<Font> screenFontFace() {
+	return APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
+}
+
 static inline void screenFont(NVGcontext* vg, const std::shared_ptr<Font>& f,
                               float mm = TYPE_SCREEN) {
 	nvgFontFaceId(vg, f->handle);

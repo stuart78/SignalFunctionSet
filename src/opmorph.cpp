@@ -497,7 +497,7 @@ struct OpMorphDisplay : Widget {
 
 	void draw(const DrawArgs& args) override {
 		NVGcontext* vg = args.vg;
-		if (!font || font->handle < 0) font = sfs::panelFont();
+		if (!font || font->handle < 0) font = sfs::screenFontFace();
 		nvgBeginPath(vg);
 		nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 3.f);
 		nvgFillColor(vg, OPM_BG); nvgFill(vg);

@@ -739,7 +739,7 @@ struct KeyDisplay : OpaqueWidget {
 
 	void drawLayer(const DrawArgs& args, int layer) override {
 		if (layer != 1) { OpaqueWidget::drawLayer(args, layer); return; }
-		if (!font || font->handle < 0) font = sfs::panelFont();
+		if (!font || font->handle < 0) font = sfs::screenFontFace();
 		if (!font || font->handle < 0) return;
 		nvgSave(args.vg);
 		nvgScissor(args.vg, 0.f, 0.f, box.size.x, box.size.y);

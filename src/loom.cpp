@@ -1163,7 +1163,7 @@ struct LoomDisplay : OpaqueWidget {
 	// ── drawing ───────────────────────────────────────────────────────────────
 	void drawLayer(const DrawArgs& args, int layer) override {
 		if (layer != 1) { OpaqueWidget::drawLayer(args, layer); return; }
-		if (!font || font->handle < 0) font = sfs::panelFont();
+		if (!font || font->handle < 0) font = sfs::screenFontFace();
 		if (!font || font->handle < 0) return;
 
 		nvgSave(args.vg);

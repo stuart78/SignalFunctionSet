@@ -131,8 +131,18 @@ sizes and label gaps to scale.
 
 ## Screen type
 
-On-screen text follows the same rule as panel labels: **one size**. Note and Beat
-draw every string at `9.f * s` on their 174-unit-wide display, which is
+Screens are set in **Share Tech Mono**, not in Figtree. Two faces, two jobs: the
+faceplate is print and the screen is a readout, and a readout wants a mono face
+so that a changing number does not shuffle the characters either side of it. It
+ships with Rack, so load it from Rack's own res rather than bundling a second
+copy that can disagree:
+
+```cpp
+font = sfs::screenFontFace();       // Rack's res/fonts/ShareTechMono-Regular.ttf
+```
+
+On-screen text then follows the same rule as panel labels: **one size**. Note and
+Beat draw every string at `9.f * s` on their 174-unit-wide display, which is
 **2.38 mm** of physical height — so that is the number, and it lives in
 `panel-style.hpp` as `sfs::TYPE_SCREEN` with a `sfs::screenFont()` helper.
 
@@ -147,6 +157,10 @@ Two things to avoid, both of which happened:
   in isolation and comes out a different size on every module, because displays
   are different heights. Key and Loom each invented their own and drifted from
   Note.
+* **Do not draw screen text in `panelFont()`.** It is Figtree, the panel face.
+  Key, Loom, Slide and OP MORPH all reached for it because it was the font the
+  style header already offered, and their screens came out in the wrong face at
+  a size that had been measured against a different one.
 * **Do not set letter spacing.** Note and Beat set none; tracking makes the same
   nominal size read as a different face.
 
