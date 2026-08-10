@@ -1,7 +1,7 @@
 {
   "slug": "SignalFunctionSet",
   "name": "Signal Function Set",
-  "version": "2.17.2",
+  "version": "2.17.3",
   "_comment": "Build script will modify slug/name/version for dev builds to allow coexistence",
   "license": "GPL-3.0-or-later",
   "brand": "SignalFunctionSet",
@@ -378,8 +378,7 @@
         "Quantizer",
         "Polyphonic",
         "Utility"
-      ],
-      "hidden": true
+      ]
     },
     {
       "slug": "Slide",

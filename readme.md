@@ -54,6 +54,7 @@ Modules grouped by function:
 - [OP ENV](#op-env): Standalone DX7 operator envelope generator
 
 **Utilities**
+- [Key](#key): Quantizer that takes its key from the patch, and hands it out
 - [Shift](#shift): 4-output CV shift register with cascade chain
 - [Record](#record): Auto-sampler that captures any voice to a multisampled SFZ instrument
 
@@ -913,6 +914,32 @@ The DX7 operator envelope, freed from the oscillator. OP ENV loads a voice from 
 See [docs/op-env-manual.md](docs/op-env-manual.md) for the full manual.
 
 ### Utilities
+
+#### Key
+
+<img src="screenshots/Key.png" alt="Key panel" height="320"> 
+
+A quantizer that isn't an island. Most of them make you set a scale by hand and then keep it in step with everything else yourself. Key reads **ROOT** (1V/oct, semitone-quantized) and **SCALE** (1V per scale) in the plugin's own convention, so Arrange, Note, Chance, Muse, Fugue, Chime, Loom and Slide all follow one key change, and Key hands the same key back out of its own ROOT and SCALE outputs. Four channels, each polyphonic to 16 voices, all sharing it. 14HP.
+
+**Features:**
+- **Three sub-scales**, and a channel picks the full scale or one of them. They are masks over the parent scale's **degree indices**, never over absolute pitches, so `{1st, 3rd, 5th}` is a triad in Major (C E G), still a triad in Minor (C D♯ G), and D♯ G A♯ in E♭. A sub-scale is a role in the key, not a set of notes. An empty one falls back to the parent rather than going silent.
+- **Sub-scales may leave the key** (menu, off by default) makes the out-of-scale cells clickable, so a sub-scale can carry an accidental: a flat 5th under a walking line, a passing tone the rest of the patch never sees. Those picks are stored as semitones from the root, because a note chosen for being outside the scale has no degree to be stored as. They transpose with ROOT and stay put when SCALE changes. A ring marks one on screen.
+- **Nothing here is a 12-bit pitch mask.** Harmonic series, Pelog and Slendro carry fractional semitone intervals, and a Scala file can carry anything, so the quantizer works in "semitones within one period" against real floats. Pelog stays 0 / 1.20 / 2.70 / 5.40 / 7.00 / 8.00 / 10.40 rather than being rounded onto the chromatic grid.
+- **Scala (.scl) files load** from the menu at SCALE index 19, leaving 0–18 as exactly the canonical list so cross-module SCALE CV is unaffected. Cents and ratios both parse, and **the period need not be an octave**: Bohlen-Pierce arrives as 13 degrees repeating at 19.02 semitones (3/1). The parsed scale is saved into the patch alongside the path, so it survives the file moving.
+- **Two screen states.** The keyboard when the period is 12 semitones and every degree lands on one; otherwise a region strip that is linear in pitch across one period, so the gaps between its degree lines *are* the snap regions. A keyboard can only round a microtonal scale; the strip shows where it really sits. The keyboard is drawn from C whatever the root is, because you read a keyboard by its shape, and the root is marked in place.
+- **On-screen editing.** Click a key to fork a custom scale; click a sub-scale cell to add or remove that degree. The rows show all twelve chromatic tones aligned under their own note, or one cell per degree when the scale isn't 12-tone.
+- **A global TRIG** turns it into a sample-and-hold: patched, notes update only on a trigger.
+- **Hysteresis** (menu, 12 cents by default) stops a pitch sitting on a boundary from flickering. It is abandoned whenever the key or a channel's sub-scale changes, or a held note would survive outside its new scale.
+
+**The scale bus.** ROOT OUT is 1V/oct and SCALE OUT is **polyphonic**. Channel 0 is the plain 1V-per-scale index every other module already reads. They all call `getVoltage()`, which returns channel 0 whatever the channel count, so the extension costs them nothing. Channel 1 is the period in volts, and channels 2 and up are the degrees as 1V/oct offsets from the root. That is how a microtonal or Scala scale reaches another module at all: the index rides on channel 0 as a lossy summary (Pelog resolves to Phrygian, the nearest canonical scale by pitch-class content) and the real scale rides behind it. Patch SCALE OUT into another Key and the whole key crosses intact, non-octave period and all. 14 degrees maximum, being 16 channels less the index and the period.
+
+**Controls:** Root, Scale, and per channel: Sub and Offset.
+**Inputs:** Root, Scale, Trig, and per channel: In (poly).
+**Outputs:** Per channel, Out (poly); plus Root and Scale.
+
+**Context menu:** Load Scala file, Offset in scale degrees (default) or semitones, Rounding (nearest / down / up), Sub-scales may leave the key, Hysteresis.
+
+> **Note:** OFFSET moves in scale **degrees** by default, so +2 goes two steps up the scale and stays in key. Semitones are a menu option.
 
 #### Shift
 
