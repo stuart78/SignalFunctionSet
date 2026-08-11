@@ -1046,7 +1046,12 @@ struct KeyWidget : ModuleWidget {
 		// than grid-snapped.
 		const float col[KEY_NCH] = {16.04f, 27.90f, 39.75f, 51.60f};
 		const float yIn = 58.50f, ySub = 70.40f, yOff = 82.30f, yOut = 94.10f;
+		// The bottom row is on its OWN spacing, not the channel columns': the key
+		// is not a fifth channel, and the art puts ROOT / SCALE / TRIG together on
+		// the left with the two outputs on their own plate to the right.
 		const float yPot = 110.60f, yJack = 121.00f;
+		const float kRoot = 6.90f, kScale = 18.75f, kTrig = 30.61f;
+		const float kRootOut = 48.22f, kScaleOut = 60.07f;
 
 		KeyDisplay* disp = new KeyDisplay();
 		disp->module = module;
@@ -1062,21 +1067,13 @@ struct KeyWidget : ModuleWidget {
 		}
 
 		// ── the key, in and out ────────────────────────────────────────────────
-		addParam (createParamCentered <Trimpot>   (mm2px(Vec(col[0], yPot)),  module, Key::ROOT_PARAM));
-		addInput (createInputCentered <PJ301MPort>(mm2px(Vec(col[0], yJack)), module, Key::ROOT_INPUT));
-		addParam (createParamCentered <Trimpot>   (mm2px(Vec(col[1], yPot)),  module, Key::SCALE_PARAM));
-		addInput (createInputCentered <PJ301MPort>(mm2px(Vec(col[1], yJack)), module, Key::SCALE_INPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(col[2], yJack)), module, Key::ROOT_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(col[3], yJack)), module, Key::SCALE_OUTPUT));
-
-		// TRIG sits in the empty corner left of ROOT IN. The column pitch would
-		// put it at 4.19mm, which leaves its bezel 0.2mm off the panel edge, so it
-		// is nudged in to 6.4mm — the art has not been drawn around it yet.
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(6.40f, yJack)), module, Key::TRIG_INPUT));
-		sfs::PanelLabels* lbl = new sfs::PanelLabels();
-		lbl->box.size = box.size;
-		addChild(lbl);
-		lbl->jack(6.40f, yJack, "TRIG");
+		addParam (createParamCentered <Trimpot>   (mm2px(Vec(kRoot,  yPot)),  module, Key::ROOT_PARAM));
+		addInput (createInputCentered <PJ301MPort>(mm2px(Vec(kRoot,  yJack)), module, Key::ROOT_INPUT));
+		addParam (createParamCentered <Trimpot>   (mm2px(Vec(kScale, yPot)),  module, Key::SCALE_PARAM));
+		addInput (createInputCentered <PJ301MPort>(mm2px(Vec(kScale, yJack)), module, Key::SCALE_INPUT));
+		addInput (createInputCentered <PJ301MPort>(mm2px(Vec(kTrig,  yJack)), module, Key::TRIG_INPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(kRootOut,  yJack)), module, Key::ROOT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(kScaleOut, yJack)), module, Key::SCALE_OUTPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {
