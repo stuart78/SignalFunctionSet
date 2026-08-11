@@ -125,7 +125,7 @@ struct Gravity : Module {
 	bool   hmPassRing[HM_NODES] = {};           // open between (r,s) and (r+1,s); idx = r*S+s, r<RINGS-1
 	bool   hmPassRad[HM_NODES]  = {};           // open between (r,s) and (r,(s+1)%S); idx = r*S+s
 	// Adjacency (built from passages) for BFS pathfinding.
-	int    hmAdj[HM_NODES][4];
+	int    hmAdj[HM_NODES][4] = {};
 	int    hmAdjN[HM_NODES] = {};
 	// Dots live in cell centers: one per cell; big dots replace small on chosen cells.
 	bool   hmBigDot[HM_NODES] = {};

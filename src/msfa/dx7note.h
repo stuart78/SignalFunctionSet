@@ -88,8 +88,8 @@ class Dx7Note {
   Env env_[6];
   FmOpParams params_[6];
   PitchEnv pitchenv_;
-  int32_t basepitch_[6];
-  int32_t fb_buf_[2];
+  int32_t basepitch_[6] = {};
+  int32_t fb_buf_[2] = {};
   int32_t fb_shift_;
 
   int algorithm_;

@@ -21,7 +21,7 @@ static const int OUTLEVEL = 4064;   // scaleoutlevel(99) << 5
 
 struct OpEnvEngine::Impl {
 	uint8_t bank[4096];
-	char    unpacked[156];
+	char    unpacked[156] = {};
 	int     curVoice = 0;
 	double  sr = 0.0;
 	bool    tablesInit = false;
@@ -35,7 +35,7 @@ struct OpEnvEngine::Impl {
 	int   carrierOp = 0;
 	int32_t lmax = 1;                   // level that maps to full scale (1.0)
 	float curLevel = 0.f;
-	float scratch[6144];
+	float scratch[6144] = {};
 
 	// LFO / tremolo
 	Lfo   lfo;

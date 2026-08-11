@@ -105,6 +105,13 @@ inline float hann(float phase) {
 	else if (phase > 1.f) phase = 1.f;
 	float idxF = phase * (float)SIZE;
 	int idx = (int)idxF;
+	// The table has SIZE+1 entries so the interpolation always has a right-hand
+	// neighbour -- but at phase == 1.0 exactly, idx IS SIZE and idx+1 runs off
+	// the end. frac is zero there so the value is multiplied away, which is why
+	// this never showed up as a wrong number; it is still a read past the array,
+	// and had the byte after it ever held an inf, inf * 0 would have put a NaN
+	// into the signal. Found by cppcheck (issue #11).
+	if (idx >= SIZE) return tables().hann[SIZE];
 	float frac = idxF - (float)idx;
 	return tables().hann[idx] + (tables().hann[idx + 1] - tables().hann[idx]) * frac;
 }

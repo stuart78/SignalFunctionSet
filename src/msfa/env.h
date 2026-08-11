@@ -50,20 +50,24 @@ class Env {
   // correct at any host sample rate (port of Dexed's fix). Call once at setup.
   static void init_sr(double sampleRate);
  private:
-  int rates_[4];
-  int levels_[4];
-  int outlevel_;
-  int rate_scaling_;
+  // Default-initialised for the same reason Lfo's members are: an Env that is
+  // constructed but not yet init()'d otherwise holds whatever was on the heap,
+  // and a static analyser is right to say so (issue #11). init() overwrites all
+  // of these before the first getsample(), so this costs nothing but certainty.
+  int rates_[4] = {0, 0, 0, 0};
+  int levels_[4] = {0, 0, 0, 0};
+  int outlevel_ = 0;
+  int rate_scaling_ = 0;
   // Level is stored so that 2^24 is one doubling, ie 16 more bits than
   // the DX7 itself (fraction is stored in level rather than separate
   // counter)
-  int32_t level_;
-  int targetlevel_;
-  bool rising_;
-  int ix_;
-  int inc_;
+  int32_t level_ = 0;
+  int targetlevel_ = 0;
+  bool rising_ = false;
+  int ix_ = 0;
+  int inc_ = 0;
 
-  bool down_;
+  bool down_ = true;
 
   void advance(int newix);
 };

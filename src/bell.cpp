@@ -97,7 +97,7 @@ struct Bell : Module {
 
 	struct LoadedBank {
 		std::string name;
-		uint8_t data[4096];
+		uint8_t data[4096] = {};
 		int voiceCount = 32;   // selectable voices (DX7 .syx = 32; Eno default = 4)
 	};
 

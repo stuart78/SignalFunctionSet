@@ -23,26 +23,26 @@
 
 struct BellEngineImpl {
 	uint8_t bank[4096];            // 32 packed voices
-	char    unpacked[156];         // current voice, unpacked
+	char    unpacked[156] = {};    // current voice, unpacked
 	int     curVoice = 0;
 	double  sr = 0.0;
 	bool    tablesInit = false;
 
 	Lfo lfo;
 	Controllers controllers;
-	Dx7Note notes[BellEngine::MAX_CH];
+	Dx7Note notes[BellEngine::MAX_CH] = {};
 	bool  active[BellEngine::MAX_CH];   // channel is rendering (note still audible)
 	bool  keyed[BellEngine::MAX_CH];    // note currently held (between on and off)
 	int   quietBlocks[BellEngine::MAX_CH];  // consecutive near-silent blocks after release
 	float vbuf[BellEngine::MAX_CH][BellEngine::BLOCK];
 
 	// VCO out: continuous env-bypassed oscillators, independent of gate.
-	Dx7Note vco[BellEngine::MAX_CH];
+	Dx7Note vco[BellEngine::MAX_CH] = {};
 	bool    vcoArmed[BellEngine::MAX_CH];   // vco[ch] init()'d with current patch
 	int     vcoNote[BellEngine::MAX_CH];    // midinote it was armed at
 	float   vcoBuf[BellEngine::MAX_CH][BellEngine::BLOCK];
 	int32_t lfoVal = 0, lfoDelay = 0;       // last block's LFO (shared with VCO)
-	float   envScratch[6144];               // for renderEnvShape (off the stack)
+	float   envScratch[6144] = {};          // for renderEnvShape (off the stack)
 
 	BellEngineImpl() {
 		// Default bank: the four Brian Eno DX7 patches (Keyboard, Feb 1987),

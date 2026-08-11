@@ -59,7 +59,7 @@ struct OpEnv : Module {
 	enum OutputId { ENV_OUTPUT, OUTPUTS_LEN };
 	enum LightId { LIGHTS_LEN };
 
-	struct LoadedBank { std::string name; uint8_t data[4096]; int voiceCount = 32; };
+	struct LoadedBank { std::string name; uint8_t data[4096] = {}; int voiceCount = 32; };
 
 	OpEnvEngine engine;
 	std::vector<LoadedBank> banks;

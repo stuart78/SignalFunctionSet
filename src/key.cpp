@@ -62,7 +62,7 @@ struct KeyOffsetQuantity : ParamQuantity {
 
 // A scale, reduced to what the quantizer actually needs.
 struct KeyScale {
-	float iv[KEY_MAXDEG];
+	float iv[KEY_MAXDEG] = {};
 	int   n;
 	float period;                        // semitones per repeat
 	KeyScale() : n(0), period(12.f) {}
@@ -153,7 +153,7 @@ static bool keyLoadScala(const std::string& path, KeyScale& out, std::string& na
 		if (a == std::string::npos) continue;
 		t = t.substr(a);
 		size_t b = t.find_last_not_of(" \t\r\n");
-		t = t.substr(0, b + 1);
+		t.resize(b + 1);
 		if (t.empty() || t[0] == '!') continue;
 
 		if (stage == 0) { name = t; stage = 1; continue; }
@@ -928,7 +928,7 @@ struct KeyDisplay : OpaqueWidget {
 		    : m->customMask ? std::string("Custom")
 		    : m->scaleIsScala() ? (m->scalaLoaded ? m->scalaName : std::string("No Scala file"))
 		    : std::string(sfs::SCALES[clamp(m->scaleIndex, 0, sfs::NUM_SCALES - 1)].shortName);
-		if (sname.size() > 22) sname = sname.substr(0, 22);
+		if (sname.size() > 22) sname.resize(22);
 		header(args, KEY_NOTES[m->rootNote], sname);
 
 		if (chromatic) drawKeyboard(args, m->keyboardMask(), m->rootNote, lit);

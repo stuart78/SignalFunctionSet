@@ -60,7 +60,14 @@ extern int32_t tanhtab[TANH_N_SAMPLES << 1];
 
 inline
 int32_t Tanh::lookup(int32_t x) {
-  int32_t signum = x >> 31;
+  // Upstream writes this as `x >> 31`. That is NOT undefined behaviour -- the
+  // shift count is in range, and right-shifting a negative signed value is
+  // implementation-defined and arithmetic on every compiler in existence -- but
+  // cppcheck reports it as an error on every VCV Library submission (issue #11),
+  // and a checker that cries wolf is how a real finding gets missed. Both forms
+  // compile to the same single `asr` instruction, verified, so this costs
+  // nothing and the report stays clean.
+  int32_t signum = x < 0 ? -1 : 0;
   x ^= signum;
   if (x >= (4 << 24)) {
     if (x >= (17 << 23)) {

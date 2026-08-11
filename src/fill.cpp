@@ -46,7 +46,12 @@ struct LibSet {
 	std::vector<int> fills;
 	float bpm = 120.f;
 	float vary = 0.4f;                         // identity strength: how far the variation layer may bend this set
-	sfs::Taste taste;                          // how this style ornaments (see drum-taste.hpp)
+	// `= {}` is the durable half of the issue #11 fix. Taste is a plain struct
+	// (it has to stay an aggregate -- the DRUM_TASTE table is brace-initialised,
+	// and under C++11 a member initialiser would stop it being one), so without
+	// this any code path that forgets to assign a taste gets stack garbage. The
+	// .txt importer did exactly that.
+	sfs::Taste taste = {};                     // how this style ornaments (see drum-taste.hpp)
 	int   axis = 0;                            // browser axis (AX_GENRE / AX_REGION / AX_USER)
 };
 
@@ -156,7 +161,7 @@ static void loadLibrary(const std::string& path, Library& lib, int forceAxis = -
 				    && s.id.size() > s.family.size() + 1 && s.id[s.family.size()] == '.') {
 					sub = s.id.substr(s.family.size() + 1);
 					size_t dot = sub.find('.');
-					if (dot != std::string::npos) sub = sub.substr(0, dot);
+					if (dot != std::string::npos) sub.resize(dot);
 				}
 				s.taste = sfs::tasteFor(s.family, sub);
 				if (!json_object_get(sj, "vary")) s.vary = s.taste.vary;   // research default
@@ -306,6 +311,14 @@ static bool loadDrumPatternsTxt(const std::string& path, Library& lib) {
 	set.family = "drum-patterns";
 	set.axis = AX_USER;
 	set.bpm = bpm; set.vary = 0.35f;
+	// An imported bank has no family to look a taste up by, so it takes the
+	// generic one. Leaving it default-constructed is what cppcheck caught in
+	// issue #11: sfs::Taste is a plain struct with no initialisers, so every
+	// propensity in it -- ratchet, ghost, added, and the frozen-lane mask that
+	// says which drums the engine must not touch at all -- was whatever happened
+	// to be on the stack, and the variation layer ornamented an imported pattern
+	// at random. The JSON loader already does this; only the .txt path missed it.
+	set.taste = sfs::tasteFor(set.family, "");
 	set.sparse = set.lift = set.main = patIdx[0];
 	if (patIdx.size() > 1) set.lift = patIdx[1];       // [2] → lift, [3+] → fills
 	for (size_t i = 2; i < patIdx.size(); i++) set.fills.push_back(patIdx[i]);
@@ -324,7 +337,7 @@ static std::string dpHtmlToTxt(const std::string& html, const std::string& slug)
 		tp += 19; size_t te = html.find('"', tp);
 		if (te != std::string::npos) name = html.substr(tp, te - tp);
 		size_t suf = name.find(" Drum Pattern");
-		if (suf != std::string::npos) name = name.substr(0, suf);
+		if (suf != std::string::npos) name.resize(suf);
 	}
 	size_t mp = html.find("BPM<");                     // meta line: ">135BPM</a>&nbsp; 6% swung (1)"
 	if (mp != std::string::npos) {
@@ -1393,7 +1406,7 @@ struct FillDisplay : Widget {
 			if (font) {
 				nvgFontFaceId(vg, font->handle); nvgFontSize(vg, 9.f * U);
 				nvgFillColor(vg, isSel ? FTEXT : FTEXT_DIM);
-				std::string nm = st.name; if (nm.size() > 26) nm = nm.substr(0, 25) + "…";
+				std::string nm = st.name; if (nm.size() > 26) { nm.resize(25); nm += "…"; }
 				nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 				nvgText(vg, (rightX + 5.f) * U, y + BROW_H * U / 2, nm.c_str(), NULL);
 				const char* meter = (st.main >= 0 && st.main < (int)lib.pats.size()) ? lib.pats[st.main].meter.c_str() : "4/4";
@@ -1502,7 +1515,7 @@ struct FillDisplay : Widget {
 				nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 				std::string nm = (it.set >= 0 && it.set < (int)lib.sets.size()) ? lib.sets[it.set].name : "?";
 				size_t lim = (size_t)std::max(6.f, (c.nameEnd - 28.f) / 5.2f);
-				if (nm.size() > lim) nm = nm.substr(0, lim - 1) + "…";
+				if (nm.size() > lim) { nm.resize(lim - 1); nm += "…"; }
 				nvgText(vg, 26.f * U, mid, nm.c_str(), NULL);
 				// repeats, with the progress through them on the playing entry
 				nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
@@ -1788,7 +1801,7 @@ struct FillWidget : ModuleWidget {
 			size_t sl = slug.rfind('/');
 			if (sl != std::string::npos) slug = slug.substr(sl + 1);
 			size_t q = slug.find('?');
-			if (q != std::string::npos) slug = slug.substr(0, q);
+			if (q != std::string::npos) slug.resize(q);
 			slug = dpSlug(slug);
 			std::string tmp = asset::user("SignalFunctionSet/dp-import.tmp");
 			system::createDirectories(asset::user("SignalFunctionSet"));

@@ -51,8 +51,8 @@ struct Bookmark {
 // ---------- Tables for one slot (mipmap + thumbnail) ----------
 
 struct SlotTables {
-	float levels[NUM_LEVELS][TABLE_SIZE];
-	float mini[MINI_SIZE];
+	float levels[NUM_LEVELS][TABLE_SIZE] = {};
+	float mini[MINI_SIZE] = {};
 	bool  ready = false;
 };
 
