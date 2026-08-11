@@ -41,7 +41,6 @@ static const int   SLICE_NXF     = 7;        // transforms, not counting passthr
 static const float SLICE_BUFSEC  = 30.f;
 static const float SLICE_MINLEN  = 0.010f;   // 10ms
 static const float SLICE_MAXLEN  = 1.000f;
-static const int   SLICE_MAXPAT  = 64;       // longest repeating pattern, in slices
 
 // The transforms, in panel order. APPEND ONLY: the weights are params and the
 // screen rows are drawn from this, so inserting one re-points a saved patch.
@@ -56,6 +55,34 @@ enum SliceXf {
 };
 static const char* SLICE_XFNAME[SLICE_NXF] =
 	{"CUT", "SWAP", "DELAY", "SHUF", "REV", "REPEAT", "PITCH"};
+
+// A PATTERN is a fixed sequence of what to do to each slice, and you pick one.
+//
+// The first cut of this module rolled seven weights per slice, which sounds
+// like a good idea and is not: everything came out as the same undifferentiated
+// scatter, and no setting was a thing you could learn, play against or come
+// back to. A pattern is repeatable by construction. RANDOM is one of the
+// entries rather than the whole design, so the scatter is still there when you
+// want it, as a choice among twelve rather than as the only behaviour.
+//
+// -1 is "leave this slice alone", and the straight slices matter as much as the
+// altered ones: they are what makes the alteration land.
+struct SlicePattern { const char* name; int len; int8_t slot[8]; };
+static const SlicePattern SLICE_PATS[] = {
+	{"Straight",  1, {-1}},
+	{"Gate 2",    2, {-1, XF_CUT}},
+	{"Gate 4",    4, {-1, -1, -1, XF_CUT}},
+	{"Ping-pong", 2, {-1, XF_SWAP}},
+	{"Reverse 2", 2, {-1, XF_REVERSE}},
+	{"Echo",      4, {-1, -1, XF_DELAY, -1}},
+	{"Stutter",   4, {-1, -1, -1, XF_REPEAT}},
+	{"Dive",      4, {-1, -1, -1, XF_PITCH}},
+	{"Scatter",   8, {XF_SHUFFLE, -1, XF_SHUFFLE, -1, -1, XF_SHUFFLE, -1, -1}},
+	{"Tumble",    8, {-1, XF_REVERSE, -1, XF_DELAY, -1, XF_REPEAT, -1, XF_SWAP}},
+	{"Glitch",    8, {-1, XF_REPEAT, XF_CUT, -1, XF_REVERSE, -1, XF_REPEAT, XF_CUT}},
+	{"Random",   -1, {-1}},        // len -1: rolled per slice, from the seed
+};
+static const int SLICE_NPAT = (int)(sizeof(SLICE_PATS) / sizeof(SLICE_PATS[0]));
 
 enum SliceShape { SH_HANN, SH_BELL, SH_SQUARE, SH_TRI, SH_COUNT };
 static const char* SLICE_SHAPENAME[SH_COUNT] = {"Hann", "Bell", "Square", "Triangle"};
@@ -85,17 +112,18 @@ struct SliceDisplay : OpaqueWidget {
 };
 
 struct Slice : Module {
+	// Slice has never shipped, so this enum could be rebuilt rather than
+	// appended to. Once it does ship, that stops being true.
 	enum ParamId {
-		LENGTH_PARAM, DEPTH_PARAM, RANGE_PARAM, MIX_PARAM,
-		DIV_PARAM, SHAPE_PARAM, PATTERN_PARAM,
-		FREEZE_PARAM, RESEED_PARAM, LINK_PARAM,
-		ENUMS(WEIGHT_PARAM, SLICE_NXF),
+		PATTERN_PARAM, LENGTH_PARAM, DEPTH_PARAM, RANGE_PARAM,
+		DIV_PARAM, SHAPE_PARAM, LINK_PARAM,
+		FREEZE_PARAM, RESEED_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
 		L_INPUT, R_INPUT, CLOCK_INPUT, BAR_INPUT, RESET_INPUT,
 		FREEZE_INPUT, RESEED_INPUT,
-		DEPTH_INPUT, LENGTH_INPUT, RANGE_INPUT,
+		PATTERN_INPUT, DEPTH_INPUT, LENGTH_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId { L_OUTPUT, R_OUTPUT, SLICE_OUTPUT, XF_OUTPUT, OUTPUTS_LEN };
@@ -142,9 +170,7 @@ struct Slice : Module {
 		x ^= x >> 16; return x;
 	}
 	float rollAt(long idx, int stream) {
-		int pat = (int)std::round(params[PATTERN_PARAM].getValue());
-		long i = (pat > 0) ? (idx % pat) : idx;
-		return (float)(hash32((uint32_t)(i * 2654435761u) ^ hash32(seed + stream * 977u))
+		return (float)(hash32((uint32_t)(idx * 2654435761u) ^ hash32(seed + stream * 977u))
 		               & 0xFFFFFF) / (float)0xFFFFFF;
 	}
 
@@ -159,26 +185,21 @@ struct Slice : Module {
 
 	Slice() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
+		std::vector<std::string> pn;
+		for (int i = 0; i < SLICE_NPAT; i++) pn.push_back(SLICE_PATS[i].name);
+		configSwitch(PATTERN_PARAM, 0.f, (float)(SLICE_NPAT - 1), 0.f, "Pattern", pn);
 		configParam(LENGTH_PARAM, std::log2(SLICE_MINLEN), std::log2(SLICE_MAXLEN),
 		            std::log2(0.125f), "Slice length", " s", 2.f);
-		configParam(DEPTH_PARAM, 0.f, 1.f, 0.35f, "Depth", "%", 0.f, 100.f);
+		configParam(DEPTH_PARAM, 0.f, 1.f, 1.f, "Depth", "%", 0.f, 100.f);
 		configParam(RANGE_PARAM, 0.f, 1.f, 0.25f, "Reach back", "%", 0.f, 100.f);
-		configParam(MIX_PARAM, 0.f, 1.f, 1.f, "Dry / wet", "%", 0.f, 100.f);
 		configSwitch(DIV_PARAM, 0.f, 5.f, 0.f, "Clock division",
 		             {"x1", "x2", "x4", "/2", "/4", "/8"});
 		configSwitch(SHAPE_PARAM, 0.f, (float)(SH_COUNT - 1), 0.f, "Edge shape",
 		             {SLICE_SHAPENAME[0], SLICE_SHAPENAME[1],
 		              SLICE_SHAPENAME[2], SLICE_SHAPENAME[3]});
-		configParam(PATTERN_PARAM, 0.f, (float)SLICE_MAXPAT, 8.f,
-		            "Pattern length", " slices");
-		getParamQuantity(PATTERN_PARAM)->snapEnabled = true;
+		configSwitch(LINK_PARAM, 0.f, 1.f, 1.f, "Channels", {"Independent", "Paired"});
 		configButton(FREEZE_PARAM, "Freeze the buffer");
-		configButton(RESEED_PARAM, "Reseed");
-		configSwitch(LINK_PARAM, 0.f, 1.f, 1.f, "Channels",
-		             {"Independent", "Paired"});
-		for (int i = 0; i < SLICE_NXF; i++)
-			configParam(WEIGHT_PARAM + i, 0.f, 1.f, i == XF_CUT ? 0.4f : 0.2f,
-			            string::f("%s weight", SLICE_XFNAME[i]), "%", 0.f, 100.f);
+		configButton(RESEED_PARAM, "Reseed (Random pattern only)");
 
 		configInput(L_INPUT, "Left audio");
 		configInput(R_INPUT, "Right audio (normalled from left)");
@@ -189,7 +210,7 @@ struct Slice : Module {
 		configInput(RESEED_INPUT, "Reseed trigger");
 		configInput(DEPTH_INPUT, "Depth CV (±5V)");
 		configInput(LENGTH_INPUT, "Slice length CV (±5V)");
-		configInput(RANGE_INPUT, "Reach CV (±5V)");
+		configInput(PATTERN_INPUT, "Pattern CV (1V per pattern)");
 		configOutput(L_OUTPUT, "Left");
 		configOutput(R_OUTPUT, "Right");
 		configOutput(SLICE_OUTPUT, "Trigger on every slice boundary");
@@ -230,8 +251,7 @@ struct Slice : Module {
 	// buffer, but snapped to whole bars when a BAR clock is present, because
 	// "one bar ago" lands and "1.37 seconds ago" does not.
 	float reachSamples() {
-		float r = clamp(params[RANGE_PARAM].getValue()
-		                + inputs[RANGE_INPUT].getVoltage() * 0.2f, 0.f, 1.f);
+		float r = clamp(params[RANGE_PARAM].getValue(), 0.f, 1.f);
 		float maxBack = std::min((float)bufN, (float)written) - sliceLen * 2.f;
 		if (maxBack < sliceLen) return sliceLen;
 		float want = sliceLen + r * (maxBack - sliceLen);
@@ -242,28 +262,25 @@ struct Slice : Module {
 		return want;
 	}
 
+	int patIndex() {
+		int p = (int)std::round(params[PATTERN_PARAM].getValue()
+		                        + inputs[PATTERN_INPUT].getVoltage());
+		return clamp(p, 0, SLICE_NPAT - 1);
+	}
+
 	// Choose what happens to slot `idx`, and set the read head up for it.
 	void beginSlice(long idx) {
 		xf = -1; swapCh = false; rdRate = 1.0; repLen = 0;
 
-		float depth = clamp(params[DEPTH_PARAM].getValue()
-		                    + inputs[DEPTH_INPUT].getVoltage() * 0.2f, 0.f, 1.f);
-		float w[SLICE_NXF], tot = 0.f;
-		for (int i = 0; i < SLICE_NXF; i++) {
-			w[i] = clamp(params[WEIGHT_PARAM + i].getValue(), 0.f, 1.f);
-			tot += w[i];
-		}
-		// DEPTH is the chance that anything happens at all; the weights then say
-		// what. Keeping the two apart means you can dial a character in with the
-		// weights and then bring it in and out with one knob (or one cable),
-		// which is the control a performance wants.
-		bool act = (tot > 0.0001f) && (rollAt(idx, 0) < depth);
-		if (act) {
-			float pick = rollAt(idx, 1) * tot, acc = 0.f;
-			for (int i = 0; i < SLICE_NXF; i++) {
-				acc += w[i];
-				if (pick <= acc) { xf = i; break; }
-			}
+		const SlicePattern& P = SLICE_PATS[patIndex()];
+		if (P.len > 0) {
+			// The whole point: slot N of the pattern, every time round.
+			xf = P.slot[idx % P.len];
+		} else {
+			// RANDOM is a pattern like the others, not a mode. Still seeded, so
+			// a take can be reproduced from a reset and RESEED means something.
+			float r = rollAt(idx, 0);
+			xf = (r < 0.45f) ? -1 : (int)(rollAt(idx, 1) * (float)SLICE_NXF) % SLICE_NXF;
 		}
 		if (xf < 0) return;
 
@@ -400,7 +417,11 @@ struct Slice : Module {
 		}
 		dispEnv = env; dispXf = xf;
 
-		float mix = clamp(params[MIX_PARAM].getValue(), 0.f, 1.f);
+		// DEPTH crossfades the altered slice against the straight signal. With a
+		// pattern doing the choosing, "how strong" is the only thing left for it
+		// to mean, and it is the same knob whichever transform is running.
+		float mix = clamp(params[DEPTH_PARAM].getValue()
+		                  + inputs[DEPTH_INPUT].getVoltage() * 0.2f, 0.f, 1.f);
 		float wetL = outL * env, wetR = outR * env;
 		// LINK off decorrelates the two channels by giving the right one its own
 		// roll; the transform is the same, its source is not.
@@ -451,7 +472,7 @@ struct Slice : Module {
 static const float SD_W = 480.f;
 static const float SD_M = 14.f;
 static const float SD_BUFY = 20.f, SD_BUFH = 62.f;
-static const float SD_ROWY = 96.f, SD_ROWH = 13.f, SD_ROWGAP = 15.f;
+static const float SD_ROWY = 108.f, SD_ROWH = 13.f;
 
 void SliceDisplay::drawLayer(const DrawArgs& args, int layer) {
 	if (layer != 1) { OpaqueWidget::drawLayer(args, layer); return; }
@@ -464,47 +485,31 @@ void SliceDisplay::drawLayer(const DrawArgs& args, int layer) {
 	nvgRestore(args.vg);
 }
 
-int SliceDisplay::rowAt(Vec p) const {
-	float s = box.size.x / SD_W;
-	for (int i = 0; i < SLICE_NXF; i++) {
-		float y = (SD_ROWY + (float)i * SD_ROWGAP) * s;
-		if (p.y >= y && p.y <= y + SD_ROWH * s) return i;
-	}
-	return -1;
-}
+int SliceDisplay::rowAt(Vec p) const { (void)p; return -1; }
+void SliceDisplay::onButton(const ButtonEvent& e) { OpaqueWidget::onButton(e); }
 
-// Drag across a row to set its weight, the way Beat sets a velocity.
-void SliceDisplay::onButton(const ButtonEvent& e) {
-	if (!module || e.button != GLFW_MOUSE_BUTTON_LEFT || e.action != GLFW_PRESS) {
-		OpaqueWidget::onButton(e); return;
-	}
-	int r = rowAt(e.pos);
-	if (r < 0) return;
-	e.consume(this);
-	float s = box.size.x / SD_W;
-	float x0 = (SD_M + 62.f) * s, x1 = (SD_W - SD_M) * s;
-	module->params[Slice::WEIGHT_PARAM + r].setValue(
-		clamp((e.pos.x - x0) / std::max(x1 - x0, 1.f), 0.f, 1.f));
-}
-
-static void sliceRows(NVGcontext* vg, std::shared_ptr<Font> font, float s,
-                      const float* w, int active) {
-	for (int i = 0; i < SLICE_NXF; i++) {
-		float y = (SD_ROWY + (float)i * SD_ROWGAP) * s, h = SD_ROWH * s;
-		float x0 = (SD_M + 62.f) * s, x1 = (SD_W - SD_M) * s;
+// The pattern, as the row of slices it is: one cell per slot, named, with the
+// one playing lit. You can see the shape of the figure and where you are in it,
+// which is the thing a bank of probability bars could never show.
+static void slicePatRow(NVGcontext* vg, std::shared_ptr<Font> font, float s,
+                        const SlicePattern& P, int playSlot, bool random) {
+	int n = random ? 8 : P.len;
+	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s;
+	float cw = (x1 - x0) / (float)n, y = SD_ROWY * s, h = SD_ROWH * 2.2f * s;
+	for (int i = 0; i < n; i++) {
+		int xf = random ? -2 : P.slot[i];
+		bool live = (i == playSlot);
+		nvgBeginPath(vg);
+		nvgRoundedRect(vg, x0 + cw * (float)i + 1.f, y, cw - 2.f, h, 2.f);
+		nvgFillColor(vg, live ? sfs::SCREEN_HOT
+		                : xf >= 0 ? sfs::SCREEN_DEEP : nvgRGB(0x23, 0x23, 0x3C));
+		nvgFill(vg);
 		sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
-		nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-		nvgFillColor(vg, i == active ? sfs::SCREEN_HOT
-		                             : (w[i] > 0.001f ? sfs::SCREEN_TEXT : sfs::SCREEN_PMID));
-		nvgText(vg, SD_M * s, y + h * 0.5f, SLICE_XFNAME[i], NULL);
-
-		nvgBeginPath(vg); nvgRect(vg, x0, y, x1 - x0, h);
-		nvgFillColor(vg, nvgRGB(0x23, 0x23, 0x3C)); nvgFill(vg);
-		if (w[i] > 0.001f) {
-			nvgBeginPath(vg); nvgRect(vg, x0, y, (x1 - x0) * w[i], h);
-			nvgFillColor(vg, i == active ? sfs::SCREEN_HOT : sfs::SCREEN_BLUE);
-			nvgFill(vg);
-		}
+		nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgFillColor(vg, live ? sfs::SCREEN_BG
+		                : xf >= 0 ? sfs::SCREEN_TEXT : sfs::SCREEN_PMID);
+		nvgText(vg, x0 + cw * ((float)i + 0.5f), y + h * 0.5f,
+		        xf == -2 ? "?" : xf >= 0 ? SLICE_XFNAME[xf] : "\u00b7", NULL);
 	}
 }
 
@@ -548,9 +553,14 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	nvgText(vg, x0, (SD_BUFY - 8.f) * s,
 	        m->freeze ? "FROZEN" : string::f("%.0f ms", ms).c_str(), NULL);
 
-	float w[SLICE_NXF];
-	for (int i = 0; i < SLICE_NXF; i++) w[i] = m->params[Slice::WEIGHT_PARAM + i].getValue();
-	sliceRows(vg, font, s, w, m->dispXf);
+	const SlicePattern& P = SLICE_PATS[m->patIndex()];
+	bool rnd = (P.len <= 0);
+	int slot = rnd ? (int)(m->sliceIdx % 8) : (int)(m->sliceIdx % P.len);
+	sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
+	nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+	nvgFillColor(vg, sfs::SCREEN_TEXT);
+	nvgText(vg, x1, (SD_BUFY - 8.f) * s, P.name, NULL);
+	slicePatRow(vg, font, s, P, slot, rnd);
 }
 
 void SliceDisplay::drawPreview(const DrawArgs& args) {
@@ -580,8 +590,10 @@ void SliceDisplay::drawPreview(const DrawArgs& args) {
 	nvgFillColor(vg, sfs::SCREEN_DIM);
 	nvgText(vg, x0, (SD_BUFY - 8.f) * s, "125 ms", NULL);
 
-	static const float w[SLICE_NXF] = {0.40f, 0.15f, 0.55f, 0.30f, 0.70f, 0.25f, 0.10f};
-	sliceRows(vg, font, s, w, XF_REVERSE);
+	nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+	nvgFillColor(vg, sfs::SCREEN_TEXT);
+	nvgText(vg, x1, (SD_BUFY - 8.f) * s, "Tumble", NULL);
+	slicePatRow(vg, font, s, SLICE_PATS[9], 3, false);
 }
 
 // =============================================================================
@@ -609,31 +621,30 @@ struct SliceWidget : ModuleWidget {
 		SliceDisplay* disp = new SliceDisplay();
 		disp->module = module;
 		disp->box.pos  = mm2px(Vec(hp(1), hp(2.4f)));
-		disp->box.size = mm2px(Vec(hp(19), hp(8.4f)));
+		disp->box.size = mm2px(Vec(hp(19), hp(6)));
 		addChild(disp);
 
 		// ── controls ─────────────────────────────────────────────────────────
 		const float kx[4] = {hp(3), hp(8), hp(14), hp(19)};
-		const float ky1 = hp(13), ky2 = hp(16);
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[0], ky1)), module, Slice::LENGTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[1], ky1)), module, Slice::DEPTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[2], ky1)), module, Slice::RANGE_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[3], ky1)), module, Slice::MIX_PARAM));
-		lbl->knob(kx[0], ky1, "LENGTH");
-		lbl->knob(kx[1], ky1, "DEPTH");
-		lbl->knob(kx[2], ky1, "REACH");
-		lbl->knob(kx[3], ky1, "MIX");
+		const float ky1 = hp(11), ky2 = hp(14);
+		// PATTERN is the module's one big decision, so it gets the first knob.
+		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(kx[0], ky1)), module, Slice::PATTERN_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[1], ky1)), module, Slice::LENGTH_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[2], ky1)), module, Slice::DEPTH_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[3], ky1)), module, Slice::RANGE_PARAM));
+		lbl->knob(kx[0], ky1, "PATTERN");
+		lbl->knob(kx[1], ky1, "LENGTH");
+		lbl->knob(kx[2], ky1, "DEPTH");
+		lbl->knob(kx[3], ky1, "REACH");
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[0], ky2)), module, Slice::DIV_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[1], ky2)), module, Slice::SHAPE_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[2], ky2)), module, Slice::PATTERN_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[1], ky2)), module, Slice::DIV_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[2], ky2)), module, Slice::SHAPE_PARAM));
 		addParam(createParamCentered<CKSS>(mm2px(Vec(kx[3], ky2)), module, Slice::LINK_PARAM));
-		lbl->trim(kx[0], ky2, "DIV");
-		lbl->trim(kx[1], ky2, "SHAPE");
-		lbl->trim(kx[2], ky2, "PATTERN");
+		lbl->trim(kx[1], ky2, "DIV");
+		lbl->trim(kx[2], ky2, "SHAPE");
 		lbl->trim(kx[3], ky2, "LINK");
 
-		const float by = hp(18.6f);
+		const float by = hp(17.4f);
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(
 			mm2px(Vec(hp(6.5f), by)), module, Slice::FREEZE_PARAM, Slice::FREEZE_LIGHT));
 		addParam(createParamCentered<VCVButton>(mm2px(Vec(hp(15.5f), by)), module, Slice::RESEED_PARAM));
@@ -641,7 +652,7 @@ struct SliceWidget : ModuleWidget {
 		lbl->trim(hp(15.5f), by, "RESEED");
 
 		// ── jacks, all of them, along the foot ───────────────────────────────
-		const float jy1 = hp(21.2f), jy2 = hp(23.7f);
+		const float jy1 = hp(20.6f), jy2 = hp(23.1f);
 		const float jx0 = hp(1.8f), jdx = hp(2.62f);
 		struct J { int id; bool out; const char* name; };
 		static const J ROW1[7] = {
@@ -651,8 +662,8 @@ struct SliceWidget : ModuleWidget {
 			{Slice::RESEED_INPUT, false, "SEED"},
 		};
 		static const J ROW2[7] = {
-			{Slice::DEPTH_INPUT, false, "DPTH"}, {Slice::LENGTH_INPUT, false, "LEN"},
-			{Slice::RANGE_INPUT, false, "RCH"},
+			{Slice::PATTERN_INPUT, false, "PAT"}, {Slice::DEPTH_INPUT, false, "DPTH"},
+			{Slice::LENGTH_INPUT, false, "LEN"},
 			{Slice::L_OUTPUT, true, "L"}, {Slice::R_OUTPUT, true, "R"},
 			{Slice::SLICE_OUTPUT, true, "TRIG"}, {Slice::XF_OUTPUT, true, "GATE"},
 		};

@@ -381,7 +381,7 @@ def splice(path, old, elems, plates=(), upmm=MM):
 PLATES = {
     # every jack is at the foot, so the only thing separating the four outputs
     # from the three CV inputs beside them is this plate
-    "slice": [(hp(8.4), hp(22.1), hp(10.4), hp(2.7))],
+    "slice": [(hp(8.4), hp(21.5), hp(10.4), hp(2.7))],
     # A plate bleeds about a cell past its outermost control -- enough to read as
     # a region rather than a box, without running the width of the panel.
     "chime": [(hp(7.25), hp(13.5), hp(20.0), hp(6.0)),   # the eight note out rows
