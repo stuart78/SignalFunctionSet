@@ -98,6 +98,27 @@ Each module follows the VCV Rack module pattern:
 - Implements `process()` method for audio processing
 - Has corresponding widget class for UI
 
+### Launch Checklist
+**Before a module goes from hidden to shipping, and before any release is
+tagged, work through `docs/conventions/launch-checklist.md`.** Every item on it
+was learned by getting it wrong once. It covers the panel, the browser preview,
+metadata (a tag the Library does not recognise is rejected *after* you tag the
+release), documentation, and the release steps.
+
+**Static analysis is part of it.** The VCV Library runs cppcheck on every
+submission and opens an issue with what it finds — so run it first:
+
+```bash
+./tools/cppcheck.sh      # exit status = findings in our own code
+```
+
+The first such report contained two real bugs that no amount of playing the
+modules would have surfaced: Fill importing a bank with an uninitialised taste
+struct, and a lookup table read one element past its end at a phase of exactly
+1.0. Fix the *declaration* as well as the call site, and silence a false
+positive rather than living with it — a checker that cries wolf on every
+submission is how a real finding gets missed.
+
 ### Panel Conventions
 **NEVER add virtual screws to a panel.** Signal Function Set faceplates omit the
 `ScrewSilver`/`ScrewBlack` corner screws by design — do not call

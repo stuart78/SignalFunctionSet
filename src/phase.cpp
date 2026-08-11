@@ -1046,10 +1046,10 @@ struct Phase : Module {
 				std::vector<float> tmp(sd.length);
 				for (size_t i = 0; i < sd.length; i++) tmp[i] = sampleToFloat(sd.samples[i]);
 				size_t numBytes = tmp.size() * sizeof(float);
-				std::string b64 = base64Encode((const uint8_t*)tmp.data(), numBytes);
+				std::string b64 = base64Encode(reinterpret_cast<const uint8_t*>(tmp.data()), numBytes);
 #else
 				size_t numBytes = sd.length * sizeof(float);
-				std::string b64 = base64Encode((const uint8_t*)sd.samples.data(), numBytes);
+				std::string b64 = base64Encode(reinterpret_cast<const uint8_t*>(sd.samples.data()), numBytes);
 #endif
 				json_object_set_new(rootJ, dataKey, json_string(b64.c_str()));
 			}
