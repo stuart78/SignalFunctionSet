@@ -409,6 +409,18 @@
         "Expander",
         "Polyphonic"
       ]
+    },
+    {
+      "slug": "Slice",
+      "name": "Slice",
+      "description": "Slices a stereo stream onto a grid and reworks each piece from a 30s buffer.",
+      "tags": [
+        "Effect",
+        "Sampler",
+        "Random",
+        "Polyphonic"
+      ],
+      "hidden": true
     }
   ]
 }

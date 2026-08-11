@@ -92,8 +92,11 @@ def constants(seed, *sources):
     env = dict(seed)
     for text in sources:
         for m in re.finditer(r"(?:static\s+)?const\s+float\s+(\w+)\s*\[\s*\w*\s*\]\s*=\s*\{([^}]*)\}", text):
+            # Each element is EVALUATED, not just parsed as a literal: a column
+            # table written on the grid is `{hp(3), hp(8), ...}`, and reading
+            # only bare numbers silently dropped every control that used one.
             try:
-                env[m.group(1)] = [float(v.strip().rstrip("f"))
+                env[m.group(1)] = [evaluate(v, env)
                                    for v in m.group(2).split(",") if v.strip()]
             except Exception:
                 pass
@@ -376,6 +379,9 @@ def splice(path, old, elems, plates=(), upmm=MM):
 # player actually sees. Stated in mm as (x, y, w, h) — design intent, so it lives
 # here rather than being inferred from control positions.
 PLATES = {
+    # every jack is at the foot, so the only thing separating the four outputs
+    # from the three CV inputs beside them is this plate
+    "slice": [(hp(8.4), hp(22.1), hp(10.4), hp(2.7))],
     # A plate bleeds about a cell past its outermost control -- enough to read as
     # a region rather than a box, without running the width of the panel.
     "chime": [(hp(7.25), hp(13.5), hp(20.0), hp(6.0)),   # the eight note out rows
@@ -402,6 +408,8 @@ MODULES = {
     "loom":    ("Loom",    "src/loom.cpp",    "res/loom.svg",    {"LOOM_N": 8}),
     "gravity": ("Gravity", "src/gravity.cpp", "res/gravity.svg", {}),
     "slidex":  ("SlideX",  "src/slidex.cpp",  "res/slidex.svg",  {"NCH": 8}),
+    "slice": ("Slice", "src/slice.cpp", "res/slice.svg",
+               {"SLICE_NXF": 7}),
     "opmorph": ("OpMorph", "src/opmorph.cpp", "res/opmorph.svg", {"OPM_COLS": 4, "OPM_ROWS": 4, "OPM_SLOTS": 16}),
 }
 
