@@ -53,36 +53,29 @@ enum SliceXf {
 	XF_REPEAT,     // the first 1/N of this slice, looped
 	XF_PITCH,      // the previous slice, at half or double rate
 };
-static const char* SLICE_XFNAME[SLICE_NXF] =
-	{"CUT", "SWAP", "DELAY", "SHUF", "REV", "REPEAT", "PITCH"};
+// WHAT happens and HOW OFTEN it happens are two knobs, not one.
+//
+// The first cut rolled seven weights per slice, which was undifferentiated
+// mush. The second replaced it with twelve named patterns, which was
+// repeatable but welded the two questions together: "Gate 2" and "Gate 4" were
+// separate entries for one effect at two rates, and everything interesting was
+// stuck at every-4. Twelve entries could not cover seven effects times eight
+// rates, and the ones it did cover were an arbitrary sample of them.
+//
+// So: EFFECT picks one of the seven, or MIXED to rotate through them, and
+// EVERY says how many slices go by between firings. Every combination exists,
+// each is a figure you can learn, and the old patterns are all still in there
+// as pairs -- Gate 4 is CUT every 4, Stutter is REPEAT every 4, Tumble is MIXED
+// every 2.
+static const int SLICE_MIXED = SLICE_NXF;         // one past the last real effect
+static const char* SLICE_EFFNAME[SLICE_NXF + 1] =
+	{"CUT", "SWAP", "DELAY", "SHUFFLE", "REVERSE", "REPEAT", "PITCH", "MIXED"};
 
-// A PATTERN is a fixed sequence of what to do to each slice, and you pick one.
-//
-// The first cut of this module rolled seven weights per slice, which sounds
-// like a good idea and is not: everything came out as the same undifferentiated
-// scatter, and no setting was a thing you could learn, play against or come
-// back to. A pattern is repeatable by construction. RANDOM is one of the
-// entries rather than the whole design, so the scatter is still there when you
-// want it, as a choice among twelve rather than as the only behaviour.
-//
-// -1 is "leave this slice alone", and the straight slices matter as much as the
-// altered ones: they are what makes the alteration land.
-struct SlicePattern { const char* name; int len; int8_t slot[8]; };
-static const SlicePattern SLICE_PATS[] = {
-	{"Straight",  1, {-1}},
-	{"Gate 2",    2, {-1, XF_CUT}},
-	{"Gate 4",    4, {-1, -1, -1, XF_CUT}},
-	{"Ping-pong", 2, {-1, XF_SWAP}},
-	{"Reverse 2", 2, {-1, XF_REVERSE}},
-	{"Echo",      4, {-1, -1, XF_DELAY, -1}},
-	{"Stutter",   4, {-1, -1, -1, XF_REPEAT}},
-	{"Dive",      4, {-1, -1, -1, XF_PITCH}},
-	{"Scatter",   8, {XF_SHUFFLE, -1, XF_SHUFFLE, -1, -1, XF_SHUFFLE, -1, -1}},
-	{"Tumble",    8, {-1, XF_REVERSE, -1, XF_DELAY, -1, XF_REPEAT, -1, XF_SWAP}},
-	{"Glitch",    8, {-1, XF_REPEAT, XF_CUT, -1, XF_REVERSE, -1, XF_REPEAT, XF_CUT}},
-	{"Random",   -1, {-1}},        // len -1: rolled per slice, from the seed
-};
-static const int SLICE_NPAT = (int)(sizeof(SLICE_PATS) / sizeof(SLICE_PATS[0]));
+// How many slices pass between firings. Not a plain 1..16 count: the useful
+// rates are sparse at the top end and a knob that spends half its travel
+// between 12 and 16 is wasted.
+static const int SLICE_EVERY[] = {1, 2, 3, 4, 6, 8, 12, 16};
+static const int SLICE_NEVERY = (int)(sizeof(SLICE_EVERY) / sizeof(SLICE_EVERY[0]));
 
 enum SliceShape { SH_HANN, SH_BELL, SH_SQUARE, SH_TRI, SH_COUNT };
 static const char* SLICE_SHAPENAME[SH_COUNT] = {"Hann", "Bell", "Square", "Triangle"};
@@ -115,15 +108,15 @@ struct Slice : Module {
 	// Slice has never shipped, so this enum could be rebuilt rather than
 	// appended to. Once it does ship, that stops being true.
 	enum ParamId {
-		PATTERN_PARAM, LENGTH_PARAM, DEPTH_PARAM, RANGE_PARAM,
-		DIV_PARAM, SHAPE_PARAM, LINK_PARAM,
+		EFFECT_PARAM, EVERY_PARAM, LENGTH_PARAM, DEPTH_PARAM,
+		RANGE_PARAM, DIV_PARAM, SHAPE_PARAM, LINK_PARAM,
 		FREEZE_PARAM, RESEED_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
 		L_INPUT, R_INPUT, CLOCK_INPUT, BAR_INPUT, RESET_INPUT,
 		FREEZE_INPUT, RESEED_INPUT,
-		PATTERN_INPUT, DEPTH_INPUT, LENGTH_INPUT,
+		EFFECT_INPUT, EVERY_INPUT, DEPTH_INPUT, LENGTH_INPUT, RANGE_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId { L_OUTPUT, R_OUTPUT, SLICE_OUTPUT, XF_OUTPUT, OUTPUTS_LEN };
@@ -180,14 +173,19 @@ struct Slice : Module {
 	// display mirrors
 	float dispEnv = 0.f;
 	int   dispXf = -1;
-	float dispRdFrac = 0.f, dispWrFrac = 0.f;
-	float dispPeak[128] = {};
+	float  dispBack = 0.f;              // read head's distance behind now, samples
+	int8_t dispSliceHist[64] = {};      // what happened to the last 64 slices
 
 	Slice() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
-		std::vector<std::string> pn;
-		for (int i = 0; i < SLICE_NPAT; i++) pn.push_back(SLICE_PATS[i].name);
-		configSwitch(PATTERN_PARAM, 0.f, (float)(SLICE_NPAT - 1), 0.f, "Pattern", pn);
+		std::vector<std::string> en;
+		for (int i = 0; i <= SLICE_NXF; i++) en.push_back(SLICE_EFFNAME[i]);
+		configSwitch(EFFECT_PARAM, 0.f, (float)SLICE_NXF, 0.f, "Effect", en);
+		std::vector<std::string> ev;
+		for (int i = 0; i < SLICE_NEVERY; i++)
+			ev.push_back(SLICE_EVERY[i] == 1 ? "Every slice"
+			                                 : string::f("Every %d", SLICE_EVERY[i]));
+		configSwitch(EVERY_PARAM, 0.f, (float)(SLICE_NEVERY - 1), 3.f, "Rate", ev);
 		configParam(LENGTH_PARAM, std::log2(SLICE_MINLEN), std::log2(SLICE_MAXLEN),
 		            std::log2(0.125f), "Slice length", " s", 2.f);
 		configParam(DEPTH_PARAM, 0.f, 1.f, 1.f, "Depth", "%", 0.f, 100.f);
@@ -210,7 +208,9 @@ struct Slice : Module {
 		configInput(RESEED_INPUT, "Reseed trigger");
 		configInput(DEPTH_INPUT, "Depth CV (±5V)");
 		configInput(LENGTH_INPUT, "Slice length CV (±5V)");
-		configInput(PATTERN_INPUT, "Pattern CV (1V per pattern)");
+		configInput(EFFECT_INPUT, "Effect CV (1V per effect)");
+		configInput(EVERY_INPUT, "Rate CV (1V per step)");
+		configInput(RANGE_INPUT, "Reach CV (1V per step or bar)");
 		configOutput(L_OUTPUT, "Left");
 		configOutput(R_OUTPUT, "Right");
 		configOutput(SLICE_OUTPUT, "Trigger on every slice boundary");
@@ -247,40 +247,54 @@ struct Slice : Module {
 		return bufR[(size_t)a] * (1.f - f) + bufR[(size_t)b] * f;
 	}
 
-	// How far back the transforms may reach, in samples: RANGE across the
-	// buffer, but snapped to whole bars when a BAR clock is present, because
-	// "one bar ago" lands and "1.37 seconds ago" does not.
+	// REACH is a COUNT, not a fraction of the buffer. As a percentage of thirty
+	// seconds it was unreadable and unusable: the knob's whole lower half
+	// rounded to the same one or two slices, and no position on it corresponded
+	// to anything you could name. In steps, or in bars when a BAR clock is
+	// there, every position is a number you can say out loud.
+	static const int REACH_MAXSTEP = 32;
+	static const int REACH_MAXBAR  = 8;
+	bool reachInBars() { return barLen > 0.f && inputs[BAR_INPUT].isConnected(); }
+	int reachCount() {
+		float v = clamp(params[RANGE_PARAM].getValue()
+		                + inputs[RANGE_INPUT].getVoltage() * 0.1f, 0.f, 1.f);
+		int hi = reachInBars() ? REACH_MAXBAR : REACH_MAXSTEP;
+		return clamp(1 + (int)std::floor(v * (float)hi), 1, hi);
+	}
+	// ...and in samples, for the read head.
 	float reachSamples() {
-		float r = clamp(params[RANGE_PARAM].getValue(), 0.f, 1.f);
-		float maxBack = std::min((float)bufN, (float)written) - sliceLen * 2.f;
-		if (maxBack < sliceLen) return sliceLen;
-		float want = sliceLen + r * (maxBack - sliceLen);
-		if (barLen > sliceLen) {
-			float bars = std::max(1.f, std::round(want / barLen));
-			want = std::min(bars * barLen, maxBack);
-		}
-		return want;
+		float unit = reachInBars() ? barLen : std::max(sliceLen, 1.f);
+		float back = unit * (float)reachCount();
+		float have = std::min((float)bufN, (float)written) - sliceLen * 2.f;
+		return clamp(back, sliceLen, std::max(have, sliceLen));
 	}
 
-	int patIndex() {
-		int p = (int)std::round(params[PATTERN_PARAM].getValue()
-		                        + inputs[PATTERN_INPUT].getVoltage());
-		return clamp(p, 0, SLICE_NPAT - 1);
+	int effIndex() {
+		int p = (int)std::round(params[EFFECT_PARAM].getValue()
+		                        + inputs[EFFECT_INPUT].getVoltage());
+		return clamp(p, 0, SLICE_NXF);
+	}
+	int everyN() {
+		int p = (int)std::round(params[EVERY_PARAM].getValue()
+		                        + inputs[EVERY_INPUT].getVoltage());
+		return SLICE_EVERY[clamp(p, 0, SLICE_NEVERY - 1)];
 	}
 
 	// Choose what happens to slot `idx`, and set the read head up for it.
 	void beginSlice(long idx) {
 		xf = -1; swapCh = false; rdRate = 1.0; repLen = 0;
 
-		const SlicePattern& P = SLICE_PATS[patIndex()];
-		if (P.len > 0) {
-			// The whole point: slot N of the pattern, every time round.
-			xf = P.slot[idx % P.len];
+		int n = everyN();
+		// The LAST slice of each group is the one that fires, so the effect
+		// lands on the approach to the downbeat rather than on it.
+		if (n > 1 && (idx % n) != (long)(n - 1)) return;
+		int e = effIndex();
+		if (e == SLICE_MIXED) {
+			// MIXED walks the seven in order rather than rolling: still a
+			// figure, just a longer one. RESEED rotates where it starts.
+			xf = (int)(((idx / n) + (long)(seed % SLICE_NXF)) % SLICE_NXF);
 		} else {
-			// RANDOM is a pattern like the others, not a mode. Still seeded, so
-			// a take can be reproduced from a reset and RESEED means something.
-			float r = rollAt(idx, 0);
-			xf = (r < 0.45f) ? -1 : (int)(rollAt(idx, 1) * (float)SLICE_NXF) % SLICE_NXF;
+			xf = e;
 		}
 		if (xf < 0) return;
 
@@ -292,12 +306,11 @@ struct Slice : Module {
 			case XF_REVERSE:
 				// Start at the END of the previous slot and walk backwards.
 				rdPos = now - 1.0; rdRate = -1.0; break;
-			case XF_DELAY: {
-				// A whole number of slices back, so the grid still lines up.
-				float slots = std::max(1.f, std::floor(reach / std::max(sliceLen, 1.f)));
-				rdPos = now - (double)(slots * sliceLen); break;
-			}
+			case XF_DELAY:
+				// Exactly REACH back: N steps, or N bars when there is a bar.
+				rdPos = now - (double)reach; break;
 			case XF_SHUFFLE: {
+				// Somewhere inside REACH, on the slice grid so it still lands.
 				float slots = std::max(1.f, std::floor(reach / std::max(sliceLen, 1.f)));
 				float pick = 1.f + std::floor(rollAt(idx, 2) * slots);
 				rdPos = now - (double)(pick * sliceLen); break;
@@ -439,11 +452,13 @@ struct Slice : Module {
 		if (slicePos >= (double)sliceLen) { slicePos = 0.0; sliceIdx++; }
 
 		// ── display ──────────────────────────────────────────────────────────
-		dispWrFrac = (float)wr / (float)bufN;
-		dispRdFrac = (float)(((long)rdPos % bufN + bufN) % bufN) / (float)bufN;
-		int bin = (int)(dispWrFrac * 128.f) & 127;
-		float a = std::fabs(inL) * 0.2f;
-		dispPeak[bin] = std::max(dispPeak[bin] * 0.999f, a);
+		// How far behind the write head the current slice is reading, in
+		// samples. The screen is drawn from THIS rather than from an absolute
+		// buffer position: now is always the right-hand edge.
+		double back = (double)wr - rdPos;
+		while (back < 0.0) back += (double)bufN;
+		dispBack = (float)back;
+		dispSliceHist[(size_t)(sliceIdx & 63)] = (int8_t)xf;
 	}
 
 	bool linked() { return params[LINK_PARAM].getValue() > 0.5f; }
@@ -488,28 +503,30 @@ void SliceDisplay::drawLayer(const DrawArgs& args, int layer) {
 int SliceDisplay::rowAt(Vec p) const { (void)p; return -1; }
 void SliceDisplay::onButton(const ButtonEvent& e) { OpaqueWidget::onButton(e); }
 
-// The pattern, as the row of slices it is: one cell per slot, named, with the
-// one playing lit. You can see the shape of the figure and where you are in it,
-// which is the thing a bank of probability bars could never show.
-static void slicePatRow(NVGcontext* vg, std::shared_ptr<Font> font, float s,
-                        const SlicePattern& P, int playSlot, bool random) {
-	int n = random ? 8 : P.len;
+// The last sixteen slices, current at the RIGHT, scrolling left. With EVERY set
+// to 4 you see three quiet cells and a lit one, marching -- the figure, as it
+// actually came out, rather than as it was configured.
+static void sliceHistRow(NVGcontext* vg, std::shared_ptr<Font> font, float s,
+                         const int8_t* hist, long idx) {
+	const int N = 16;
 	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s;
-	float cw = (x1 - x0) / (float)n, y = SD_ROWY * s, h = SD_ROWH * 2.2f * s;
-	for (int i = 0; i < n; i++) {
-		int xf = random ? -2 : P.slot[i];
-		bool live = (i == playSlot);
+	float cw = (x1 - x0) / (float)N, y = SD_ROWY * s, h = SD_ROWH * 2.2f * s;
+	for (int i = 0; i < N; i++) {
+		long slot = idx - (long)(N - 1 - i);
+		int xf = (slot < 0) ? -1 : hist[(size_t)(slot & 63)];
+		bool live = (i == N - 1);
 		nvgBeginPath(vg);
 		nvgRoundedRect(vg, x0 + cw * (float)i + 1.f, y, cw - 2.f, h, 2.f);
-		nvgFillColor(vg, live ? sfs::SCREEN_HOT
-		                : xf >= 0 ? sfs::SCREEN_DEEP : nvgRGB(0x23, 0x23, 0x3C));
+		nvgFillColor(vg, xf >= 0 ? (live ? sfs::SCREEN_HOT : sfs::SCREEN_BLUE)
+		                         : nvgRGB(0x23, 0x23, 0x3C));
 		nvgFill(vg);
-		sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
-		nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-		nvgFillColor(vg, live ? sfs::SCREEN_BG
-		                : xf >= 0 ? sfs::SCREEN_TEXT : sfs::SCREEN_PMID);
-		nvgText(vg, x0 + cw * ((float)i + 0.5f), y + h * 0.5f,
-		        xf == -2 ? "?" : xf >= 0 ? SLICE_XFNAME[xf] : "\u00b7", NULL);
+		if (xf >= 0) {
+			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
+			nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			nvgFillColor(vg, sfs::SCREEN_BG);
+			char c[2] = {SLICE_EFFNAME[xf][0], 0};
+			nvgText(vg, x0 + cw * ((float)i + 0.5f), y + h * 0.5f, c, NULL);
+		}
 	}
 }
 
@@ -517,34 +534,58 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	NVGcontext* vg = args.vg;
 	Slice* m = module;
 	float s = box.size.x / SD_W;
-
-	// The buffer, as a ring flattened into a bar: the write head, and a mark
-	// where the slice being played was fetched from. The line between them is
-	// the module's whole idea in one picture.
 	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s, y = SD_BUFY * s, h = SD_BUFH * s;
+
+	// NOW IS THE RIGHT-HAND EDGE, always. The first version drew the whole
+	// thirty seconds with the write head sweeping across it, which told you
+	// where in a buffer you happened to be -- a fact about the implementation,
+	// not about the sound. What you actually want to see is the recent past
+	// scrolling in from the left and how far back the current slice reached,
+	// so the window is exactly REACH wide and pinned to the present.
+	float win = std::max(m->reachSamples(), m->sliceLen * 4.f);
 	nvgBeginPath(vg); nvgRect(vg, x0, y, x1 - x0, h);
 	nvgFillColor(vg, nvgRGB(0x12, 0x12, 0x20)); nvgFill(vg);
-	for (int i = 0; i < 128; i++) {
-		float a = clamp(m->dispPeak[i], 0.f, 1.f);
-		float bx = x0 + (x1 - x0) * ((float)i / 128.f);
-		float bh = h * 0.46f * a;
+
+	// Peaks read straight out of the buffer at whatever resolution the window
+	// needs, rather than from a fixed set of bins that would be far too coarse
+	// at a one-second window and far too fine at eight bars.
+	const int NB = 120;
+	long step = std::max(1L, (long)(win / (float)NB));
+	for (int i = 0; i < NB; i++) {
+		long start = m->wr - (long)win + (long)((float)i / NB * win);
+		float pk = 0.f;
+		for (long k = 0; k < step; k += std::max(1L, step / 12)) {
+			long a = ((start + k) % m->bufN + m->bufN) % m->bufN;
+			pk = std::max(pk, std::fabs(m->bufL[(size_t)a]));
+		}
+		float bh = h * 0.46f * clamp(pk * 0.2f, 0.f, 1.f);
+		float bx = x0 + (x1 - x0) * ((float)i / NB);
 		nvgBeginPath(vg);
-		nvgRect(vg, bx, y + h * 0.5f - bh, std::max((x1 - x0) / 128.f - 1.f, 1.f), bh * 2.f);
+		nvgRect(vg, bx, y + h * 0.5f - bh, std::max((x1 - x0) / NB - 1.f, 1.f), bh * 2.f);
 		nvgFillColor(vg, sfs::SCREEN_DEEP); nvgFill(vg);
 	}
-	float wx = x0 + (x1 - x0) * m->dispWrFrac;
-	float rx = x0 + (x1 - x0) * m->dispRdFrac;
-	if (m->dispXf >= 0) {
-		nvgBeginPath(vg);
-		nvgMoveTo(vg, rx, y + h * 0.5f); nvgLineTo(vg, wx, y + h * 0.5f);
-		nvgStrokeColor(vg, nvgRGBA(0xEC, 0x65, 0x2E, 140));
+
+	// The slice grid, so the window reads as steps rather than as seconds.
+	int grid = (int)std::min(64.f, win / std::max(m->sliceLen, 1.f));
+	for (int i = 1; i <= grid; i++) {
+		float gx = x1 - (x1 - x0) * ((float)i * m->sliceLen / win);
+		if (gx < x0) break;
+		nvgBeginPath(vg); nvgMoveTo(vg, gx, y + h * 0.72f); nvgLineTo(vg, gx, y + h);
+		nvgStrokeColor(vg, nvgRGBA(0x8A, 0x8A, 0xA5, 60));
+		nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
+	}
+
+	if (m->dispXf >= 0 && m->dispBack > 1.f) {
+		float rx = x1 - (x1 - x0) * clamp(m->dispBack / win, 0.f, 1.f);
+		nvgBeginPath(vg); nvgMoveTo(vg, rx, y + h * 0.5f); nvgLineTo(vg, x1, y + h * 0.5f);
+		nvgStrokeColor(vg, nvgRGBA(0xEC, 0x65, 0x2E, 150));
 		nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
 		nvgBeginPath(vg); nvgCircle(vg, rx, y + h * 0.5f, 2.4f * s);
 		nvgFillColor(vg, sfs::SCREEN_HOT); nvgFill(vg);
 	}
-	nvgBeginPath(vg); nvgMoveTo(vg, wx, y); nvgLineTo(vg, wx, y + h);
+	nvgBeginPath(vg); nvgMoveTo(vg, x1, y); nvgLineTo(vg, x1, y + h);
 	nvgStrokeColor(vg, m->freeze ? sfs::SCREEN_HOT : sfs::SCREEN_TEXT);
-	nvgStrokeWidth(vg, 1.4f); nvgStroke(vg);
+	nvgStrokeWidth(vg, 1.6f); nvgStroke(vg);
 
 	sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 	nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
@@ -552,15 +593,15 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	float ms = m->sliceLen / APP->engine->getSampleRate() * 1000.f;
 	nvgText(vg, x0, (SD_BUFY - 8.f) * s,
 	        m->freeze ? "FROZEN" : string::f("%.0f ms", ms).c_str(), NULL);
-
-	const SlicePattern& P = SLICE_PATS[m->patIndex()];
-	bool rnd = (P.len <= 0);
-	int slot = rnd ? (int)(m->sliceIdx % 8) : (int)(m->sliceIdx % P.len);
-	sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 	nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 	nvgFillColor(vg, sfs::SCREEN_TEXT);
-	nvgText(vg, x1, (SD_BUFY - 8.f) * s, P.name, NULL);
-	slicePatRow(vg, font, s, P, slot, rnd);
+	int rc = m->reachCount();
+	nvgText(vg, x1, (SD_BUFY - 8.f) * s,
+	        string::f("%s /%d  \u2190%d %s", SLICE_EFFNAME[m->effIndex()], m->everyN(),
+	                  rc, m->reachInBars() ? (rc == 1 ? "bar" : "bars")
+	                                       : (rc == 1 ? "step" : "steps")).c_str(), NULL);
+
+	sliceHistRow(vg, font, s, m->dispSliceHist, m->sliceIdx);
 }
 
 void SliceDisplay::drawPreview(const DrawArgs& args) {
@@ -569,31 +610,40 @@ void SliceDisplay::drawPreview(const DrawArgs& args) {
 	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s, y = SD_BUFY * s, h = SD_BUFH * s;
 	nvgBeginPath(vg); nvgRect(vg, x0, y, x1 - x0, h);
 	nvgFillColor(vg, nvgRGB(0x12, 0x12, 0x20)); nvgFill(vg);
-	for (int i = 0; i < 128; i++) {
+	for (int i = 0; i < 120; i++) {
 		float a = 0.25f + 0.7f * std::fabs(std::sin((float)i * 0.31f))
 		                * std::fabs(std::sin((float)i * 0.07f));
-		float bx = x0 + (x1 - x0) * ((float)i / 128.f), bh = h * 0.46f * a;
+		float bx = x0 + (x1 - x0) * ((float)i / 120.f), bh = h * 0.46f * a;
 		nvgBeginPath(vg);
-		nvgRect(vg, bx, y + h * 0.5f - bh, std::max((x1 - x0) / 128.f - 1.f, 1.f), bh * 2.f);
+		nvgRect(vg, bx, y + h * 0.5f - bh, std::max((x1 - x0) / 120.f - 1.f, 1.f), bh * 2.f);
 		nvgFillColor(vg, sfs::SCREEN_DEEP); nvgFill(vg);
 	}
-	float wx = x0 + (x1 - x0) * 0.72f, rx = x0 + (x1 - x0) * 0.31f;
-	nvgBeginPath(vg); nvgMoveTo(vg, rx, y + h * 0.5f); nvgLineTo(vg, wx, y + h * 0.5f);
-	nvgStrokeColor(vg, nvgRGBA(0xEC, 0x65, 0x2E, 140)); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
+	for (int i = 1; i <= 8; i++) {
+		float gx = x1 - (x1 - x0) * ((float)i / 8.f);
+		nvgBeginPath(vg); nvgMoveTo(vg, gx, y + h * 0.72f); nvgLineTo(vg, gx, y + h);
+		nvgStrokeColor(vg, nvgRGBA(0x8A, 0x8A, 0xA5, 60)); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
+	}
+	float rx = x1 - (x1 - x0) * 0.62f;
+	nvgBeginPath(vg); nvgMoveTo(vg, rx, y + h * 0.5f); nvgLineTo(vg, x1, y + h * 0.5f);
+	nvgStrokeColor(vg, nvgRGBA(0xEC, 0x65, 0x2E, 150)); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
 	nvgBeginPath(vg); nvgCircle(vg, rx, y + h * 0.5f, 2.4f * s);
 	nvgFillColor(vg, sfs::SCREEN_HOT); nvgFill(vg);
-	nvgBeginPath(vg); nvgMoveTo(vg, wx, y); nvgLineTo(vg, wx, y + h);
-	nvgStrokeColor(vg, sfs::SCREEN_TEXT); nvgStrokeWidth(vg, 1.4f); nvgStroke(vg);
+	nvgBeginPath(vg); nvgMoveTo(vg, x1, y); nvgLineTo(vg, x1, y + h);
+	nvgStrokeColor(vg, sfs::SCREEN_TEXT); nvgStrokeWidth(vg, 1.6f); nvgStroke(vg);
 
 	sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 	nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 	nvgFillColor(vg, sfs::SCREEN_DIM);
 	nvgText(vg, x0, (SD_BUFY - 8.f) * s, "125 ms", NULL);
-
 	nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 	nvgFillColor(vg, sfs::SCREEN_TEXT);
-	nvgText(vg, x1, (SD_BUFY - 8.f) * s, "Tumble", NULL);
-	slicePatRow(vg, font, s, SLICE_PATS[9], 3, false);
+	nvgText(vg, x1, (SD_BUFY - 8.f) * s, "REVERSE /4  \u21904 steps", NULL);
+
+	static const int8_t hist[64] = {};
+	int8_t demo[64];
+	for (int i = 0; i < 64; i++) demo[i] = ((i % 4) == 3) ? (int8_t)XF_REVERSE : (int8_t)-1;
+	(void)hist;
+	sliceHistRow(vg, font, s, demo, 31);
 }
 
 // =============================================================================
@@ -627,19 +677,23 @@ struct SliceWidget : ModuleWidget {
 		// ── controls ─────────────────────────────────────────────────────────
 		const float kx[4] = {hp(3), hp(8), hp(14), hp(19)};
 		const float ky1 = hp(11), ky2 = hp(14);
-		// PATTERN is the module's one big decision, so it gets the first knob.
-		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(kx[0], ky1)), module, Slice::PATTERN_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[1], ky1)), module, Slice::LENGTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[2], ky1)), module, Slice::DEPTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[3], ky1)), module, Slice::RANGE_PARAM));
-		lbl->knob(kx[0], ky1, "PATTERN");
-		lbl->knob(kx[1], ky1, "LENGTH");
-		lbl->knob(kx[2], ky1, "DEPTH");
-		lbl->knob(kx[3], ky1, "REACH");
+		// WHAT and HOW OFTEN, side by side, because they are the two questions.
+		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(kx[0], ky1)), module, Slice::EFFECT_PARAM));
+		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(kx[1], ky1)), module, Slice::EVERY_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[2], ky1)), module, Slice::LENGTH_PARAM));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[3], ky1)), module, Slice::DEPTH_PARAM));
+		// A large knob is 12.7mm across, so the standard label gap puts the text
+		// inside it. These two get their own.
+		lbl->add(kx[0], ky1 - 8.4f, "EFFECT");
+		lbl->add(kx[1], ky1 - 8.4f, "EVERY");
+		lbl->knob(kx[2], ky1, "LENGTH");
+		lbl->knob(kx[3], ky1, "DEPTH");
 
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[0], ky2)), module, Slice::RANGE_PARAM));
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[1], ky2)), module, Slice::DIV_PARAM));
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[2], ky2)), module, Slice::SHAPE_PARAM));
 		addParam(createParamCentered<CKSS>(mm2px(Vec(kx[3], ky2)), module, Slice::LINK_PARAM));
+		lbl->trim(kx[0], ky2, "REACH");
 		lbl->trim(kx[1], ky2, "DIV");
 		lbl->trim(kx[2], ky2, "SHAPE");
 		lbl->trim(kx[3], ky2, "LINK");
@@ -653,26 +707,26 @@ struct SliceWidget : ModuleWidget {
 
 		// ── jacks, all of them, along the foot ───────────────────────────────
 		const float jy1 = hp(20.6f), jy2 = hp(23.1f);
-		const float jx0 = hp(1.8f), jdx = hp(2.62f);
+		const float jx0 = hp(1.9f), jdx = hp(2.6f);
 		struct J { int id; bool out; const char* name; };
-		static const J ROW1[7] = {
+		static const J ROW1[8] = {
 			{Slice::L_INPUT, false, "L"}, {Slice::R_INPUT, false, "R"},
 			{Slice::CLOCK_INPUT, false, "CLK"}, {Slice::BAR_INPUT, false, "BAR"},
 			{Slice::RESET_INPUT, false, "RST"}, {Slice::FREEZE_INPUT, false, "FRZ"},
-			{Slice::RESEED_INPUT, false, "SEED"},
+			{Slice::RESEED_INPUT, false, "SEED"}, {Slice::RANGE_INPUT, false, "RCH"},
 		};
-		static const J ROW2[7] = {
-			{Slice::PATTERN_INPUT, false, "PAT"}, {Slice::DEPTH_INPUT, false, "DPTH"},
-			{Slice::LENGTH_INPUT, false, "LEN"},
+		static const J ROW2[8] = {
+			{Slice::EFFECT_INPUT, false, "EFF"}, {Slice::EVERY_INPUT, false, "EVRY"},
+			{Slice::DEPTH_INPUT, false, "DPTH"}, {Slice::LENGTH_INPUT, false, "LEN"},
 			{Slice::L_OUTPUT, true, "L"}, {Slice::R_OUTPUT, true, "R"},
 			{Slice::SLICE_OUTPUT, true, "TRIG"}, {Slice::XF_OUTPUT, true, "GATE"},
 		};
-		for (int i = 0; i < 7; i++) {
+		for (int i = 0; i < 8; i++) {
 			float x = jx0 + jdx * (float)i;
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(x, jy1)), module, ROW1[i].id));
 			lbl->jack(x, jy1, ROW1[i].name);
 		}
-		for (int i = 0; i < 7; i++) {
+		for (int i = 0; i < 8; i++) {
 			float x = jx0 + jdx * (float)i;
 			if (ROW2[i].out)
 				addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, jy2)), module, ROW2[i].id));
