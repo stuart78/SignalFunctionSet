@@ -290,6 +290,7 @@ Eight strings sharing a bridge. Each is a digital waveguide: a delay loop for pi
 
 > **Note:** DAMP is floored at 10× each string's own pitch. As an absolute cutoff it filtered a high string below its second partial, and with so few partials left the pick-position comb's null removed what was left. A dark, high, bowed string made almost no sound.
 
+See [docs/loom-manual.md](docs/loom-manual.md) for the full manual.
 #### Slide
 
 <img src="screenshots/Slide.png" alt="Slide panel" height="320"> 
@@ -315,6 +316,8 @@ An electric lap steel. Eight waveguide strings stopped by a **steel bar** instea
 
 > **Getting the crying Hawaiian sound:** SWELL up so the volume pedal hides the pick attack, GLIDE around 0.5–0.7 so moves take real time, VIBRATO shallow and slow (≈5 Hz), DAMP fairly high, and a C6 or E7 tuning. Then move the bar between two chord positions rather than picking new notes.
 
+See [docs/slide-manual.md](docs/slide-manual.md) for the full manual.
+
 ##### SLIDE XP (Expander)
 
 <img src="screenshots/SlideX.png" alt="SLIDE XP panel" height="320"> 
@@ -331,6 +334,7 @@ Each **velocity trimpot** is more than an attenuator. With nothing patched it's 
 **Controls:** 8 × velocity / attenuator trimpot.
 **Outputs:** 8 × string audio, each with an activity LED.
 
+See [docs/slidex-manual.md](docs/slidex-manual.md) for the full manual.
 #### Chime
 
 <img src="screenshots/Chime.png" alt="Chime panel" height="320"> 
@@ -348,6 +352,8 @@ An eight-note resonating drone machine, after a xylophone whose resonator tubes 
 **Controls:** Rate, Spread, Drift, Relate, Shape, Octave, Excite, Decay, Root, Scale, Reseed, and per note: degree, weight, arc width.
 **Inputs:** Rate, Spread, Drift, Root, Scale, Reseed, Clock, Excite, Octave, Relate, Shape, Decay.
 **Outputs:** 8 × tube LFO (±5V), 8 × note audio, Mix L, Mix R, V/Oct (poly, 8ch), Gate (poly, 8ch, high while a note blooms).
+
+See [docs/chime-manual.md](docs/chime-manual.md) for the full manual.
 
 ### Filters & Resonators
 
@@ -431,6 +437,7 @@ Sixteen crystal habits are built as intersections of half-spaces from symmetry-e
 
 ### Clocks & Sequencers
 
+See [docs/crystal-manual.md](docs/crystal-manual.md) for the full manual.
 #### Arrange
 
 <img src="screenshots/Arrange.png" alt="Arrange panel" height="320"> 
@@ -573,6 +580,7 @@ The idea it is built around is **pressure**. One internal value accumulates a li
 
 **Context menu:** Clock resolution, Fills, Play fills, Queue advance, Tier balance, Tier follows.
 
+See [docs/fill-manual.md](docs/fill-manual.md) for the full manual.
 #### Note
 
 <img src="screenshots/Note.png" alt="Note panel" height="320"> 
@@ -695,6 +703,8 @@ An expander module for Fugue that adds per-voice controls for steps, range, slee
 
 **All per-voice parameters have CV inputs** (±5V).
 
+See [docs/fuguex-manual.md](docs/fuguex-manual.md) for the full manual.
+
 ##### MetaFugue
 
 <img src="screenshots/MetaFugue.png" alt="MetaFugue panel" height="320"> 
@@ -702,6 +712,8 @@ An expander module for Fugue that adds per-voice controls for steps, range, slee
 **[MetaFugue on signalfunctionset.com →](https://signalfunctionset.com/projects/fugue)**
 
 A single-module merge of Fugue and Fugue X: all of Fugue's controls plus the per-voice steps/range/sleep/probability, S&H mode, sorted min/mid/max CV outputs, and per-step trigger outputs, in one wider panel. Ideal for hosts that don't support expanders (e.g. MetaModule) or for anyone who prefers everything in one place.
+
+See [docs/metafugue-manual.md](docs/metafugue-manual.md) for the full manual.
 
 #### Muse
 
@@ -941,6 +953,8 @@ A quantizer that isn't an island. Most of them make you set a scale by hand and 
 
 > **Note:** OFFSET moves in scale **degrees** by default, so +2 goes two steps up the scale and stays in key. Semitones are a menu option.
 
+See [docs/key-manual.md](docs/key-manual.md) for the full manual.
+
 #### Shift
 
 <img src="screenshots/Shift.png" alt="Shift panel" height="320"> 
@@ -978,6 +992,7 @@ A 4-output CV shift register with per-lane controls. Sample input CV at the cloc
 **Context Menu:**
 - "Clear all" wipes all buffer contents, held values, jumble S&H, and all read/write/divider indices (same as a Reset trigger)
 
+See [docs/shift-manual.md](docs/shift-manual.md) for the full manual.
 #### Record
 
 <img src="screenshots/Record.png" alt="Record panel" height="320"> 
