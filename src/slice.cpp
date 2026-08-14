@@ -174,7 +174,16 @@ struct Slice : Module {
 	float dispEnv = 0.f;
 	int   dispXf = -1;
 	float  dispBack = 0.f;              // read head's distance behind now, samples
-	int8_t dispSliceHist[64] = {};      // what happened to the last 64 slices
+
+	// Two traces of the slice in progress, at column resolution: what came in,
+	// and what the transform made of it. Written in place and swept, the way a
+	// scope sweeps, so the columns ahead of the cursor still hold the previous
+	// slice and the picture is never half empty.
+	static const int SCOPE = 256;
+	float scDryMin[SCOPE] = {}, scDryMax[SCOPE] = {};
+	float scWetMin[SCOPE] = {}, scWetMax[SCOPE] = {};
+	float scEnv[SCOPE] = {};
+	int   scCol = -1;
 
 	Slice() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -447,6 +456,25 @@ struct Slice : Module {
 		outputs[SLICE_OUTPUT].setVoltage(slicePulse.process(args.sampleTime) ? 10.f : 0.f);
 		outputs[XF_OUTPUT].setVoltage(xf >= 0 ? 10.f : 0.f);
 
+		// The two traces. dry is what arrived, wet is what the transform made of
+		// it WITH its envelope but BEFORE the DEPTH crossfade -- so the altered
+		// window is visible as itself even at low depth, rather than fading out
+		// of the picture along with the effect.
+		int col = clamp((int)(slicePos / (double)sliceLen * (double)SCOPE), 0, SCOPE - 1);
+		float dry = (inL + inR) * 0.5f, wet = (wetL + wetR) * 0.5f;
+		if (col != scCol) {
+			scCol = col;
+			scDryMin[col] = scDryMax[col] = dry;
+			scWetMin[col] = scWetMax[col] = wet;
+			scEnv[col] = env;
+		} else {
+			scDryMin[col] = std::min(scDryMin[col], dry);
+			scDryMax[col] = std::max(scDryMax[col], dry);
+			scWetMin[col] = std::min(scWetMin[col], wet);
+			scWetMax[col] = std::max(scWetMax[col], wet);
+			scEnv[col]    = std::max(scEnv[col], env);
+		}
+
 		// ── advance ──────────────────────────────────────────────────────────
 		slicePos += 1.0;
 		if (slicePos >= (double)sliceLen) { slicePos = 0.0; sliceIdx++; }
@@ -458,7 +486,7 @@ struct Slice : Module {
 		double back = (double)wr - rdPos;
 		while (back < 0.0) back += (double)bufN;
 		dispBack = (float)back;
-		dispSliceHist[(size_t)(sliceIdx & 63)] = (int8_t)xf;
+
 	}
 
 	bool linked() { return params[LINK_PARAM].getValue() > 0.5f; }
@@ -486,8 +514,9 @@ struct Slice : Module {
 // Screen coordinates, in the design's own units (see panel-design.md).
 static const float SD_W = 480.f;
 static const float SD_M = 14.f;
-static const float SD_BUFY = 20.f, SD_BUFH = 62.f;
-static const float SD_ROWY = 108.f, SD_ROWH = 13.f;
+static const float SD_BUFY = 20.f, SD_BUFH = 50.f;
+// The two slice panes: what came in, and what went out.
+static const float SD_PANE1 = 78.f, SD_PANE2 = 112.f, SD_PANEH = 30.f;
 
 void SliceDisplay::drawLayer(const DrawArgs& args, int layer) {
 	if (layer != 1) { OpaqueWidget::drawLayer(args, layer); return; }
@@ -503,31 +532,71 @@ void SliceDisplay::drawLayer(const DrawArgs& args, int layer) {
 int SliceDisplay::rowAt(Vec p) const { (void)p; return -1; }
 void SliceDisplay::onButton(const ButtonEvent& e) { OpaqueWidget::onButton(e); }
 
-// The last sixteen slices, current at the RIGHT, scrolling left. With EVERY set
-// to 4 you see three quiet cells and a lit one, marching -- the figure, as it
-// actually came out, rather than as it was configured.
-static void sliceHistRow(NVGcontext* vg, std::shared_ptr<Font> font, float s,
-                         const int8_t* hist, long idx) {
-	const int N = 16;
+// ONE SLICE, TWICE: the window that arrived and the window that left.
+//
+// This replaced a row of labelled cells. A cell could tell you that slice 4 was
+// reversed; it could not show you that the reversal is exact, where the edge
+// fades sit, that a repeat is looping the first quarter, or that a pitched
+// slice runs out halfway and holds. Drawn as the actual samples, all of that is
+// just visible.
+//
+// The traces are swept in place rather than scrolled, so the columns to the
+// right of the cursor still hold the previous slice: the pane is always full.
+static void slicePane(NVGcontext* vg, std::shared_ptr<Font> font, float s,
+                      float uy, const float* mn, const float* mx, const float* env,
+                      int cursor, const char* label, NVGcolor col, bool showEnv) {
 	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s;
-	float cw = (x1 - x0) / (float)N, y = SD_ROWY * s, h = SD_ROWH * 2.2f * s;
-	for (int i = 0; i < N; i++) {
-		long slot = idx - (long)(N - 1 - i);
-		int xf = (slot < 0) ? -1 : hist[(size_t)(slot & 63)];
-		bool live = (i == N - 1);
+	float y = uy * s, h = SD_PANEH * s, mid = y + h * 0.5f;
+	nvgBeginPath(vg); nvgRect(vg, x0, y, x1 - x0, h);
+	nvgFillColor(vg, nvgRGB(0x12, 0x12, 0x20)); nvgFill(vg);
+
+	// zero line
+	nvgBeginPath(vg); nvgMoveTo(vg, x0, mid); nvgLineTo(vg, x1, mid);
+	nvgStrokeColor(vg, nvgRGBA(0x8A, 0x8A, 0xA5, 45)); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
+
+	// the envelope the slice is being shaped by, as an outline behind the trace
+	if (showEnv) {
 		nvgBeginPath(vg);
-		nvgRoundedRect(vg, x0 + cw * (float)i + 1.f, y, cw - 2.f, h, 2.f);
-		nvgFillColor(vg, xf >= 0 ? (live ? sfs::SCREEN_HOT : sfs::SCREEN_BLUE)
-		                         : nvgRGB(0x23, 0x23, 0x3C));
-		nvgFill(vg);
-		if (xf >= 0) {
-			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
-			nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-			nvgFillColor(vg, sfs::SCREEN_BG);
-			char c[2] = {SLICE_EFFNAME[xf][0], 0};
-			nvgText(vg, x0 + cw * ((float)i + 0.5f), y + h * 0.5f, c, NULL);
+		for (int i = 0; i < Slice::SCOPE; i++) {
+			float ex = x0 + (x1 - x0) * ((float)i / (float)Slice::SCOPE);
+			float ey = mid - h * 0.46f * clamp(env[i], 0.f, 1.f);
+			if (i == 0) nvgMoveTo(vg, ex, ey); else nvgLineTo(vg, ex, ey);
 		}
+		for (int i = Slice::SCOPE - 1; i >= 0; i--) {
+			float ex = x0 + (x1 - x0) * ((float)i / (float)Slice::SCOPE);
+			float ey = mid + h * 0.46f * clamp(env[i], 0.f, 1.f);
+			nvgLineTo(vg, ex, ey);
+		}
+		nvgClosePath(vg);
+		nvgStrokeColor(vg, nvgRGBA(0x8A, 0x8A, 0xA5, 70));
+		nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
 	}
+
+	// min/max per column: a real waveform, not an envelope follower
+	const float VSCALE = 0.46f / 5.f;              // ±5V fills the pane
+	nvgBeginPath(vg);
+	for (int i = 0; i < Slice::SCOPE; i++) {
+		float cx = x0 + (x1 - x0) * ((float)i / (float)Slice::SCOPE);
+		float a = mid - h * clamp(mx[i] * VSCALE, -0.46f, 0.46f);
+		float b = mid - h * clamp(mn[i] * VSCALE, -0.46f, 0.46f);
+		if (b - a < 1.f) b = a + 1.f;
+		nvgMoveTo(vg, cx, a); nvgLineTo(vg, cx, b);
+	}
+	nvgStrokeColor(vg, col); nvgStrokeWidth(vg, std::max((x1 - x0) / Slice::SCOPE, 1.f));
+	nvgStroke(vg);
+
+	// the sweep
+	if (cursor >= 0) {
+		float cx = x0 + (x1 - x0) * ((float)cursor / (float)Slice::SCOPE);
+		nvgBeginPath(vg); nvgMoveTo(vg, cx, y); nvgLineTo(vg, cx, y + h);
+		nvgStrokeColor(vg, nvgRGBA(0xE8, 0xE8, 0xF0, 120));
+		nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
+	}
+
+	sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
+	nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+	nvgFillColor(vg, sfs::SCREEN_DIM);
+	nvgText(vg, x0 + 3.f * s, y + 2.f * s, label, NULL);
 }
 
 void SliceDisplay::drawLive(const DrawArgs& args) {
@@ -601,7 +670,11 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	                  rc, m->reachInBars() ? (rc == 1 ? "bar" : "bars")
 	                                       : (rc == 1 ? "step" : "steps")).c_str(), NULL);
 
-	sliceHistRow(vg, font, s, m->dispSliceHist, m->sliceIdx);
+	slicePane(vg, font, s, SD_PANE1, m->scDryMin, m->scDryMax, m->scEnv,
+	          m->scCol, "IN", sfs::SCREEN_DEEP, false);
+	slicePane(vg, font, s, SD_PANE2, m->scWetMin, m->scWetMax, m->scEnv,
+	          m->scCol, m->dispXf >= 0 ? SLICE_EFFNAME[m->dispXf] : "OUT",
+	          m->dispXf >= 0 ? sfs::SCREEN_HOT : sfs::SCREEN_BLUE, true);
 }
 
 void SliceDisplay::drawPreview(const DrawArgs& args) {
@@ -639,11 +712,23 @@ void SliceDisplay::drawPreview(const DrawArgs& args) {
 	nvgFillColor(vg, sfs::SCREEN_TEXT);
 	nvgText(vg, x1, (SD_BUFY - 8.f) * s, "REVERSE /4  \u21904 steps", NULL);
 
-	static const int8_t hist[64] = {};
-	int8_t demo[64];
-	for (int i = 0; i < 64; i++) demo[i] = ((i % 4) == 3) ? (int8_t)XF_REVERSE : (int8_t)-1;
-	(void)hist;
-	sliceHistRow(vg, font, s, demo, 31);
+	// A slice reversed, drawn as it would really look: the same waveform,
+	// mirrored, inside its edge fades.
+	static float dmn[Slice::SCOPE], dmx[Slice::SCOPE];
+	static float wmn[Slice::SCOPE], wmx[Slice::SCOPE], wev[Slice::SCOPE];
+	for (int i = 0; i < Slice::SCOPE; i++) {
+		float t = (float)i / (float)Slice::SCOPE;
+		float a = std::sin(t * 47.f) * (0.25f + 0.75f * std::exp(-t * 2.6f)) * 4.f;
+		dmx[i] = std::fabs(a); dmn[i] = -std::fabs(a) * 0.85f;
+		int j = Slice::SCOPE - 1 - i;                       // reversed
+		float e = clamp(std::min(t, 1.f - t) * 14.f, 0.f, 1.f);
+		float b = std::sin((float)j / Slice::SCOPE * 47.f)
+		        * (0.25f + 0.75f * std::exp(-(float)j / Slice::SCOPE * 2.6f)) * 4.f;
+		wmx[i] = std::fabs(b) * e; wmn[i] = -std::fabs(b) * 0.85f * e;
+		wev[i] = e;
+	}
+	slicePane(vg, font, s, SD_PANE1, dmn, dmx, wev, 168, "IN", sfs::SCREEN_DEEP, false);
+	slicePane(vg, font, s, SD_PANE2, wmn, wmx, wev, 168, "REVERSE", sfs::SCREEN_HOT, true);
 }
 
 // =============================================================================
