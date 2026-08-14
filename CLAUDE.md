@@ -107,8 +107,9 @@ was learned by getting it wrong once. It covers the panel, the browser preview,
 metadata (a tag the Library does not recognise is rejected *after* you tag the
 release), documentation, and the release steps.
 
-**Static analysis is part of it.** The VCV Library runs cppcheck on every
-submission and opens an issue with what it finds — so run it first:
+**Static analysis is part of it, at release time.** The VCV Library runs
+cppcheck on every submission and opens an issue with what it finds, so run it
+before they do — when preparing a release, **not** on every dev build:
 
 ```bash
 ./tools/cppcheck.sh      # exit status = findings in our own code

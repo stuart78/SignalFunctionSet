@@ -41,7 +41,8 @@ applies until it comes out.
 - [ ] **Enums are append-only.** Params, inputs, outputs and lights serialise by
       index. Retire in place with a `"(retired)"` label; never delete or insert.
 
-- [ ] **Static analysis is clean.** `./tools/cppcheck.sh` — see below.
+- [ ] **Static analysis is clean.** `./tools/cppcheck.sh` — see below. This is a
+      release-prep check, not something to run on every build.
 
 ## The metadata
 
@@ -79,7 +80,10 @@ applies until it comes out.
 ## Static analysis
 
 The Library runs cppcheck on every submission and opens an issue with whatever
-it finds. Run it before they do:
+it finds. Run it before they do — but **only when preparing a release**. It
+takes a couple of minutes over the whole tree, it has nothing useful to say
+about a change that has not been finished yet, and running it on every dev build
+just makes the build slow enough to stop wanting to run.
 
 ```bash
 ./tools/cppcheck.sh          # exit status is the number of findings in our code
