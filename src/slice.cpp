@@ -149,6 +149,14 @@ struct Slice : Module {
 	// ── options ──────────────────────────────────────────────────────────────
 	bool  wholeWindow = false;        // envelope the whole slice, granular-style
 	float fadeMs = 4.f;
+	// REPEAT is the one transform that splices inside a slice: every time it
+	// wraps back to the start of its fragment the waveform jumps, and unless the
+	// fragment happens to begin and end near zero that jump is a click. CLEAN
+	// puts a very short fade either side of the wrap; DIRTY leaves it, because
+	// the click is a perfectly good sound and it is most of what makes a stutter
+	// sound like a stutter rather than like a loop.
+	int   spliceMode = 0;             // 0 = clean, 1 = dirty
+	static constexpr float SPLICE_MS = 1.5f;
 	bool  freeze = false;
 
 	// ── seeded choice ────────────────────────────────────────────────────────
@@ -417,9 +425,20 @@ struct Slice : Module {
 		} else if (xf == XF_REPEAT) {
 			// Live until the fragment is captured, then loop it.
 			long into = (long)slicePos;
-			if (into < repLen) { rdPos = (double)((repStart + into) % bufN); }
-			else               { rdPos = (double)((repStart + (into % repLen)) % bufN); }
+			long p = (into < repLen) ? into : (into % repLen);
+			rdPos = (double)((repStart + p) % bufN);
 			outL = readL(rdPos); outR = readR(rdPos);
+			if (spliceMode == 0 && repLen > 8) {
+				// A raised cosine, NOT the SHAPE curve. SHAPE is allowed to be
+				// Square, which means "no fade" and is chosen for the click at
+				// the slice edges -- but a clean splice has to stay clean
+				// whatever the edges are doing.
+				float f = std::min(SPLICE_MS * 0.001f * sr, (float)repLen * 0.25f);
+				float a = std::min((float)p / f, 1.f);
+				float b = std::min((float)(repLen - p) / f, 1.f);
+				float g = 0.5f * (1.f - std::cos(std::min(a, b) * (float)M_PI));
+				outL *= g; outR *= g;
+			}
 		} else {
 			outL = readL(rdPos); outR = readR(rdPos);
 			rdPos += rdRate;
@@ -497,6 +516,7 @@ struct Slice : Module {
 		json_object_set_new(r, "wholeWindow", json_boolean(wholeWindow));
 		json_object_set_new(r, "fadeMs", json_real(fadeMs));
 		json_object_set_new(r, "freeze", json_boolean(freeze));
+		json_object_set_new(r, "spliceMode", json_integer(spliceMode));
 		return r;
 	}
 	void dataFromJson(json_t* r) override {
@@ -504,6 +524,7 @@ struct Slice : Module {
 		if (json_t* j = json_object_get(r, "wholeWindow")) wholeWindow = json_boolean_value(j);
 		if (json_t* j = json_object_get(r, "fadeMs"))      fadeMs = clamp((float)json_number_value(j), 0.5f, 25.f);
 		if (json_t* j = json_object_get(r, "freeze"))      freeze = json_boolean_value(j);
+		if (json_t* j = json_object_get(r, "spliceMode")) spliceMode = clamp((int)json_integer_value(j), 0, 1);
 	}
 };
 
@@ -829,6 +850,10 @@ struct SliceWidget : ModuleWidget {
 		// The granular reading of "window shape": envelope the whole slice
 		// rather than just its edges. Nothing passes through clean then, which
 		// is the point -- it becomes a gater with a shape control.
+		// REPEAT is the only transform that splices inside a slice, so this is
+		// the only place a click can come from that the edge fades do not cover.
+		menu->addChild(createIndexPtrSubmenuItem("Repeat splice",
+			{"Clean", "Dirty"}, &m->spliceMode));
 		menu->addChild(createBoolPtrMenuItem("Envelope the whole slice", "", &m->wholeWindow));
 		menu->addChild(createSubmenuItem("Edge fade", string::f("%.0f ms", m->fadeMs),
 			[=](Menu* sub) {
