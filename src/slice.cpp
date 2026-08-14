@@ -183,15 +183,20 @@ struct Slice : Module {
 	int   dispXf = -1;
 	float  dispBack = 0.f;              // read head's distance behind now, samples
 
-	// Two traces of the slice in progress, at column resolution: what came in,
-	// and what the transform made of it. Written in place and swept, the way a
-	// scope sweeps, so the columns ahead of the cursor still hold the previous
-	// slice and the picture is never half empty.
-	static const int SCOPE = 256;
-	float scDryMin[SCOPE] = {}, scDryMax[SCOPE] = {};
-	float scWetMin[SCOPE] = {}, scWetMax[SCOPE] = {};
-	float scEnv[SCOPE] = {};
-	int   scCol = -1;
+	// FIVE SECONDS OF HISTORY, NOW AT THE RIGHT. One peak per column per trace,
+	// scrolling, the way a chart recorder works -- not one slice swept in place.
+	// A single slice showed the transform in detail and told you nothing about
+	// the figure it was part of; five seconds shows both, because at 125ms a
+	// slice is still thirteen columns wide.
+	//
+	// Four traces, because this is a stereo module: the original and the altered
+	// signal for each channel, drawn over each other so the difference between
+	// them IS the picture.
+	static const int SCOPE = 512;
+	static constexpr float SCOPE_SEC = 5.f;
+	float scDry[2][SCOPE] = {}, scWet[2][SCOPE] = {};
+	int   scHead = 0;                 // newest column
+	float scAcc = 0.f;                // samples into the current column
 
 	Slice() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -475,23 +480,20 @@ struct Slice : Module {
 		outputs[SLICE_OUTPUT].setVoltage(slicePulse.process(args.sampleTime) ? 10.f : 0.f);
 		outputs[XF_OUTPUT].setVoltage(xf >= 0 ? 10.f : 0.f);
 
-		// The two traces. dry is what arrived, wet is what the transform made of
-		// it WITH its envelope but BEFORE the DEPTH crossfade -- so the altered
-		// window is visible as itself even at low depth, rather than fading out
-		// of the picture along with the effect.
-		int col = clamp((int)(slicePos / (double)sliceLen * (double)SCOPE), 0, SCOPE - 1);
-		float dry = (inL + inR) * 0.5f, wet = (wetL + wetR) * 0.5f;
-		if (col != scCol) {
-			scCol = col;
-			scDryMin[col] = scDryMax[col] = dry;
-			scWetMin[col] = scWetMax[col] = wet;
-			scEnv[col] = env;
-		} else {
-			scDryMin[col] = std::min(scDryMin[col], dry);
-			scDryMax[col] = std::max(scDryMax[col], dry);
-			scWetMin[col] = std::min(scWetMin[col], wet);
-			scWetMax[col] = std::max(scWetMax[col], wet);
-			scEnv[col]    = std::max(scEnv[col], env);
+		// The four traces. wet is what the transform made of the slice WITH its
+		// envelope but BEFORE the DEPTH crossfade, so the altered signal stays
+		// visible as itself at low depth instead of fading out of the picture
+		// along with the effect.
+		scDry[0][scHead] = std::max(scDry[0][scHead], std::fabs(inL));
+		scDry[1][scHead] = std::max(scDry[1][scHead], std::fabs(inR));
+		scWet[0][scHead] = std::max(scWet[0][scHead], std::fabs(wetL));
+		scWet[1][scHead] = std::max(scWet[1][scHead], std::fabs(wetR));
+		scAcc += 1.f;
+		if (scAcc >= SCOPE_SEC * sr / (float)SCOPE) {
+			scAcc = 0.f;
+			scHead = (scHead + 1) % SCOPE;
+			scDry[0][scHead] = scDry[1][scHead] = 0.f;
+			scWet[0][scHead] = scWet[1][scHead] = 0.f;
 		}
 
 		// ── advance ──────────────────────────────────────────────────────────
@@ -535,9 +537,9 @@ struct Slice : Module {
 // Screen coordinates, in the design's own units (see panel-design.md).
 static const float SD_W = 480.f;
 static const float SD_M = 14.f;
-static const float SD_BUFY = 20.f, SD_BUFH = 50.f;
-// The two slice panes: what came in, and what went out.
-static const float SD_PANE1 = 78.f, SD_PANE2 = 112.f, SD_PANEH = 30.f;
+static const float SD_BUFY = 20.f, SD_BUFH = 36.f;
+// One pane per channel, because this is a stereo module.
+static const float SD_PANE1 = 64.f, SD_PANE2 = 104.f, SD_PANEH = 38.f;
 
 void SliceDisplay::drawLayer(const DrawArgs& args, int layer) {
 	if (layer != 1) { OpaqueWidget::drawLayer(args, layer); return; }
@@ -553,66 +555,57 @@ void SliceDisplay::drawLayer(const DrawArgs& args, int layer) {
 int SliceDisplay::rowAt(Vec p) const { (void)p; return -1; }
 void SliceDisplay::onButton(const ButtonEvent& e) { OpaqueWidget::onButton(e); }
 
-// ONE SLICE, TWICE: the window that arrived and the window that left.
+// FIVE SECONDS, NOW AT THE RIGHT, one pane per channel.
 //
-// This replaced a row of labelled cells. A cell could tell you that slice 4 was
-// reversed; it could not show you that the reversal is exact, where the edge
-// fades sit, that a repeat is looping the first quarter, or that a pitched
-// slice runs out halfway and holds. Drawn as the actual samples, all of that is
-// just visible.
+// Each pane carries BOTH signals for its channel: the original in orange, the
+// altered over the top of it in blue. Where nothing happened the blue sits
+// exactly on the orange and you see one shape; where a slice was cut the orange
+// is left standing alone; where it was reversed or fetched from elsewhere the
+// two shapes disagree for exactly the width of that slice. The difference
+// between them IS the picture, which is why they share a pane instead of having
+// one each.
 //
-// The traces are swept in place rather than scrolled, so the columns to the
-// right of the cursor still hold the previous slice: the pane is always full.
-static void slicePane(NVGcontext* vg, std::shared_ptr<Font> font, float s,
-                      float uy, const float* mn, const float* mx, const float* env,
-                      int cursor, const char* label, NVGcolor col, bool showEnv) {
+// Drawn as a filled envelope, the way Phase draws a sample: trace the peak along
+// the top, back along the bottom, close and fill. A column of separate bars is
+// cheaper and reads as a bar chart rather than as a waveform.
+static void sliceFilled(NVGcontext* vg, const float* v, int n, float x0, float x1,
+                        float mid, float h, NVGcolor col) {
+	if (n < 2) return;
+	nvgBeginPath(vg);
+	for (int i = 0; i < n; i++) {
+		float px = x0 + (x1 - x0) * ((float)i / (float)(n - 1));
+		float a = clamp(v[i] * 0.2f, 0.f, 1.f) * h * 0.46f;
+		if (i == 0) nvgMoveTo(vg, px, mid - a); else nvgLineTo(vg, px, mid - a);
+	}
+	for (int i = n - 1; i >= 0; i--) {
+		float px = x0 + (x1 - x0) * ((float)i / (float)(n - 1));
+		float a = clamp(v[i] * 0.2f, 0.f, 1.f) * h * 0.46f;
+		nvgLineTo(vg, px, mid + a);
+	}
+	nvgClosePath(vg);
+	nvgFillColor(vg, col);
+	nvgFill(vg);
+}
+
+static void sliceTrace(NVGcontext* vg, const float* v, int head, float x0, float x1,
+                       float mid, float h, NVGcolor col) {
+	float lin[Slice::SCOPE];
+	for (int i = 0; i < Slice::SCOPE; i++)          // oldest first, newest at x1
+		lin[i] = v[(head + 1 + i) % Slice::SCOPE];
+	sliceFilled(vg, lin, Slice::SCOPE, x0, x1, mid, h, col);
+}
+
+static void slicePane(NVGcontext* vg, std::shared_ptr<Font> font, float s, float uy,
+                      const float* dry, const float* wet, int head, const char* label) {
 	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s;
 	float y = uy * s, h = SD_PANEH * s, mid = y + h * 0.5f;
 	nvgBeginPath(vg); nvgRect(vg, x0, y, x1 - x0, h);
 	nvgFillColor(vg, nvgRGB(0x12, 0x12, 0x20)); nvgFill(vg);
-
-	// zero line
 	nvgBeginPath(vg); nvgMoveTo(vg, x0, mid); nvgLineTo(vg, x1, mid);
-	nvgStrokeColor(vg, nvgRGBA(0x8A, 0x8A, 0xA5, 45)); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
+	nvgStrokeColor(vg, nvgRGBA(0x8A, 0x8A, 0xA5, 40)); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
 
-	// the envelope the slice is being shaped by, as an outline behind the trace
-	if (showEnv) {
-		nvgBeginPath(vg);
-		for (int i = 0; i < Slice::SCOPE; i++) {
-			float ex = x0 + (x1 - x0) * ((float)i / (float)Slice::SCOPE);
-			float ey = mid - h * 0.46f * clamp(env[i], 0.f, 1.f);
-			if (i == 0) nvgMoveTo(vg, ex, ey); else nvgLineTo(vg, ex, ey);
-		}
-		for (int i = Slice::SCOPE - 1; i >= 0; i--) {
-			float ex = x0 + (x1 - x0) * ((float)i / (float)Slice::SCOPE);
-			float ey = mid + h * 0.46f * clamp(env[i], 0.f, 1.f);
-			nvgLineTo(vg, ex, ey);
-		}
-		nvgClosePath(vg);
-		nvgStrokeColor(vg, nvgRGBA(0x8A, 0x8A, 0xA5, 70));
-		nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
-	}
-
-	// min/max per column: a real waveform, not an envelope follower
-	const float VSCALE = 0.46f / 5.f;              // ±5V fills the pane
-	nvgBeginPath(vg);
-	for (int i = 0; i < Slice::SCOPE; i++) {
-		float cx = x0 + (x1 - x0) * ((float)i / (float)Slice::SCOPE);
-		float a = mid - h * clamp(mx[i] * VSCALE, -0.46f, 0.46f);
-		float b = mid - h * clamp(mn[i] * VSCALE, -0.46f, 0.46f);
-		if (b - a < 1.f) b = a + 1.f;
-		nvgMoveTo(vg, cx, a); nvgLineTo(vg, cx, b);
-	}
-	nvgStrokeColor(vg, col); nvgStrokeWidth(vg, std::max((x1 - x0) / Slice::SCOPE, 1.f));
-	nvgStroke(vg);
-
-	// the sweep
-	if (cursor >= 0) {
-		float cx = x0 + (x1 - x0) * ((float)cursor / (float)Slice::SCOPE);
-		nvgBeginPath(vg); nvgMoveTo(vg, cx, y); nvgLineTo(vg, cx, y + h);
-		nvgStrokeColor(vg, nvgRGBA(0xE8, 0xE8, 0xF0, 120));
-		nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
-	}
+	sliceTrace(vg, dry, head, x0, x1, mid, h, sfs::SCREEN_HOT);
+	sliceTrace(vg, wet, head, x0, x1, mid, h, nvgRGBA(0x00, 0x97, 0xDE, 225));
 
 	sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 	nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
@@ -639,21 +632,20 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	// Peaks read straight out of the buffer at whatever resolution the window
 	// needs, rather than from a fixed set of bins that would be far too coarse
 	// at a one-second window and far too fine at eight bars.
-	const int NB = 120;
+	const int NB = 240;
 	long step = std::max(1L, (long)(win / (float)NB));
+	float pk[NB];
 	for (int i = 0; i < NB; i++) {
 		long start = m->wr - (long)win + (long)((float)i / NB * win);
-		float pk = 0.f;
-		for (long k = 0; k < step; k += std::max(1L, step / 12)) {
+		float p = 0.f;
+		for (long k = 0; k < step; k += std::max(1L, step / 16)) {
 			long a = ((start + k) % m->bufN + m->bufN) % m->bufN;
-			pk = std::max(pk, std::fabs(m->bufL[(size_t)a]));
+			p = std::max(p, std::max(std::fabs(m->bufL[(size_t)a]),
+			                         std::fabs(m->bufR[(size_t)a])));
 		}
-		float bh = h * 0.46f * clamp(pk * 0.2f, 0.f, 1.f);
-		float bx = x0 + (x1 - x0) * ((float)i / NB);
-		nvgBeginPath(vg);
-		nvgRect(vg, bx, y + h * 0.5f - bh, std::max((x1 - x0) / NB - 1.f, 1.f), bh * 2.f);
-		nvgFillColor(vg, sfs::SCREEN_DEEP); nvgFill(vg);
+		pk[i] = p;
 	}
+	sliceFilled(vg, pk, NB, x0, x1, y + h * 0.5f, h, sfs::SCREEN_DEEP);
 
 	// The slice grid, so the window reads as steps rather than as seconds.
 	int grid = (int)std::min(64.f, win / std::max(m->sliceLen, 1.f));
@@ -691,11 +683,8 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	                  rc, m->reachInBars() ? (rc == 1 ? "bar" : "bars")
 	                                       : (rc == 1 ? "step" : "steps")).c_str(), NULL);
 
-	slicePane(vg, font, s, SD_PANE1, m->scDryMin, m->scDryMax, m->scEnv,
-	          m->scCol, "IN", sfs::SCREEN_DEEP, false);
-	slicePane(vg, font, s, SD_PANE2, m->scWetMin, m->scWetMax, m->scEnv,
-	          m->scCol, m->dispXf >= 0 ? SLICE_EFFNAME[m->dispXf] : "OUT",
-	          m->dispXf >= 0 ? sfs::SCREEN_HOT : sfs::SCREEN_BLUE, true);
+	slicePane(vg, font, s, SD_PANE1, m->scDry[0], m->scWet[0], m->scHead, "L");
+	slicePane(vg, font, s, SD_PANE2, m->scDry[1], m->scWet[1], m->scHead, "R");
 }
 
 void SliceDisplay::drawPreview(const DrawArgs& args) {
@@ -704,14 +693,11 @@ void SliceDisplay::drawPreview(const DrawArgs& args) {
 	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s, y = SD_BUFY * s, h = SD_BUFH * s;
 	nvgBeginPath(vg); nvgRect(vg, x0, y, x1 - x0, h);
 	nvgFillColor(vg, nvgRGB(0x12, 0x12, 0x20)); nvgFill(vg);
-	for (int i = 0; i < 120; i++) {
-		float a = 0.25f + 0.7f * std::fabs(std::sin((float)i * 0.31f))
-		                * std::fabs(std::sin((float)i * 0.07f));
-		float bx = x0 + (x1 - x0) * ((float)i / 120.f), bh = h * 0.46f * a;
-		nvgBeginPath(vg);
-		nvgRect(vg, bx, y + h * 0.5f - bh, std::max((x1 - x0) / 120.f - 1.f, 1.f), bh * 2.f);
-		nvgFillColor(vg, sfs::SCREEN_DEEP); nvgFill(vg);
-	}
+	float pk[240];
+	for (int i = 0; i < 240; i++)
+		pk[i] = (1.2f + 3.4f * std::fabs(std::sin((float)i * 0.155f))
+		                     * std::fabs(std::sin((float)i * 0.035f)));
+	sliceFilled(vg, pk, 240, x0, x1, y + h * 0.5f, h, sfs::SCREEN_DEEP);
 	for (int i = 1; i <= 8; i++) {
 		float gx = x1 - (x1 - x0) * ((float)i / 8.f);
 		nvgBeginPath(vg); nvgMoveTo(vg, gx, y + h * 0.72f); nvgLineTo(vg, gx, y + h);
@@ -733,23 +719,23 @@ void SliceDisplay::drawPreview(const DrawArgs& args) {
 	nvgFillColor(vg, sfs::SCREEN_TEXT);
 	nvgText(vg, x1, (SD_BUFY - 8.f) * s, "REVERSE /4  \u21904 steps", NULL);
 
-	// A slice reversed, drawn as it would really look: the same waveform,
-	// mirrored, inside its edge fades.
-	static float dmn[Slice::SCOPE], dmx[Slice::SCOPE];
-	static float wmn[Slice::SCOPE], wmx[Slice::SCOPE], wev[Slice::SCOPE];
+	// Five seconds in which every fourth slice was reversed: the blue sits on
+	// the orange until it does not.
+	static float dry[Slice::SCOPE], wet[Slice::SCOPE];
 	for (int i = 0; i < Slice::SCOPE; i++) {
 		float t = (float)i / (float)Slice::SCOPE;
-		float a = std::sin(t * 47.f) * (0.25f + 0.75f * std::exp(-t * 2.6f)) * 4.f;
-		dmx[i] = std::fabs(a); dmn[i] = -std::fabs(a) * 0.85f;
-		int j = Slice::SCOPE - 1 - i;                       // reversed
-		float e = clamp(std::min(t, 1.f - t) * 14.f, 0.f, 1.f);
-		float b = std::sin((float)j / Slice::SCOPE * 47.f)
-		        * (0.25f + 0.75f * std::exp(-(float)j / Slice::SCOPE * 2.6f)) * 4.f;
-		wmx[i] = std::fabs(b) * e; wmn[i] = -std::fabs(b) * 0.85f * e;
-		wev[i] = e;
+		float a = (0.6f + 0.4f * std::sin(t * 31.f)) * (0.55f + 0.45f * std::sin(t * 7.3f));
+		dry[i] = a * 4.2f;
+		int slot = i / 13;                                  // ~125ms slices
+		int into = i % 13;
+		wet[i] = (slot % 4 == 3)
+		       ? dry[i - into + (12 - into)] * 0.95f        // that slice, reversed
+		       : dry[i];
+		float e = clamp(std::min((float)into, 12.f - (float)into) * 0.9f, 0.f, 1.f);
+		if (slot % 4 == 3) wet[i] *= e;
 	}
-	slicePane(vg, font, s, SD_PANE1, dmn, dmx, wev, 168, "IN", sfs::SCREEN_DEEP, false);
-	slicePane(vg, font, s, SD_PANE2, wmn, wmx, wev, 168, "REVERSE", sfs::SCREEN_HOT, true);
+	slicePane(vg, font, s, SD_PANE1, dry, wet, Slice::SCOPE - 1, "L");
+	slicePane(vg, font, s, SD_PANE2, dry, wet, Slice::SCOPE - 1, "R");
 }
 
 // =============================================================================
