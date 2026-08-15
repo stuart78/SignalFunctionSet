@@ -408,8 +408,15 @@ struct Slice : Module {
 
 		int n = everyN();
 		// The LAST slice of each group is the one that fires, so the effect
-		// lands on the approach to the downbeat rather than on it.
-		if (n > 1 && (idx % n) != (long)(n - 1)) return;
+		// lands on the approach to the downbeat rather than on it. The rule is a
+		// pure function of the index, which means the NEXT slice can be asked
+		// about before it has happened -- and the END of this slice needs a fade
+		// if the next one is going to jump away from it.
+		bool fires     = (n <= 1) || ((idx % n)       == (long)(n - 1));
+		bool nextFires = (n <= 1) || (((idx + 1) % n) == (long)(n - 1));
+		spliceIn  = (prevXf >= 0) || fires;
+		spliceOut = fires || nextFires;
+		if (!fires) return;
 		int e = effIndex();
 		if (e == SLICE_MIXED) {
 			// MIXED walks the seven in order rather than rolling: still a
