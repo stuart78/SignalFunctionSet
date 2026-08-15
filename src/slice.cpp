@@ -117,6 +117,14 @@ struct SliceReachQuantity : ParamQuantity {
 	std::string getDescription() override;
 };
 
+// WINDOW reads as the fade TIME it is actually applying, not as a percentage.
+// A percentage said nothing about whether the setting was usable, and the
+// bottom of the knob was a millisecond -- a quarter of one cycle at 261 Hz,
+// where no fade curve is distinguishable from a hard edge.
+struct SliceWindowQuantity : ParamQuantity {
+	std::string getDisplayValueString() override;
+};
+
 struct SliceDisplay : OpaqueWidget {
 	Slice* module = nullptr;
 	std::shared_ptr<Font> font;
@@ -193,10 +201,6 @@ struct Slice : Module {
 	// questions: the start jumps if this slice or the one before it was
 	// transformed, the end jumps if this slice or the NEXT one is.
 	bool   spliceIn = false, spliceOut = false;
-	// ...and whether the audio on the other side of each edge is SILENCE. A
-	// gate needs a far longer fade than a splice, and CUT is the only transform
-	// that gates -- see the envelope maths where the fade is chosen.
-	bool   gateIn = false, gateOut = false;
 	double rdPos = 0.0;               // read head into the buffer (absolute, may be fractional)
 	double rdRate = 1.0;
 	long   repLen = 0;                // repeat: fragment length
@@ -237,6 +241,12 @@ struct Slice : Module {
 	float dispEnv = 0.f;
 	int   dispXf = -1;
 	float  dispBack = 0.f;              // read head's distance behind now, samples
+	// The fade lengths actually in force this sample. On the screen because
+	// inferring them from the code turned out to be unreliable: SHAPE, WINDOW,
+	// which effect is running and what its neighbours are doing all feed in, and
+	// a number on the panel settles in one glance what reading the source did
+	// not settle in an afternoon.
+	float  dispFadeIn = 0.f, dispFadeOut = 0.f;
 
 	// FIVE SECONDS OF HISTORY, NOW AT THE RIGHT. One peak per column per trace,
 	// scrolling, the way a chart recorder works -- not one slice swept in place.
@@ -292,7 +302,7 @@ struct Slice : Module {
 		// amplitude-modulates at the slice rate whether or not anything is being
 		// transformed. That pulse is the sound most people want from a slicer,
 		// so it is the default, and 0 is there when you need it transparent.
-		configParam(WINDOW_PARAM, 0.f, 1.f, 1.f, "Window", "%", 0.f, 100.f);
+		configParam<SliceWindowQuantity>(WINDOW_PARAM, 0.f, 1.f, 1.f, "Window");
 		configSwitch(FREEZE_PARAM, 0.f, 1.f, 0.f, "Freeze the buffer", {"Running", "Frozen"});
 		configButton(RESEED_PARAM, "Reseed (Random pattern only)");
 
@@ -561,45 +571,39 @@ struct Slice : Module {
 		// mode switch and no discontinuity between the two behaviours.
 		int shape = (int)std::round(params[SHAPE_PARAM].getValue());
 		float wparam = clamp(params[WINDOW_PARAM].getValue(), 0.f, 1.f);
-		// A SPLICE AND A GATE NEED DIFFERENT FADES, and this is what the clicking
-		// at low WINDOW was.
+		// WINDOW IS A FADE TIME, 5 ms to 200 ms, and that is all it is.
 		//
-		// Substituting one piece of audio for another only has to hide a
-		// discontinuity in the waveform, and a millisecond does that; longer
-		// than that just ducks the signal for no reason. Going to SILENCE is a
-		// different problem: the envelope itself becomes the transient, and its
-		// sidebands land either side of whatever is playing. Measured on a
-		// 261 Hz tone, a 1 ms gate edge puts sidebands 1027 Hz out at -60 dB,
-		// which is heard as a separate tick. By 20 ms they have collapsed to
-		// about 100 Hz out and it just sounds like the note being shaped.
+		// It used to run from one millisecond, which was a mistake twice over. A
+		// 1 ms ramp on a 261 Hz tone is a quarter of one cycle, so no curve is
+		// distinguishable from any other down there -- Hann and Square sound the
+		// same, which is not something a shape control should ever do. And the
+		// bottom of the knob was simply an unusable setting that looked like a
+		// legitimate one.
 		//
-		// So a gate edge starts at 18 ms rather than 1, and WINDOW scales up
-		// from there. SHAPE = Square still bypasses the fade entirely, which is
-		// the way to ask for the hard gate on purpose.
-		float fmax     = std::max(sliceLen * 0.5f, 1.f);
-		float fSplice  = 0.001f * sr;
-		float fGate    = std::min(0.018f * sr, sliceLen * 0.2f);
-		auto mapFade = [&](float lo) {
-			lo = std::min(lo, fmax);
-			return lo * std::pow(fmax / lo, wparam);
-		};
+		// There used to be a longer floor for edges that gate to silence and a
+		// shorter one for edges that splice between two pieces of audio. That
+		// distinction is real, but 5 ms is long enough for the splice case and
+		// short enough for the gate case, so one number does both and there is
+		// no conditional left to get wrong.
+		//
+		// Clamped to half the slice: past that the two fades overlap and the
+		// slice never reaches full level, which is a volume drop rather than a
+		// window.
+		float half = std::max(sliceLen * 0.5f, 1.f);
+		float fLo  = std::min(0.005f * sr, half);
+		float fHi  = std::max(std::min(0.200f * sr, half), fLo);
+		float fade = fLo * std::pow(fHi / fLo, wparam);
 
-		// AN EDGE WITH NOTHING TO HIDE GETS NO FADE, and the two edges are asked
-		// separately. Treating the fade as a property of the whole slice was
-		// wrong in a way that made its own click: a clean slice that followed a
-		// transformed one faded OUT at its end, and the clean slice after it
-		// started at unity, so the signal went to silence and then jumped
-		// straight back to full. A fade-out with no matching fade-in is exactly
-		// the discontinuity the fade exists to prevent.
-		//
-		// At WINDOW 1 the window IS the effect and belongs on every edge, so the
-		// clean ones scale in with the knob rather than being exempt.
-		float fIn  = mapFade(gateIn  ? fGate : fSplice) * (spliceIn  ? 1.f : wparam);
-		float fOut = mapFade(gateOut ? fGate : fSplice) * (spliceOut ? 1.f : wparam);
+		// An edge with nothing to hide still gets nothing: a run of untransformed
+		// slices is read from the write head sample for sample and is already
+		// continuous, so fading it only punches a hole in it.
+		float fIn  = spliceIn  ? fade : fade * wparam;
+		float fOut = spliceOut ? fade : fade * wparam;
 		float ea = (float)slicePos, eb = sliceLen - (float)slicePos;
 		float env = std::min(fIn  < 1.f ? 1.f : sliceFade(shape, ea / fIn),
 		                     fOut < 1.f ? 1.f : sliceFade(shape, eb / fOut));
 		dispEnv = env; dispXf = xf;
+		dispFadeIn = fIn; dispFadeOut = fOut;
 
 		// DEPTH crossfades the altered slice against the straight signal. With a
 		// pattern doing the choosing, "how strong" is the only thing left for it
@@ -823,10 +827,12 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 	nvgFillColor(vg, m->freeze ? sfs::SCREEN_HOT : sfs::SCREEN_DIM);
 	float ms = m->sliceLen / APP->engine->getSampleRate() * 1000.f;
+	float fi = m->dispFadeIn / APP->engine->getSampleRate() * 1000.f;
+	float fo = m->dispFadeOut / APP->engine->getSampleRate() * 1000.f;
 	nvgText(vg, x0, (SD_BUFY - 8.f) * s,
 	        m->freeze ? "FROZEN"
-	                  : string::f("%.0f ms %s", ms,
-	                              m->clockedLength() ? "CLK" : "LEN").c_str(), NULL);
+	                  : string::f("%.0f ms %s   fade %.1f/%.1f ms", ms,
+	                              m->clockedLength() ? "CLK" : "LEN", fi, fo).c_str(), NULL);
 	nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 	nvgFillColor(vg, sfs::SCREEN_TEXT);
 	int want = m->reachCount(), got = m->reachFit();
@@ -1021,6 +1027,17 @@ struct SliceWidget : ModuleWidget {
 			{"Independent", "Paired"}, &m->linkIdx));
 	}
 };
+
+std::string SliceWindowQuantity::getDisplayValueString() {
+	Slice* m = dynamic_cast<Slice*>(module);
+	if (!m) return "";
+	float sr = APP->engine->getSampleRate();
+	float half = std::max(m->sliceLen * 0.5f, 1.f);
+	float lo = std::min(0.005f * sr, half);
+	float hi = std::max(std::min(0.200f * sr, half), lo);
+	float f = lo * std::pow(hi / lo, clamp(getValue(), 0.f, 1.f));
+	return string::f("%.1f ms", f / sr * 1000.f);
+}
 
 std::string SliceReachQuantity::getUnit() {
 	Slice* m = dynamic_cast<Slice*>(module);
