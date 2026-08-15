@@ -2,7 +2,7 @@
 
 ## Overview
 
-GSX is a real-time granular synthesis module inspired by Barry Truax's groundbreaking GSX system (1985-86) — the first implementation of real-time granular synthesis. It generates dense textures from hundreds of short sound events called "grains," operating in the microsound domain (1-50ms) where changes in the time domain produce changes in the frequency/spectral domain.
+GSX is a real-time granular synthesis module inspired by Barry Truax's groundbreaking GSX system (1985-86), the first implementation of real-time granular synthesis. It generates dense textures from hundreds of short sound events called "grains," operating in the microsound domain (1-50ms) where changes in the time domain produce changes in the frequency/spectral domain.
 
 GSX is 12HP. Stereo output.
 
@@ -10,7 +10,7 @@ GSX is 12HP. Stereo output.
 
 ### Granular Synthesis
 
-Granular synthesis builds sound from many tiny sonic events (grains), each typically 1-50ms long. At this timescale, individual grains are perceived not as separate notes but as texture. The aggregate of hundreds of overlapping grains creates continuous sound whose character is controlled by the statistical properties of the grain stream — density, frequency spread, duration, timing regularity.
+Granular synthesis builds sound from many tiny sonic events (grains), each typically 1-50ms long. At this timescale, individual grains are perceived not as separate notes but as texture. The aggregate of hundreds of overlapping grains creates continuous sound whose character is controlled by the statistical properties of the grain stream: density, frequency spread, duration, timing regularity.
 
 ### Streams
 
@@ -18,9 +18,9 @@ GSX runs up to 20 independent grain generators (streams) simultaneously. Each st
 
 ### Quasi-Synchronous vs. Asynchronous
 
-At low Variation settings, grains fire at regular intervals and at consistent frequencies — this is quasi-synchronous mode. The regularity creates pitch through amplitude modulation: if grains arrive every 20ms, you hear a 50Hz modulation tone. This is how the original GSX produced tonal effects from granular techniques.
+At low Variation settings, grains fire at regular intervals and at consistent frequencies, which is quasi-synchronous mode. The regularity creates pitch through amplitude modulation: if grains arrive every 20ms, you hear a 50Hz modulation tone. This is how the original GSX produced tonal effects from granular techniques.
 
-At high Variation settings, grain timing, frequency, duration, and panning all become stochastic. Grains scatter randomly, producing cloud-like textures with no clear pitch — asynchronous mode.
+At high Variation settings, grain timing, frequency, duration, and panning all become stochastic. Grains scatter randomly, producing cloud-like textures with no clear pitch, the asynchronous mode.
 
 The Variation knob blends continuously between these extremes.
 

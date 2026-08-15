@@ -4,7 +4,7 @@
 
 Beat is a single-voice pattern sequencer designed to be paired with Meter (or any source of clock + bar pulses). One Beat instance = one drum / voice. Eight patterns × sixteen steps each, with per-step velocity, accent, and probability.
 
-Most editing happens on the screen — the panel is a narrow 10HP with just the display and six jacks.
+Most editing happens on the screen: the panel is a narrow 10HP with just the display and six jacks.
 
 Beat is 10HP.
 
@@ -12,7 +12,7 @@ Beat is 10HP.
 
 ### One Voice Per Module
 
-Beat is intentionally **monophonic per instance** — each module drives exactly one drum or voice via Gate, Velocity, and Accent outputs. To build a kit, instantiate multiple Beats and clock them from a shared Meter. Each instance has its own pattern bank, length, swing-source choice, etc., so each drum can have its own feel and composition independently.
+Beat is intentionally **monophonic per instance**: each module drives exactly one drum or voice via Gate, Velocity, and Accent outputs. To build a kit, instantiate multiple Beats and clock them from a shared Meter. Each instance has its own pattern bank, length, swing-source choice, etc., so each drum can have its own feel and composition independently.
 
 ### Patterns and Steps
 
@@ -25,7 +25,7 @@ Each Beat instance holds **8 patterns × 16 steps**. Each step has four properti
 
 ### Pattern Length
 
-Each pattern has its own **length** (1–16 steps). When the playhead reaches the last step, on the next CLOCK pulse it wraps back to step 0 — even mid-bar. This lets you build cross-rhythm patterns shorter than the bar: a 5-step pattern clocked at 16th notes will keep cycling through the bar producing polyrhythm against the underlying meter.
+Each pattern has its own **length** (1–16 steps). When the playhead reaches the last step, on the next CLOCK pulse it wraps back to step 0, even mid-bar. This lets you build cross-rhythm patterns shorter than the bar: a 5-step pattern clocked at 16th notes will keep cycling through the bar producing polyrhythm against the underlying meter.
 
 ### Pattern Repeats
 
@@ -33,7 +33,7 @@ Each pattern has its own **repeat count** (1–8 bars). When BAR fires, Beat inc
 
 ### Active Patterns
 
-Each pattern has an **active** flag. Inactive patterns are skipped in the rotation — useful for chaining a subset of patterns without manually editing each one. By default all 8 patterns are active.
+Each pattern has an **active** flag. Inactive patterns are skipped in the rotation, which is useful for chaining a subset of patterns without manually editing each one. By default all 8 patterns are active.
 
 Toggle active by **double-clicking** a pattern cell.
 
@@ -43,14 +43,14 @@ Meter fires BAR and downbeat-EIGHTH/QUARTER/SIXTEENTH on the same sample (or wit
 
 ### "Advance only on bar trigger"
 
-Default ON (context menu toggle). When ON, pattern advance happens **only** on a real BAR pulse. With BAR not patched, the pattern just loops the same one indefinitely — you patch BAR when you want pattern progression. When OFF, a legacy fallback advances on pattern wrap when BAR isn't patched.
+Default ON (context menu toggle). When ON, pattern advance happens **only** on a real BAR pulse. With BAR not patched, the pattern just loops the same one indefinitely. You patch BAR when you want pattern progression. When OFF, a legacy fallback advances on pattern wrap when BAR isn't patched.
 
 ## Display
 
 The display is the primary editing surface. Top to bottom:
 
-1. **Mode tabs**: `STEPS · VEL · ACC · PROB` — click to switch edit modes
-2. **Top connector rail** — visual link from active mode tab down to the step grid
+1. **Mode tabs**: `STEPS · VEL · ACC · PROB`, click to switch edit modes
+2. **Top connector rail**: visual link from active mode tab down to the step grid
 3. **Step grid**: 2 rows × 8 cols (16 steps). Cell colors:
    - Out of length: very dim
    - Active step: blue
@@ -60,7 +60,7 @@ The display is the primary editing surface. Top to bottom:
 4. **Length dots**: 16 small bars below the grid showing pattern length
 5. **PATTERN label** (left)
 6. **Pattern selector**: 8 cells (1–8). Each shows the pattern number + a row of small dots indicating that pattern's repeat count. The dot at `currentBar - 1` lights up brightly on the playing pattern
-7. **Bottom connector rail** — visual link from edit-pattern cell to the repeats bar
+7. **Bottom connector rail**: visual link from edit-pattern cell to the repeats bar
 8. **Repeats bar**: 8 cells. Orange = current bar of the loop, blue = in-range, dim = out-of-range
 
 ## Controls (display interactions)
@@ -85,7 +85,7 @@ Click any of the four mode tabs to switch edit mode. The selected tab highlights
 **ACC mode**:
 - Click toggles the accent flag (auto-enables the step)
 - Drag paints
-- Accent shows as an unfilled white circle at cell center — full opacity in ACC mode, 10% opacity hint elsewhere
+- Accent shows as an unfilled white circle at cell center: full opacity in ACC mode, 10% opacity hint elsewhere
 
 **PROB mode**:
 - Same vertical-drag behavior as VEL but writes to step probabilities
@@ -116,21 +116,21 @@ Click any of the four mode tabs to switch edit mode. The selected tab highlights
 | **BAR** | Advances to the next active pattern (with `repeats` honored) |
 | **RESET** | Returns to first active pattern, step 0 |
 
-(MUTE input was removed in 2.8.0 — silence a Beat by switching off all its steps or muting downstream.)
+(MUTE input was removed in 2.8.0; silence a Beat by switching off all its steps or muting downstream.)
 
 ## Outputs
 
 | Output | Function |
 |--------|----------|
 | **GATE** | 1ms 10V pulse on each fired step |
-| **VEL** | Sample-and-hold CV 0..10V — the previous step's velocity stays held until the next fire |
+| **VEL** | Sample-and-hold CV 0..10V. The previous step's velocity stays held until the next fire |
 | **ACC** | 1ms 10V pulse on accented hits |
 
 ## Context Menu
 
-- **Advance only on bar trigger** (default ON) — see *Concepts* above
+- **Advance only on bar trigger** (default ON): see *Concepts* above
 - **Patterns**:
-  - **Randomize current pattern steps** — fires each of 16 step on/off slots at 50% density (doesn't touch velocity/accent/probability)
+  - **Randomize current pattern steps**: fires each of 16 step on/off slots at 50% density (doesn't touch velocity/accent/probability)
   - **Clear current pattern**
   - **Clear all patterns**
 

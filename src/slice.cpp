@@ -344,12 +344,12 @@ struct Slice : Module {
 		// so it is the default, and 0 is there when you need it transparent.
 		configParam<SliceWindowQuantity>(WINDOW_PARAM, 0.f, 1.f, 1.f, "Window");
 		configSwitch(FREEZE_PARAM, 0.f, 1.f, 0.f, "Freeze the buffer", {"Running", "Frozen"});
-		configButton(RESEED_PARAM, "Reseed (Random pattern only)");
+		configButton(RESEED_PARAM, "Reseed (rotates where MIXED starts)");
 
 		configInput(L_INPUT, "Left audio");
 		configInput(R_INPUT, "Right audio (normalled from left)");
-		configInput(CLOCK_INPUT, "Clock — sets the slice length");
-		configInput(BAR_INPUT, "Bar — quantizes how far back DELAY and SHUFFLE reach");
+		configInput(CLOCK_INPUT, "Clock (sets the slice length)");
+		configInput(BAR_INPUT, "Bar (quantizes how far back DELAY and SHUFFLE reach)");
 		configInput(RESET_INPUT, "Reset the grid and the pattern");
 		configInput(FREEZE_INPUT, "Freeze gate");
 		configInput(RESEED_INPUT, "Reseed trigger");
@@ -361,7 +361,7 @@ struct Slice : Module {
 		configOutput(L_OUTPUT, "Left");
 		configOutput(R_OUTPUT, "Right");
 		configOutput(SLICE_OUTPUT, "Trigger on every slice boundary");
-		configOutput(XF_OUTPUT, "Gate — high while a slice is being altered");
+		configOutput(XF_OUTPUT, "Gate, high while a slice is being altered");
 		configBypass(L_INPUT, L_OUTPUT);
 		configBypass(R_INPUT, R_OUTPUT);
 		onSampleRateChange();

@@ -10,7 +10,7 @@ Drift is 10HP.
 
 ### Phase Spreading
 
-The four outputs are phase-shifted relative to each other. At maximum spread, A is at 0 degrees, B at 90, C at 180, and D at 270 — a quadrature LFO. At minimum spread, all four outputs are in phase. The Phase knob controls this spread continuously.
+The four outputs are phase-shifted relative to each other. At maximum spread, A is at 0 degrees, B at 90, C at 180, and D at 270, a quadrature LFO. At minimum spread, all four outputs are in phase. The Phase knob controls this spread continuously.
 
 ### Waveform Morphing
 
@@ -18,28 +18,28 @@ The Shape control smoothly transitions between waveform types: sine, triangle, s
 
 ### Chaos and Stability
 
-The Stability control modulates a Lorenz attractor system that adds organic unpredictability to each output independently. At high stability, outputs are clean periodic waveforms. As stability decreases, the outputs begin to drift and mutate — each channel develops its own subtle variations because the chaos calculation is independent per output.
+The Stability control modulates a Lorenz attractor system that adds organic unpredictability to each output independently. At high stability, outputs are clean periodic waveforms. As stability decreases, the outputs begin to drift and mutate: each channel develops its own subtle variations because the chaos calculation is independent per output.
 
 ## Controls
 
 | Control | Range | Default | Function |
 |---------|-------|---------|----------|
 | **Shape** | 0-1 | 0.5 | Waveform morphing: sine → triangle → sawtooth → square → chaos |
-| **Stability** | 0-1 | — | Chaos amount. Higher = more stable/predictable |
+| **Stability** | 0-1 | n/a | Chaos amount. Higher = more stable/predictable |
 | **Center** | -5V to +5V | 0V | DC offset applied to all outputs |
-| **Spread** | 0-5V | — | Amplitude of all outputs |
-| **Frequency** | — | — | LFO rate in Hz |
-| **Phase** | 0-1 | — | Phase spread between the four outputs |
+| **Spread** | 0-5V | n/a | Amplitude of all outputs |
+| **Frequency** | n/a | n/a | LFO rate in Hz |
+| **Phase** | 0-1 | n/a | Phase spread between the four outputs |
 
 ## Inputs
 
 All controls have corresponding CV inputs (±5V):
-- **Shape CV** — waveform morphing
-- **Stability CV** — chaos amount
-- **Clock** — external clock sync (overrides Frequency knob)
-- **Phase CV** — phase spread
-- **Center CV** — DC offset
-- **Spread CV** — amplitude
+- **Shape CV**: waveform morphing
+- **Stability CV**: chaos amount
+- **Clock**: external clock sync (overrides Frequency knob)
+- **Phase CV**: phase spread
+- **Center CV**: DC offset
+- **Spread CV**: amplitude
 
 ## Outputs
 

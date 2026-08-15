@@ -2,7 +2,7 @@
 
 ## Overview
 
-Intone is a formant synthesis voice based on the IRCAM CHANT project (Rodet, Potard, Barriere, 1984). It generates vocal-character sound using 5 parallel formant cells, each producing overlapping FOF (Formant Wave Function) grains — damped sinusoids at formant frequencies. A vowel morph slider smoothly interpolates through /a/, /e/, /i/, /o/, /u/ presets.
+Intone is a formant synthesis voice based on the IRCAM CHANT project (Rodet, Potard, Barriere, 1984). It generates vocal-character sound using 5 parallel formant cells, each producing overlapping FOF (Formant Wave Function) grains, damped sinusoids at formant frequencies. A vowel morph slider smoothly interpolates through /a/, /e/, /i/, /o/, /u/ presets.
 
 Intone is 16HP.
 
@@ -14,11 +14,11 @@ The human voice's distinctive character comes from resonances (formants) in the 
 
 ### FOF (Formant Wave Functions)
 
-Each formant cell generates FOF grains — short bursts of a damped sinusoid at the formant's center frequency, with a cosine-windowed attack and exponential decay. Multiple FOFs overlap as they're re-triggered at the fundamental frequency rate, creating a continuous tone with formant resonance character.
+Each formant cell generates FOF grains: short bursts of a damped sinusoid at the formant's center frequency, with a cosine-windowed attack and exponential decay. Multiple FOFs overlap as they're re-triggered at the fundamental frequency rate, creating a continuous tone with formant resonance character.
 
 ### Vowel Morphing
 
-The vowel morph slider sweeps through 5 vowel positions (/a/, /e/, /i/, /o/, /u/), linearly interpolating the first 3 formant frequencies between presets. The per-formant frequency knobs act as additive offsets on top of the vowel preset — so you can dial in "mostly /a/ but with F2 pushed higher."
+The vowel morph slider sweeps through 5 vowel positions (/a/, /e/, /i/, /o/, /u/), linearly interpolating the first 3 formant frequencies between presets. The per-formant frequency knobs act as additive offsets on top of the vowel preset, so you can dial in "mostly /a/ but with F2 pushed higher."
 
 ### Three Excitation Modes
 
@@ -26,7 +26,7 @@ Intone's behavior changes based on what's patched to the EXC input:
 
 **Default (nothing patched)**: Internal F0 oscillator drives FOF generation. V/Oct controls pitch. Works as a vocal-character VCO.
 
-**Audio mode (audio patched, switch up)**: Input audio passes through a parallel resonant bandpass filter bank at the 5 formant frequencies. The audio is formant-shaped — drums gain vocal coloring, oscillators acquire vowel character. V/Oct transposes the formant pattern.
+**Audio mode (audio patched, switch up)**: Input audio passes through a parallel resonant bandpass filter bank at the 5 formant frequencies. The audio is formant-shaped: drums gain vocal coloring, oscillators acquire vowel character. V/Oct transposes the formant pattern.
 
 **Trigger mode (clock patched, switch down)**: External rising edges fire fresh FOF grains. Each trigger produces a vowel-character burst. V/Oct transposes the formant frequencies.
 

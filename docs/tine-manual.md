@@ -2,7 +2,7 @@
 
 ## Overview
 
-Tine is a tunable 3rd-order pingable resonator based on the Gamelan Resonator circuit from Paul DeMarinis' *Pygmy Gamelan* (1973). The circuit was analyzed by Werner & Teboul (AES Convention Paper 10542, 2021) and found to be a completely unique active filter topology — distinct from the Bridged-T and Twin-T designs common in analog drum machines.
+Tine is a tunable 3rd-order pingable resonator based on the Gamelan Resonator circuit from Paul DeMarinis' *Pygmy Gamelan* (1973). The circuit was analyzed by Werner & Teboul (AES Convention Paper 10542, 2021) and found to be a completely unique active filter topology, distinct from the Bridged-T and Twin-T designs common in analog drum machines.
 
 When pinged, Tine produces metallic, bell-like ringing tones. The damping control varies the ring time from short percussive thumps to long sustain approaching self-oscillation.
 
@@ -21,11 +21,11 @@ Most pingable filters in analog drum machines are 2nd-order (Bridged-T, Twin-T).
 - A different phase response that shapes the attack character
 - Two zeros that create a specific spectral notch pattern
 
-The result is a ring that sounds more "metallic" than a typical 2-pole resonator — closer to struck metal than a filtered impulse.
+The result is a ring that sounds more "metallic" than a typical 2-pole resonator, closer to struck metal than a filtered impulse.
 
 ### Damping and Amplifier Gain
 
-In the original circuit, the ring time is determined by the LM3900 Norton amplifier's finite voltage gain (approximately 3500x). The circuit is only stable because the amplifier is imperfect — with infinite gain, it would ring forever.
+In the original circuit, the ring time is determined by the LM3900 Norton amplifier's finite voltage gain (approximately 3500x). The circuit is only stable because the amplifier is imperfect: with infinite gain, it would ring forever.
 
 Tine exposes this amplifier gain as the Damping parameter, allowing you to sweep from heavily damped (low gain, short thump) through the natural LM3900 behavior (moderate ring) to near-marginal stability (very long sustain).
 
@@ -39,7 +39,7 @@ The analog transfer function is discretized using the bilinear transform with fr
 |---------|------|-------|---------|----------|
 | **Freq** | RoundHugeBlackKnob | -4 to +4 octaves | 0 (C4) | Resonant frequency, log2 scaled |
 | **Damp** | Trimpot | 0-1 | 0.5 | Ring time. Low = short thump, high = long sustain |
-| **Ping** | VCVButton | Momentary | — | Manual trigger |
+| **Ping** | VCVButton | Momentary | n/a | Manual trigger |
 
 ## Inputs
 
@@ -64,7 +64,7 @@ Enabled by default (toggle in right-click context menu). When a new ping arrives
 3. New pulse fires
 4. Output envelope fades back up over 2.5ms
 
-This eliminates the zero-crossing click that occurs when a new impulse interrupts a decaying oscillation. With VCA mode off, pings fire immediately — raw and clicky, but maximally responsive.
+This eliminates the zero-crossing click that occurs when a new impulse interrupts a decaying oscillation. With VCA mode off, pings fire immediately, raw and clicky, but maximally responsive.
 
 ## Excitation Pulse
 
@@ -78,7 +78,7 @@ Each ping fires a 16-sample sine-arch shaped pulse into the filter. This smooth 
 
 **Damped Drum**: Damp very low (0.1-0.2), Freq in the bass range. Short, punchy, percussive. Modulate Damp CV with an envelope for dynamic variation.
 
-**Resonant Drone**: Damp at maximum (1.0). The filter approaches self-oscillation — even small trigger inputs or noise produce sustained tones. Modulate Freq slowly for evolving pitched drones.
+**Resonant Drone**: Damp at maximum (1.0). The filter approaches self-oscillation, so even small trigger inputs or noise produce sustained tones. Modulate Freq slowly for evolving pitched drones.
 
 **Polyrhythmic Bells**: Use multiple Tine instances at different frequencies. Clock each from different divisions of a master clock. Pan them across the stereo field for a gamelan-like ensemble.
 

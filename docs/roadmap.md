@@ -6,7 +6,7 @@ Modules and work that are planned but not started. Shipped work lives in
 ## Planned modules
 
 ### Comb filter
-A comb as an instrument rather than a utility — the delay-line half of what
+A comb as an instrument rather than a utility: the delay-line half of what
 Loom's strings already do, exposed on its own so it can colour any source.
 Worth reusing: Loom's fractional delay reads, its in-loop damping, and the
 lesson that the filter's phase delay has to be evaluated at the tuned
@@ -20,7 +20,7 @@ and its exact phase delay are in hand.
 ### Flanger
 Short modulated delay with feedback. Shares the delay-line and interpolation
 work with the comb; the distinguishing parts are through-zero behaviour and
-the feedback path's DC handling — note that a DC blocker belongs *inside* a
+the feedback path's DC handling. Note that a DC blocker belongs *inside* a
 feedback loop, not on its input (learned the hard way in Loom and Crystal).
 
 All three are effects rather than voices, which is a gap in the set: the plugin
@@ -29,10 +29,10 @@ core rather than each growing their own.
 
 ## Known gaps in shipped work
 
-- **Slide** — SCRAPE was tried twice and dropped: bandpassed noise sounded like
+- **Slide**: SCRAPE was tried twice and dropped: bandpassed noise sounded like
   hiss, an impulse train at the winding-crossing rate sounded like a record
   scratch. The physics was right both times (a wound string is a grating, and
-  the crossing rate really does track bar speed), which is the interesting part —
+  the crossing rate really does track bar speed), which is the interesting part,
   a correct model of the mechanism is not the same as a convincing sound, and
   what a bar on a string sounds like in a recording is mostly the room and the
   body, neither of which this has. Worth another attempt only with a different
@@ -41,19 +41,19 @@ core rather than each growing their own.
   a player would. The
   bar's approach curve is an S-curve but does not overshoot-and-settle the way a
   player arriving at a note does. The behind-the-bar string segment is still not
-  modelled — deliberately, since players damp it, but it is the Dobro ring if
+  modelled, deliberately, since players damp it, but it is the Dobro ring if
   ever wanted. **Slide is not decided, it is emergent**: the bar always glides to
   wherever the solver puts it, so a note landing on a string at the current
   position does not slide and one needing a new position does. There is no
   legato/staccato distinction, which is the obvious next control.
 
-- **Loom** — strings tuned near the very top of the range (+36 semitones,
+- **Loom**: strings tuned near the very top of the range (+36 semitones,
   ~523 Hz) bow much quieter than the rest; the pluck-position comb's null lands
   on what little the loop leaves them. Separately, below about 24 Hz every
   exciter breaks down, which is the subsonic end of the tuning range rather than
   an exciter fault.
-- **Nightly workflow** — its actions still emit Node 20 deprecation warnings.
-- **Crystal** — retired enum entries still appear in the parameter list for
+- **Nightly workflow**: its actions still emit Node 20 deprecation warnings.
+- **Crystal**: retired enum entries still appear in the parameter list for
   MIDI-map and automation; `surfaceDist()` is now unused.
-- **Fill** — dragging a queue row past the visible rows does not auto-scroll,
+- **Fill**: dragging a queue row past the visible rows does not auto-scroll,
   and the `×N` repeat read-out is not click-draggable.

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Swell is a ping-driven envelope generator. Each rising edge on the PING input adds a configurable voltage rise to the current envelope value, then the envelope decays back toward zero. Multiple pings stack — you can build up a slow swell from a stream of triggers, or get a single sharp attack from a single ping.
+Swell is a ping-driven envelope generator. Each rising edge on the PING input adds a configurable voltage rise to the current envelope value, then the envelope decays back toward zero. Multiple pings stack, so you can build up a slow swell from a stream of triggers, or get a single sharp attack from a single ping.
 
 Where a typical AD/AR envelope produces one fixed-shape ramp per gate, Swell accumulates contributions from every trigger and bleeds them off continuously. The output is a single 0–10V CV that smoothly soft-saturates near the ceiling and is paused from decaying while a rise is still in flight.
 
@@ -59,7 +59,7 @@ All four parameters accept ±5V CV with ±50% range, summed with the knob positi
 
 ## Display
 
-The scope view shows a 1.2-second window: 600 ms of past samples drawn left of center, the current voltage at center (orange dot), and 600 ms of projected future drawn right of center (faint blue). The future trace is simulated forward using the current rise queue and decay parameters — so as you turn knobs, the projection updates immediately to show what the envelope will do next.
+The scope view shows a 1.2-second window: 600 ms of past samples drawn left of center, the current voltage at center (orange dot), and 600 ms of projected future drawn right of center (faint blue). The future trace is simulated forward using the current rise queue and decay parameters, so as you turn knobs, the projection updates immediately to show what the envelope will do next.
 
 Gridlines mark 0 V, 5 V, and 10 V. The exact current voltage is displayed as text in the top-right corner.
 
@@ -67,7 +67,7 @@ Gridlines mark 0 V, 5 V, and 10 V. The exact current voltage is displayed as tex
 
 **Slow Swell from a Clock**: Patch a clock to PING, set Delta low (~0.1, 1V), Rise short (10 ms), Fall long (5–10 s), Curve high. Each tick adds a small bump; the envelope ramps up steadily and bleeds back down slowly. The faster the clock, the higher the steady-state voltage.
 
-**Velocity-Sensitive Trigger**: Patch a trigger source to PING and an envelope or LFO to Delta CV. Each ping captures the current Delta — quiet pings produce small rises, loud pings produce bigger ones.
+**Velocity-Sensitive Trigger**: Patch a trigger source to PING and an envelope or LFO to Delta CV. Each ping captures the current Delta: quiet pings produce small rises, loud pings produce bigger ones.
 
 **Crescendo Detector**: Convert audio peaks to triggers (with a comparator) and feed them to PING. Sparse peaks produce a low envelope; dense peaks build up a swell that tracks intensity over time. Patch CV to a filter cutoff or VCA for an automatic crescendo follower.
 

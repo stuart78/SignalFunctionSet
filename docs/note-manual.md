@@ -2,7 +2,7 @@
 
 ## Overview
 
-Note is the pitched (CV/gate) cousin of Beat. It's a monophonic pattern sequencer with on-screen pitch matrix editing — eight patterns × eight steps each — quantized to a selectable scale and root. The architecture mirrors Beat for clock/bar/repeat behavior, so a single Meter can drive a whole rig of Beats and Notes in lockstep.
+Note is the pitched (CV/gate) cousin of Beat. It's a monophonic pattern sequencer with on-screen pitch matrix editing (eight patterns × eight steps each), quantized to a selectable scale and root. The architecture mirrors Beat for clock/bar/repeat behavior, so a single Meter can drive a whole rig of Beats and Notes in lockstep.
 
 Note includes a unique just-intonation **Harmonic series** scale and two **Gamelan** scales (Slendro, Pelog) that produce non-12-TET pitches you can't get from a chromatic quantizer.
 
@@ -53,18 +53,18 @@ For a 7-note scale (Major, Minor, Dorian, etc.) you'll see 7 + 1 = 8 rows lit in
 | 4 | Penta- | Minor pentatonic, 0,3,5,7,10 |
 | 5 | Blues | 0,3,5,6,7,10 |
 | 6 | Whole | Whole-tone, 0,2,4,6,8,10 |
-| 7 | Harmonic | Just-intonation harmonics 1..12 — non-12-TET |
-| 8 | Dorian | 0,2,3,5,7,9,10 — minor with raised 6th |
-| 9 | Phrygian | 0,1,3,5,7,8,10 — minor with b2 |
-| 10 | Lydian | 0,2,4,6,7,9,11 — major with #4 |
-| 11 | Mixolyd | 0,2,4,5,7,9,10 — major with b7 |
-| 12 | HarmMin | 0,2,3,5,7,8,11 — harmonic minor |
-| 13 | Hijaz | 0,1,4,5,7,8,10 — Arabic / Klezmer phrygian dominant |
-| 14 | Hirajoshi | 0,2,3,7,8 — Japanese pentatonic |
-| 15 | Pelog | 7-tone Indonesian Gamelan, Surakarta-style: 0, 1.2, 2.7, 5.4, 7.0, 8.0, 10.4 — non-12-TET |
-| 16 | Slendro | 5-equal Indonesian Gamelan: 0, 2.4, 4.8, 7.2, 9.6 — non-12-TET |
+| 7 | Harmonic | Just-intonation harmonics 1..12 (non-12-TET) |
+| 8 | Dorian | 0,2,3,5,7,9,10 (minor with raised 6th) |
+| 9 | Phrygian | 0,1,3,5,7,8,10 (minor with b2) |
+| 10 | Lydian | 0,2,4,6,7,9,11 (major with #4) |
+| 11 | Mixolyd | 0,2,4,5,7,9,10 (major with b7) |
+| 12 | HarmMin | 0,2,3,5,7,8,11 (harmonic minor) |
+| 13 | Hijaz | 0,1,4,5,7,8,10 (Arabic / Klezmer phrygian dominant) |
+| 14 | Hirajoshi | 0,2,3,7,8 (Japanese pentatonic) |
+| 15 | Pelog | 7-tone Indonesian Gamelan, Surakarta-style: 0, 1.2, 2.7, 5.4, 7.0, 8.0, 10.4 (non-12-TET) |
+| 16 | Slendro | 5-equal Indonesian Gamelan: 0, 2.4, 4.8, 7.2, 9.6 (non-12-TET) |
 
-The Harmonic, Pelog, and Slendro scales use non-integer semitones, producing pitches that don't fall on the standard 12-TET grid. They'll sound noticeably "off-grid" against equal-tempered instruments — by design.
+The Harmonic, Pelog, and Slendro scales use non-integer semitones, producing pitches that don't fall on the standard 12-TET grid. They'll sound noticeably "off-grid" against equal-tempered instruments, by design.
 
 ### Bar / Clock Coincidence Handling
 
@@ -80,9 +80,9 @@ Top to bottom:
 
 1. **Mode tabs**: `STEPS · VEL · ACC · PROB`
 2. **Top connector rail** + stem from active mode tab
-3. **Pitch matrix** (13 rows × 8 cols) — see *Pitch Matrix* above
+3. **Pitch matrix** (13 rows × 8 cols): see *Pitch Matrix* above
 4. **Length dots** (8 wide bars, one per step, lit if `i < length`)
-5. **PATTERN label** (left) and **Root / Scale / Octave status** (right) — three small dark cells on the same baseline showing the current ROOT (e.g. `C`), SCALE (e.g. `Harmonic`), and OCT (e.g. `+1`)
+5. **PATTERN label** (left) and **Root / Scale / Octave status** (right): three small dark cells on the same baseline showing the current ROOT (e.g. `C`), SCALE (e.g. `Harmonic`), and OCT (e.g. `+1`)
 6. **Pattern selector**: 8 cells with pattern numbers + repeat-count dot row (filled per repeat, bright dot indicates current bar in the loop on the playing pattern)
 7. **Bottom connector rail** + stem from edit pattern
 8. **Repeats bar**: 8 cells
@@ -96,7 +96,7 @@ Top to bottom:
 - Bar: blue from bottom up to velocity × column height (orange on the currently-playing column)
 - Pitch indicator: thin white horizontal line at the lit pitch row (so you still see what note the step plays)
 - Click anywhere in a column sets velocity by Y position; vertical drag continues to adjust
-- Pitch is **not auto-set** in VEL — switch to STEPS to add notes
+- Pitch is **not auto-set** in VEL, so switch to STEPS to add notes
 
 **ACC mode**: Click toggles the accent flag on the lit pitch (auto-sets the pitch to the clicked row if the step was a rest). Drag paints. Accent shows as a white circle around the lit cell.
 
@@ -145,15 +145,15 @@ All three are summed with their CV inputs (knob + CV, clamped to range).
 
 - **Advance only on bar trigger** (default ON)
 - **Patterns**:
-  - **Randomize current pattern (notes only)** — randomizes pitches at ~60% density, leaves velocity/accent/probability alone
+  - **Randomize current pattern (notes only)**: randomizes pitches at ~60% density, leaves velocity/accent/probability alone
   - **Clear current pattern**
   - **Clear all patterns**
 
 ## Patch Ideas
 
-**Bass + arp from one Meter**: One Meter clocks two Notes. Note 1 (bass) on a 5-note pentatonic, low octave, 4-step pattern; Note 2 (arp) on the same scale, +1 octave, 8-step pattern with all-on steps. Patch Note 1's ROOT and SCALE OUT into Note 2's ROOT and SCALE CV — now changing the bass key transposes the arp automatically.
+**Bass + arp from one Meter**: One Meter clocks two Notes. Note 1 (bass) on a 5-note pentatonic, low octave, 4-step pattern; Note 2 (arp) on the same scale, +1 octave, 8-step pattern with all-on steps. Patch Note 1's ROOT and SCALE OUT into Note 2's ROOT and SCALE CV. Now changing the bass key transposes the arp automatically.
 
-**Gamelan ensemble**: 4 × Note instances on Slendro scale, all sharing root via SCALE OUT chaining. Each at a different octave (-1, 0, +1, +2). Different pattern lengths (5, 7, 8, 11) for shifting polyrhythmic feel. Patch each into a Tine for metallic resonator timbre — instant inharmonic gamelan.
+**Gamelan ensemble**: 4 × Note instances on Slendro scale, all sharing root via SCALE OUT chaining. Each at a different octave (-1, 0, +1, +2). Different pattern lengths (5, 7, 8, 11) for shifting polyrhythmic feel. Patch each into a Tine for metallic resonator timbre: instant inharmonic gamelan.
 
 **Just-intonation drone**: Set scale = Harmonic, pattern = single sustained note on row 0 (root), velocity = max. The V/OCT output gives precise just-intonation harmonics 1..12. Step through them one at a time as a sweep through the harmonic series.
 

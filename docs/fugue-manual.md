@@ -167,7 +167,7 @@ Fugue X is 20HP.
 
 ## Connection
 
-Fugue X must be placed immediately to the right of a Fugue module. It communicates via VCV Rack's expander system — no cables needed between them. If Fugue X is not adjacent to a Fugue, its controls have no effect.
+Fugue X must be placed immediately to the right of a Fugue module. It communicates via VCV Rack's expander system, with no cables needed between them. If Fugue X is not adjacent to a Fugue, its controls have no effect.
 
 ## Per-Voice Controls
 
@@ -213,7 +213,7 @@ Toggle switch (with LED indicator). When enabled, held notes sustain through res
 
 ## Randomize Sequence
 
-Button + trigger input. Randomizes the pitch faders on the parent Fugue module. Useful for generative patches — patch a slow clock divider to the trigger input for periodic sequence randomization.
+Button + trigger input. Randomizes the pitch faders on the parent Fugue module. Useful for generative patches: patch a slow clock divider to the trigger input for periodic sequence randomization.
 
 ## LED Matrix
 
@@ -238,11 +238,11 @@ These outputs always track the current chord in sorted order regardless of which
 ## Inputs
 
 All per-voice parameters have CV inputs (±5V):
-- **Steps A/B/C CV** — step count modulation
-- **Range A/B/C CV** — range selection
-- **Sleep A/B/C CV** — sleep amount
-- **Prob A/B/C CV** — probability modulation
-- **Randomize Trigger** — trigger input for sequence randomization
+- **Steps A/B/C CV**: step count modulation
+- **Range A/B/C CV**: range selection
+- **Sleep A/B/C CV**: sleep amount
+- **Prob A/B/C CV**: probability modulation
+- **Randomize Trigger**: trigger input for sequence randomization
 
 ## Patch Ideas
 

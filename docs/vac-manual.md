@@ -2,7 +2,7 @@
 
 ## Overview
 
-Vac is a semi-stable attack/release envelope generator. It has the classic A/R shape, but with a per-stage **STAB** (stability) control that introduces *controlled, musical* cycle-to-cycle variation in timing — the way a real vactrol (LED-driven photoresistor) drifts. At STAB=0 it's a perfectly ordinary, repeatable envelope; turn STAB up or down and each trigger's rise and/or fall stretches or shortens by a fresh random amount, so a repeated pattern breathes instead of marching.
+Vac is a semi-stable attack/release envelope generator. It has the classic A/R shape, but with a per-stage **STAB** (stability) control that introduces *controlled, musical* cycle-to-cycle variation in timing, the way a real vactrol (LED-driven photoresistor) drifts. At STAB=0 it's a perfectly ordinary, repeatable envelope; turn STAB up or down and each trigger's rise and/or fall stretches or shortens by a fresh random amount, so a repeated pattern breathes instead of marching.
 
 Vac is 6HP.
 
@@ -18,7 +18,7 @@ factor = exp(STAB · r · ln 2.5)     where r = random 0..1
 - **STAB = +1** → factor in 1×–2.5× (stages run *longer*, by a random amount each cycle).
 - **STAB = −1** → factor in 0.4×–1× (stages run *shorter*).
 
-The exponential form is **log-symmetric around 1**, so STAB never collapses a stage to zero — it matches how vactrols actually drift (their response is multiplicative, not additive). Rise and fall have independent STAB controls, so you can keep attacks tight while letting releases wander, or vice versa.
+The exponential form is **log-symmetric around 1**, so STAB never collapses a stage to zero, and it matches how vactrols actually drift (their response is multiplicative, not additive). Rise and fall have independent STAB controls, so you can keep attacks tight while letting releases wander, or vice versa.
 
 ## Controls
 
@@ -47,20 +47,20 @@ The exponential form is **log-symmetric around 1**, so STAB never collapses a st
 | Output | Function |
 |--------|----------|
 | **ENV** | The envelope, 0–10V |
-| **END** | 1ms trigger fired at the end of each fall stage (chain it, or use it to clock other events at the envelope's natural — drifting — rate) |
+| **END** | 1ms trigger fired at the end of each fall stage (chain it, or use it to clock other events at the envelope's natural, drifting rate) |
 
 ## Context Menu
 
-- **Continuous drift (rate wobbles during stage)** — instead of one random factor sampled per stage, the rate wobbles smoothly *throughout* each stage, for an even more "thermal," organic feel.
+- **Continuous drift (rate wobbles during stage)**: instead of one random factor sampled per stage, the rate wobbles smoothly *throughout* each stage, for an even more "thermal," organic feel.
 
 ## Patch Ideas
 
-**Humanized plucks:** trigger Vac from a sequencer's gate, set a short RISE and medium FALL, and dial RISE STAB / FALL STAB to ~±0.2. Each note's envelope is subtly different — the rigid grid loosens up without losing the groove.
+**Humanized plucks:** trigger Vac from a sequencer's gate, set a short RISE and medium FALL, and dial RISE STAB / FALL STAB to ~±0.2. Each note's envelope is subtly different, so the rigid grid loosens up without losing the groove.
 
 **Self-running drifting LFO:** turn on LOOP with no trigger patched. Vac free-runs; raise the STAB controls and it becomes a slow, wandering LFO whose period never quite repeats. Take END to clock other modules at that organic rate.
 
 **Vactrol-style filter pings:** send ENV to a filter's cutoff or VCA, trigger rhythmically, and use FALL STAB to make each decay tail breathe like a real vactrol-based gate.
 
-**Generative timing:** chain END → TRIG of another Vac (or back into a sequencer's clock) so the drifting release time becomes the timing source for the next event — small STAB values create gently elastic rhythms.
+**Generative timing:** chain END → TRIG of another Vac (or back into a sequencer's clock) so the drifting release time becomes the timing source for the next event. Small STAB values create gently elastic rhythms.
 
-**Tame it:** set both STAB knobs to 0 and Vac is a clean, repeatable A/R envelope with a nice linear↔exponential CURVE — useful even when you don't want the drift.
+**Tame it:** set both STAB knobs to 0 and Vac is a clean, repeatable A/R envelope with a nice linear↔exponential CURVE, useful even when you don't want the drift.

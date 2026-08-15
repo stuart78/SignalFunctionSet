@@ -36,7 +36,7 @@ When a harmonic is toggled, the transition waits until that harmonic's sine wave
 
 The 3-position filter restricts which harmonics can sound:
 - **All**: All enabled harmonics play
-- **Odd**: Only odd-numbered harmonics (1, 3, 5, 7, 9) — square wave character
+- **Odd**: Only odd-numbered harmonics (1, 3, 5, 7, 9): square wave character
 - **Even**: Only even-numbered harmonics (1, 2, 4, 6, 8) plus fundamental
 
 ### Dynamic Normalization
@@ -67,7 +67,7 @@ The output is normalized by the sum of active 1/n amplitudes. Toggling harmonics
 
 ## LED Indicators
 
-Red LEDs above each toggle show the actual active state of each harmonic — reflecting the combined effect of toggles, mask CV, and filter. When the mask CV overrides the toggles, the LEDs track the CV-driven state.
+Red LEDs above each toggle show the actual active state of each harmonic, reflecting the combined effect of toggles, mask CV, and filter. When the mask CV overrides the toggles, the LEDs track the CV-driven state.
 
 ## Mask CV Modes
 
