@@ -77,6 +77,13 @@ static const char* SLICE_EFFNAME[SLICE_NXF + 1] =
 static const int SLICE_EVERY[] = {1, 2, 3, 4, 6, 8, 12, 16};
 static const int SLICE_NEVERY = (int)(sizeof(SLICE_EVERY) / sizeof(SLICE_EVERY[0]));
 
+// Slice length as a multiple of the clock interval. "/2" means the slice spans
+// two clocks (half the rate); "x2" means two slices per clock. x1 sits dead
+// centre so the knob reads the way a clock divider is expected to.
+static const char* SLICE_DIVNAME[] = {"/8", "/4", "/2", "x1", "x2", "x4", "x8"};
+static const float SLICE_DIVMUL[]  = {8.f, 4.f, 2.f, 1.f, 0.5f, 0.25f, 0.125f};
+static const int   SLICE_NDIV = (int)(sizeof(SLICE_DIVMUL) / sizeof(SLICE_DIVMUL[0]));
+
 enum SliceShape { SH_HANN, SH_BELL, SH_SQUARE, SH_TRI, SH_COUNT };
 static const char* SLICE_SHAPENAME[SH_COUNT] = {"Hann", "Bell", "Square", "Triangle"};
 
@@ -189,12 +196,14 @@ struct Slice : Module {
 	// the figure it was part of; five seconds shows both, because at 125ms a
 	// slice is still thirteen columns wide.
 	//
-	// Four traces, because this is a stereo module: the original and the altered
-	// signal for each channel, drawn over each other so the difference between
-	// them IS the picture.
+	// Two traces per channel: what arrived, and WHAT LEAVES THE JACK. The second
+	// one has to be the real output, post-DEPTH -- an earlier version drew the
+	// pre-mix wet signal, and in CUT at full depth that meant a fat orange
+	// waveform on screen against total silence in the room. A display that shows
+	// a signal you cannot hear is worse than no display.
 	static const int SCOPE = 512;
 	static constexpr float SCOPE_SEC = 5.f;
-	float scDry[2][SCOPE] = {}, scWet[2][SCOPE] = {};
+	float scDry[2][SCOPE] = {}, scOut[2][SCOPE] = {};
 	int   scHead = 0;                 // newest column
 	float scAcc = 0.f;                // samples into the current column
 
@@ -208,12 +217,20 @@ struct Slice : Module {
 			ev.push_back(SLICE_EVERY[i] == 1 ? "Every slice"
 			                                 : string::f("Every %d", SLICE_EVERY[i]));
 		configSwitch(EVERY_PARAM, 0.f, (float)(SLICE_NEVERY - 1), 3.f, "Rate", ev);
+		// LENGTH only decides anything when there is no clock: patch CLOCK and
+		// the slice comes from the clock interval times DIV instead, and this
+		// knob does nothing. The screen says which of the two is in charge.
 		configParam(LENGTH_PARAM, std::log2(SLICE_MINLEN), std::log2(SLICE_MAXLEN),
-		            std::log2(0.125f), "Slice length", " s", 2.f);
+		            std::log2(0.125f), "Slice length (only when CLOCK is unpatched)",
+		            " s", 2.f);
 		configParam(DEPTH_PARAM, 0.f, 1.f, 1.f, "Depth", "%", 0.f, 100.f);
 		configParam(RANGE_PARAM, 0.f, 1.f, 0.25f, "Reach back", "%", 0.f, 100.f);
-		configSwitch(DIV_PARAM, 0.f, 5.f, 0.f, "Clock division",
-		             {"x1", "x2", "x4", "/2", "/4", "/8"});
+		// x1 in the CENTRE of the knob, divide to the left, multiply to the
+		// right, so the control reads like every other clock divider.
+		configSwitch(DIV_PARAM, 0.f, (float)(SLICE_NDIV - 1), 3.f, "Clock rate",
+		             {SLICE_DIVNAME[0], SLICE_DIVNAME[1], SLICE_DIVNAME[2],
+		              SLICE_DIVNAME[3], SLICE_DIVNAME[4], SLICE_DIVNAME[5],
+		              SLICE_DIVNAME[6]});
 		configSwitch(SHAPE_PARAM, 0.f, (float)(SH_COUNT - 1), 0.f, "Edge shape",
 		             {SLICE_SHAPENAME[0], SLICE_SHAPENAME[1],
 		              SLICE_SHAPENAME[2], SLICE_SHAPENAME[3]});
@@ -382,10 +399,10 @@ struct Slice : Module {
 			seed = hash32(seed ^ (uint32_t)wr);
 
 		// ── slice length ─────────────────────────────────────────────────────
-		static const float DIVMUL[6] = {1.f, 0.5f, 0.25f, 2.f, 4.f, 8.f};
 		float want;
 		if (clockLen > 0.f && inputs[CLOCK_INPUT].isConnected()) {
-			want = clockLen * DIVMUL[(int)std::round(params[DIV_PARAM].getValue())];
+			int d = clamp((int)std::round(params[DIV_PARAM].getValue()), 0, SLICE_NDIV - 1);
+			want = clockLen * SLICE_DIVMUL[d];
 		} else {
 			float lv = clamp(params[LENGTH_PARAM].getValue()
 			                 + inputs[LENGTH_INPUT].getVoltage() * 0.4f,
@@ -475,25 +492,23 @@ struct Slice : Module {
 			double alt = rdPos - (double)(std::floor(rollAt(sliceIdx, 5) * 4.f) * sliceLen);
 			wetR = readR(alt) * env;
 		}
-		outputs[L_OUTPUT].setVoltage(inL * (1.f - mix) + wetL * mix);
-		outputs[R_OUTPUT].setVoltage(inR * (1.f - mix) + wetR * mix);
+		float finalL = inL * (1.f - mix) + wetL * mix;
+		float finalR = inR * (1.f - mix) + wetR * mix;
+		outputs[L_OUTPUT].setVoltage(finalL);
+		outputs[R_OUTPUT].setVoltage(finalR);
 		outputs[SLICE_OUTPUT].setVoltage(slicePulse.process(args.sampleTime) ? 10.f : 0.f);
 		outputs[XF_OUTPUT].setVoltage(xf >= 0 ? 10.f : 0.f);
 
-		// The four traces. wet is what the transform made of the slice WITH its
-		// envelope but BEFORE the DEPTH crossfade, so the altered signal stays
-		// visible as itself at low depth instead of fading out of the picture
-		// along with the effect.
 		scDry[0][scHead] = std::max(scDry[0][scHead], std::fabs(inL));
 		scDry[1][scHead] = std::max(scDry[1][scHead], std::fabs(inR));
-		scWet[0][scHead] = std::max(scWet[0][scHead], std::fabs(wetL));
-		scWet[1][scHead] = std::max(scWet[1][scHead], std::fabs(wetR));
+		scOut[0][scHead] = std::max(scOut[0][scHead], std::fabs(finalL));
+		scOut[1][scHead] = std::max(scOut[1][scHead], std::fabs(finalR));
 		scAcc += 1.f;
 		if (scAcc >= SCOPE_SEC * sr / (float)SCOPE) {
 			scAcc = 0.f;
 			scHead = (scHead + 1) % SCOPE;
 			scDry[0][scHead] = scDry[1][scHead] = 0.f;
-			scWet[0][scHead] = scWet[1][scHead] = 0.f;
+			scOut[0][scHead] = scOut[1][scHead] = 0.f;
 		}
 
 		// ── advance ──────────────────────────────────────────────────────────
@@ -511,6 +526,8 @@ struct Slice : Module {
 	}
 
 	bool linked() { return params[LINK_PARAM].getValue() > 0.5f; }
+	// Whether the slice length is coming from the clock or from the knob.
+	bool clockedLength() { return clockLen > 0.f && inputs[CLOCK_INPUT].isConnected(); }
 
 	json_t* dataToJson() override {
 		json_t* r = json_object();
@@ -557,19 +574,24 @@ void SliceDisplay::onButton(const ButtonEvent& e) { OpaqueWidget::onButton(e); }
 
 // FIVE SECONDS, NOW AT THE RIGHT, one pane per channel.
 //
-// Each pane carries BOTH signals for its channel: the original in orange, the
-// altered over the top of it in blue. Where nothing happened the blue sits
-// exactly on the orange and you see one shape; where a slice was cut the orange
-// is left standing alone; where it was reversed or fetched from elsewhere the
-// two shapes disagree for exactly the width of that slice. The difference
-// between them IS the picture, which is why they share a pane instead of having
-// one each.
+// Each pane carries both signals for its channel, and they are drawn
+// DIFFERENTLY on purpose:
+//
+//   BLUE, FILLED    what leaves the jack. This is the sound in the room.
+//   ORANGE, OUTLINE what came in. Where the two coincide the outline sits on
+//                   the edge of the fill and vanishes; where they part, the
+//                   orange is left tracing what the slice would have been.
+//
+// Both were filled at first, and CUT at full depth then showed a fat orange
+// waveform against complete silence. A display that draws a signal you cannot
+// hear as though you can is worse than no display, so only the audible one is
+// solid now, and the source it departed from is a line.
 //
 // Drawn as a filled envelope, the way Phase draws a sample: trace the peak along
 // the top, back along the bottom, close and fill. A column of separate bars is
 // cheaper and reads as a bar chart rather than as a waveform.
 static void sliceFilled(NVGcontext* vg, const float* v, int n, float x0, float x1,
-                        float mid, float h, NVGcolor col) {
+                        float mid, float h, NVGcolor col, bool fill = true) {
 	if (n < 2) return;
 	nvgBeginPath(vg);
 	for (int i = 0; i < n; i++) {
@@ -583,20 +605,20 @@ static void sliceFilled(NVGcontext* vg, const float* v, int n, float x0, float x
 		nvgLineTo(vg, px, mid + a);
 	}
 	nvgClosePath(vg);
-	nvgFillColor(vg, col);
-	nvgFill(vg);
+	if (fill) { nvgFillColor(vg, col); nvgFill(vg); }
+	else      { nvgStrokeColor(vg, col); nvgStrokeWidth(vg, 1.f); nvgStroke(vg); }
 }
 
 static void sliceTrace(NVGcontext* vg, const float* v, int head, float x0, float x1,
-                       float mid, float h, NVGcolor col) {
+                       float mid, float h, NVGcolor col, bool fill) {
 	float lin[Slice::SCOPE];
 	for (int i = 0; i < Slice::SCOPE; i++)          // oldest first, newest at x1
 		lin[i] = v[(head + 1 + i) % Slice::SCOPE];
-	sliceFilled(vg, lin, Slice::SCOPE, x0, x1, mid, h, col);
+	sliceFilled(vg, lin, Slice::SCOPE, x0, x1, mid, h, col, fill);
 }
 
 static void slicePane(NVGcontext* vg, std::shared_ptr<Font> font, float s, float uy,
-                      const float* dry, const float* wet, int head, const char* label) {
+                      const float* dry, const float* out, int head, const char* label) {
 	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s;
 	float y = uy * s, h = SD_PANEH * s, mid = y + h * 0.5f;
 	nvgBeginPath(vg); nvgRect(vg, x0, y, x1 - x0, h);
@@ -604,8 +626,8 @@ static void slicePane(NVGcontext* vg, std::shared_ptr<Font> font, float s, float
 	nvgBeginPath(vg); nvgMoveTo(vg, x0, mid); nvgLineTo(vg, x1, mid);
 	nvgStrokeColor(vg, nvgRGBA(0x8A, 0x8A, 0xA5, 40)); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
 
-	sliceTrace(vg, dry, head, x0, x1, mid, h, sfs::SCREEN_HOT);
-	sliceTrace(vg, wet, head, x0, x1, mid, h, nvgRGBA(0x00, 0x97, 0xDE, 225));
+	sliceTrace(vg, out, head, x0, x1, mid, h, sfs::SCREEN_BLUE, true);
+	sliceTrace(vg, dry, head, x0, x1, mid, h, sfs::SCREEN_HOT, false);
 
 	sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 	nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
@@ -674,7 +696,9 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	nvgFillColor(vg, m->freeze ? sfs::SCREEN_HOT : sfs::SCREEN_DIM);
 	float ms = m->sliceLen / APP->engine->getSampleRate() * 1000.f;
 	nvgText(vg, x0, (SD_BUFY - 8.f) * s,
-	        m->freeze ? "FROZEN" : string::f("%.0f ms", ms).c_str(), NULL);
+	        m->freeze ? "FROZEN"
+	                  : string::f("%.0f ms %s", ms,
+	                              m->clockedLength() ? "CLK" : "LEN").c_str(), NULL);
 	nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 	nvgFillColor(vg, sfs::SCREEN_TEXT);
 	int rc = m->reachCount();
@@ -683,8 +707,8 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	                  rc, m->reachInBars() ? (rc == 1 ? "bar" : "bars")
 	                                       : (rc == 1 ? "step" : "steps")).c_str(), NULL);
 
-	slicePane(vg, font, s, SD_PANE1, m->scDry[0], m->scWet[0], m->scHead, "L");
-	slicePane(vg, font, s, SD_PANE2, m->scDry[1], m->scWet[1], m->scHead, "R");
+	slicePane(vg, font, s, SD_PANE1, m->scDry[0], m->scOut[0], m->scHead, "L");
+	slicePane(vg, font, s, SD_PANE2, m->scDry[1], m->scOut[1], m->scHead, "R");
 }
 
 void SliceDisplay::drawPreview(const DrawArgs& args) {
@@ -717,25 +741,21 @@ void SliceDisplay::drawPreview(const DrawArgs& args) {
 	nvgText(vg, x0, (SD_BUFY - 8.f) * s, "125 ms", NULL);
 	nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 	nvgFillColor(vg, sfs::SCREEN_TEXT);
-	nvgText(vg, x1, (SD_BUFY - 8.f) * s, "REVERSE /4  \u21904 steps", NULL);
+	nvgText(vg, x1, (SD_BUFY - 8.f) * s, "CUT /4  \u21904 steps", NULL);
 
-	// Five seconds in which every fourth slice was reversed: the blue sits on
-	// the orange until it does not.
-	static float dry[Slice::SCOPE], wet[Slice::SCOPE];
+	// Five seconds of CUT every 4: the output drops out for a slice at a time
+	// and the orange outline is left showing what was removed.
+	static float dry[Slice::SCOPE], out[Slice::SCOPE];
 	for (int i = 0; i < Slice::SCOPE; i++) {
 		float t = (float)i / (float)Slice::SCOPE;
-		float a = (0.6f + 0.4f * std::sin(t * 31.f)) * (0.55f + 0.45f * std::sin(t * 7.3f));
-		dry[i] = a * 4.2f;
-		int slot = i / 13;                                  // ~125ms slices
-		int into = i % 13;
-		wet[i] = (slot % 4 == 3)
-		       ? dry[i - into + (12 - into)] * 0.95f        // that slice, reversed
-		       : dry[i];
+		dry[i] = (0.6f + 0.4f * std::sin(t * 31.f))
+		       * (0.55f + 0.45f * std::sin(t * 7.3f)) * 4.2f;
+		int slot = i / 13, into = i % 13;                 // ~125ms slices
 		float e = clamp(std::min((float)into, 12.f - (float)into) * 0.9f, 0.f, 1.f);
-		if (slot % 4 == 3) wet[i] *= e;
+		out[i] = (slot % 4 == 3) ? 0.f : dry[i] * e;
 	}
-	slicePane(vg, font, s, SD_PANE1, dry, wet, Slice::SCOPE - 1, "L");
-	slicePane(vg, font, s, SD_PANE2, dry, wet, Slice::SCOPE - 1, "R");
+	slicePane(vg, font, s, SD_PANE1, dry, out, Slice::SCOPE - 1, "L");
+	slicePane(vg, font, s, SD_PANE2, dry, out, Slice::SCOPE - 1, "R");
 }
 
 // =============================================================================
