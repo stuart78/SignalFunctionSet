@@ -133,7 +133,7 @@ struct Slice : Module {
 	enum ParamId {
 		EFFECT_PARAM, EVERY_PARAM, LENGTH_PARAM, DEPTH_PARAM,
 		RANGE_PARAM, DIV_PARAM, SHAPE_PARAM, LINK_PARAM,
-		FREEZE_PARAM, RESEED_PARAM,
+		FREEZE_PARAM, RESEED_PARAM, WINDOW_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -195,8 +195,6 @@ struct Slice : Module {
 	bool   swapCh = false;
 
 	// ── options ──────────────────────────────────────────────────────────────
-	bool  wholeWindow = false;        // envelope the whole slice, granular-style
-	float fadeMs = 4.f;
 	// REPEAT is the one transform that splices inside a slice: every time it
 	// wraps back to the start of its fragment the waveform jumps, and unless the
 	// fragment happens to begin and end near zero that jump is a click. CLEAN
@@ -223,7 +221,7 @@ struct Slice : Module {
 		               & 0xFFFFFF) / (float)0xFFFFFF;
 	}
 
-	dsp::SchmittTrigger clockTrig, barTrig, resetTrig, freezeTrig, freezeBtn, reseedTrig, reseedBtn;
+	dsp::SchmittTrigger clockTrig, barTrig, resetTrig, reseedTrig, reseedBtn;
 	dsp::PulseGenerator slicePulse;
 
 	// display mirrors
@@ -278,7 +276,15 @@ struct Slice : Module {
 		             {SLICE_SHAPENAME[0], SLICE_SHAPENAME[1],
 		              SLICE_SHAPENAME[2], SLICE_SHAPENAME[3]});
 		configSwitch(LINK_PARAM, 0.f, 1.f, 1.f, "Channels", {"Independent", "Paired"});
-		configButton(FREEZE_PARAM, "Freeze the buffer");
+		// WINDOW is the whole envelope story on one knob. At 0 the fade is a
+		// millisecond at each end and the slice passes at unity between, so
+		// nothing happens to untransformed audio. At 1 the two fades meet in the
+		// middle and every slice swells and falls -- a grain window, which
+		// amplitude-modulates at the slice rate whether or not anything is being
+		// transformed. That pulse is the sound most people want from a slicer,
+		// so it is the default, and 0 is there when you need it transparent.
+		configParam(WINDOW_PARAM, 0.f, 1.f, 1.f, "Window", "%", 0.f, 100.f);
+		configSwitch(FREEZE_PARAM, 0.f, 1.f, 0.f, "Freeze the buffer", {"Running", "Frozen"});
 		configButton(RESEED_PARAM, "Reseed (Random pattern only)");
 
 		configInput(L_INPUT, "Left audio");
@@ -454,7 +460,13 @@ struct Slice : Module {
 		bool rst = resetTrig.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f);
 		if (rst) { sliceIdx = 0; slicePos = 0.0; xf = -1; }
 
-		if (freezeBtn.process(params[FREEZE_PARAM].getValue() > 0.5f)) freeze = !freeze;
+		// The panel control is a VCVLightLatch, which already holds 0 or 1 -- so
+		// its value IS the state. Running it through a SchmittTrigger and
+		// toggling on top took two clicks to turn freeze off: the first press
+		// gave a rising edge and flipped it, the release gave a falling edge and
+		// did nothing, and only the next press flipped it back.
+		freeze = params[FREEZE_PARAM].getValue() > 0.5f;
+		params[LINK_PARAM].setValue(linkIdx ? 1.f : 0.f);
 		if (inputs[FREEZE_INPUT].isConnected())
 			freeze = inputs[FREEZE_INPUT].getVoltage() >= 1.f;
 		lights[FREEZE_LIGHT].setBrightness(freeze ? 1.f : 0.f);
@@ -533,16 +545,17 @@ struct Slice : Module {
 		if (swapCh) std::swap(outL, outR);
 
 		// ── envelope ─────────────────────────────────────────────────────────
+		// One envelope, one control. The fade length runs exponentially from a
+		// millisecond up to half the slice; at the top the two fades meet in the
+		// middle and the edge fade IS the whole-slice window, so there is no
+		// mode switch and no discontinuity between the two behaviours.
 		int shape = (int)std::round(params[SHAPE_PARAM].getValue());
-		float env;
-		if (wholeWindow) {
-			float t = (float)(slicePos / (double)sliceLen);
-			env = sliceFade(shape, std::min(t, 1.f - t) * 2.f);
-		} else {
-			float fade = std::min(fadeMs * 0.001f * sr, sliceLen * 0.49f);
-			float a = (float)slicePos, b = sliceLen - (float)slicePos;
-			env = std::min(sliceFade(shape, a / fade), sliceFade(shape, b / fade));
-		}
+		float wparam = clamp(params[WINDOW_PARAM].getValue(), 0.f, 1.f);
+		float fmin = 0.001f * sr;
+		float fmax = std::max(sliceLen * 0.5f, fmin);
+		float fade = fmin * std::pow(fmax / fmin, wparam);
+		float ea = (float)slicePos, eb = sliceLen - (float)slicePos;
+		float env = std::min(sliceFade(shape, ea / fade), sliceFade(shape, eb / fade));
 		dispEnv = env; dispXf = xf;
 
 		// DEPTH crossfades the altered slice against the straight signal. With a
@@ -590,6 +603,8 @@ struct Slice : Module {
 
 	}
 
+	// The menu edits an int; the param is what the DSP and the patch use.
+	int  linkIdx = 1;
 	bool linked() { return params[LINK_PARAM].getValue() > 0.5f; }
 	// Whether the slice length is coming from the clock or from the knob.
 	bool clockedLength() { return clockLen > 0.f && inputs[CLOCK_INPUT].isConnected(); }
@@ -597,19 +612,17 @@ struct Slice : Module {
 	json_t* dataToJson() override {
 		json_t* r = json_object();
 		json_object_set_new(r, "seed", json_integer((json_int_t)seed));
-		json_object_set_new(r, "wholeWindow", json_boolean(wholeWindow));
-		json_object_set_new(r, "fadeMs", json_real(fadeMs));
 		json_object_set_new(r, "freeze", json_boolean(freeze));
 		json_object_set_new(r, "spliceMode", json_integer(spliceMode));
 		json_object_set_new(r, "bufSecIdx", json_integer(bufSecIdx));
+		json_object_set_new(r, "linkIdx", json_integer(linkIdx));
 		return r;
 	}
 	void dataFromJson(json_t* r) override {
 		if (json_t* j = json_object_get(r, "seed"))        seed = (uint32_t)json_integer_value(j);
-		if (json_t* j = json_object_get(r, "wholeWindow")) wholeWindow = json_boolean_value(j);
-		if (json_t* j = json_object_get(r, "fadeMs"))      fadeMs = clamp((float)json_number_value(j), 0.5f, 25.f);
 		if (json_t* j = json_object_get(r, "freeze"))      freeze = json_boolean_value(j);
 		if (json_t* j = json_object_get(r, "spliceMode")) spliceMode = clamp((int)json_integer_value(j), 0, 1);
+		if (json_t* j = json_object_get(r, "linkIdx")) linkIdx = clamp((int)json_integer_value(j), 0, 1);
 		if (json_t* j = json_object_get(r, "bufSecIdx"))
 			requestBuffer((int)json_integer_value(j));
 	}
@@ -879,11 +892,11 @@ struct SliceWidget : ModuleWidget {
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[0], ky2)), module, Slice::RANGE_PARAM));
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[1], ky2)), module, Slice::DIV_PARAM));
 		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[2], ky2)), module, Slice::SHAPE_PARAM));
-		addParam(createParamCentered<CKSS>(mm2px(Vec(kx[3], ky2)), module, Slice::LINK_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[3], ky2)), module, Slice::WINDOW_PARAM));
 		lbl->trim(kx[0], ky2, "REACH");
 		lbl->trim(kx[1], ky2, "DIV");
 		lbl->trim(kx[2], ky2, "SHAPE");
-		lbl->trim(kx[3], ky2, "LINK");
+		lbl->trim(kx[3], ky2, "WINDOW");
 
 		const float by = hp(17.4f);
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(
@@ -959,17 +972,10 @@ struct SliceWidget : ModuleWidget {
 			}));
 		menu->addChild(createIndexPtrSubmenuItem("Repeat splice",
 			{"Clean", "Dirty"}, &m->spliceMode));
-		menu->addChild(createBoolPtrMenuItem("Envelope the whole slice", "", &m->wholeWindow));
-		menu->addChild(createSubmenuItem("Edge fade", string::f("%.0f ms", m->fadeMs),
-			[=](Menu* sub) {
-				static const float MS[5] = {1.f, 2.f, 4.f, 8.f, 16.f};
-				for (int i = 0; i < 5; i++) {
-					float v = MS[i];
-					sub->addChild(createCheckMenuItem(string::f("%.0f ms", v), "",
-						[=]() { return std::fabs(m->fadeMs - v) < 0.01f; },
-						[=]() { m->fadeMs = v; }));
-				}
-			}));
+		// LINK came off the panel to make room for WINDOW. It is a set-once
+		// decision about the stereo image, not something played.
+		menu->addChild(createIndexPtrSubmenuItem("Channels",
+			{"Independent", "Paired"}, &m->linkIdx));
 	}
 };
 
