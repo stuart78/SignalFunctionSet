@@ -90,67 +90,55 @@ static const char* SLICE_DIVNAME[] = {"/8", "/4", "/2", "x1", "x2", "x4", "x8"};
 static const float SLICE_DIVMUL[]  = {8.f, 4.f, 2.f, 1.f, 0.5f, 0.25f, 0.125f};
 static const int   SLICE_NDIV = (int)(sizeof(SLICE_DIVMUL) / sizeof(SLICE_DIVMUL[0]));
 
-// The fade curves, ordered softest to sharpest, so sweeping SHAPE is a sweep of
-// character rather than a jump between unrelated things.
+// THREE curves, because as windows there are only three.
 //
-// SQUARE IS GONE. It returned 1.0 unconditionally, which bypassed the whole
-// fade -- WINDOW, the floor, everything -- so one position of a "shape" control
-// silently switched the envelope off. That is not a shape, it is a hidden mode,
-// and it cost an afternoon of chasing a click that was a setting.
+// This control has been wrong three times, each time one level deeper.
+// Square returned 1.0 unconditionally, so a "shape" silently switched the
+// envelope off -- a hidden mode. Its replacement was inaudible: Gaussian(0.4),
+// Hann and smoothstep sat within 0.01 of each other. Respacing them by gain
+// ratio did not help either, because a 27 dB ratio between two silences is
+// still silence.
 //
-// AND THE FIRST REPLACEMENT SET WAS INAUDIBLE, which is a subtler version of the
-// same failure. Gaussian(0.4), Hann and smoothstep sat within 0.01 of each other
-// -- a one percent gain difference -- because window functions are all DESIGNED
-// to be smooth: the family is chosen for spectral leakage, and that is not a
-// thing the ear resolves as a 50 ms gain ramp. Five names, three curves, one
-// audible result. The ear hears the fade's LENGTH, which is WINDOW's job; for
-// SHAPE to have anything to say, the curves have to be spread far enough apart
-// that the difference survives being a gain ramp.
+// The actual mistake was a category error. A fade is an EDGE TAPER, and the ear
+// hears how long a taper is, not how it curves. A window function is the WHOLE
+// ARC, and the family name only describes something audible when the window
+// spans the slice -- which is what WINDOW at its top now does.
 //
-// So the ladder below is chosen by measurement, not by pedigree: the weakest gap
-// between neighbours is 0.160 of full scale, against 0.010 for the set it
-// replaces. Every stop is still a real function -- four genuine window functions
-// and a logarithmic attack, which is the language Chime already uses.
-enum SliceShape { SH_GAUSS, SH_BLACK, SH_HANN, SH_SINC, SH_LOG, SH_COUNT };
-static const char* SLICE_SHAPENAME[SH_COUNT] =
-	{"Gaussian", "Blackman", "Hann", "Sinc", "Log"};
+// And once they ARE windows, what separates them is WIDTH, not pedigree.
+// Blackman, Hann, Sinc and Log are all wide smooth arcs; measured across a
+// slice they keep 70 / 80 / 91 / 97 percent of it above -20 dB, which is four
+// names for one window. Gaussian is distinct only because sigma is narrowed to
+// 0.22. So the set is three genuinely different widths and nothing that merely
+// sounds like a fourth:
+//
+//    Gaussian  47% of the slice loud   a blip in the middle of its slot
+//    Hann      80%                     the classic arc
+//    Log       97%                     nearly the whole slice, edges taken off
+//
+// Weakest gap 17 points, against 5.8 for the pair that was cut.
+enum SliceShape { SH_GAUSS, SH_HANN, SH_LOG, SH_COUNT };
+static const char* SLICE_SHAPENAME[SH_COUNT] = {"Gaussian", "Hann", "Log"};
 
-// The curve, over t in 0..1 rising into the slice. Every one of them really
-// reaches 0 at t=0 and 1 at t=1 -- a curve that starts at 0.04 is a step of
-// 0.04, which is the whole problem these exist to avoid.
+// The curve, over t in 0..1 rising into the slice. Each really reaches 0 at t=0
+// and 1 at t=1: a curve that starts at 0.04 is a step of 0.04, which is the
+// whole problem these exist to avoid.
 static inline float sliceFade(int shape, float t) {
 	t = clamp(t, 0.f, 1.f);
 	switch (shape) {
 		case SH_GAUSS: {
-			// The rising half of a Gaussian window. Sigma is 0.22 rather than the
-			// textbook 0.4 because at 0.4 it lands on top of Hann; narrowed, it
-			// holds near silence for the first third of the fade and then swells,
-			// which is the softest thing this control can do and audibly so.
-			// A Gaussian never actually reaches zero, so it is shifted and
-			// rescaled until it does.
+			// Sigma 0.22, not the textbook 0.4 -- at 0.4 it lands on top of Hann.
+			// Narrowed, it concentrates the slice into its middle half, which is
+			// the one thing here the ear reads instantly. A Gaussian never truly
+			// reaches zero, so it is shifted and rescaled until it does.
 			const float S = 0.22f;
 			const float E = std::exp(-0.5f / (S * S));      // its value at t = 0
 			float x = 1.f - t;
 			return (std::exp(-0.5f * x * x / (S * S)) - E) / (1.f - E);
 		}
-		case SH_BLACK:
-			// Blackman. Its three cosine terms sum to exactly 0 and exactly 1 at
-			// the ends, so it needs no rescaling, and it sits halfway between the
-			// Gaussian and Hann instead of duplicating either.
-			return 0.42f - 0.5f * std::cos(t * (float)M_PI)
-			             + 0.08f * std::cos(2.f * t * (float)M_PI);
-		case SH_SINC: {
-			// The main lobe of sinc, the Lanczos window's basis: it leaves zero
-			// quickly and flattens early. Further lobes ring past unity, which is
-			// an effect rather than a fade, so only the lobe is used.
-			float x = (1.f - t) * (float)M_PI;
-			return (x < 1e-5f) ? 1.f : std::sin(x) / x;
-		}
 		case SH_LOG:
-			// A logarithmic attack: almost all of the level in the first fifth of
-			// the fade. The sharpest edge available, and the honest replacement
-			// for what people reached for Square to get -- it is nearly immediate
-			// without ever being a step.
+			// A cubic attack: as a taper it is nearly immediate without being a
+			// step, and as a window it is close to rectangular with the corners
+			// taken off. This is the honest version of what Square was for.
 			return 1.f - (1.f - t) * (1.f - t) * (1.f - t);
 		default:
 			return 0.5f * (1.f - std::cos(t * (float)M_PI));   // Hann
@@ -344,9 +332,8 @@ struct Slice : Module {
 		              SLICE_DIVNAME[3], SLICE_DIVNAME[4], SLICE_DIVNAME[5],
 		              SLICE_DIVNAME[6]});
 		configSwitch(SHAPE_PARAM, 0.f, (float)(SH_COUNT - 1), (float)SH_HANN,
-		             "Edge shape",
-		             {SLICE_SHAPENAME[0], SLICE_SHAPENAME[1], SLICE_SHAPENAME[2],
-		              SLICE_SHAPENAME[3], SLICE_SHAPENAME[4]});
+		             "Window shape",
+		             {SLICE_SHAPENAME[0], SLICE_SHAPENAME[1], SLICE_SHAPENAME[2]});
 		configSwitch(LINK_PARAM, 0.f, 1.f, 1.f, "Channels", {"Independent", "Paired"});
 		// WINDOW is the whole envelope story on one knob. At 0 the fade is a
 		// millisecond at each end and the slice passes at unity between, so
