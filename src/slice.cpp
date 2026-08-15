@@ -188,6 +188,7 @@ struct Slice : Module {
 
 	// ── the slot in progress ─────────────────────────────────────────────────
 	int    xf = -1;                   // SliceXf, or -1 for passthrough
+	int    prevXf = -1;               // what the slice before this one did
 	double rdPos = 0.0;               // read head into the buffer (absolute, may be fractional)
 	double rdRate = 1.0;
 	long   repLen = 0;                // repeat: fragment length
@@ -384,6 +385,7 @@ struct Slice : Module {
 
 	// Choose what happens to slot `idx`, and set the read head up for it.
 	void beginSlice(long idx) {
+		prevXf = xf;
 		xf = -1; swapCh = false; rdRate = 1.0; repLen = 0;
 
 		int n = everyN();
@@ -554,8 +556,26 @@ struct Slice : Module {
 		float fmin = 0.001f * sr;
 		float fmax = std::max(sliceLen * 0.5f, fmin);
 		float fade = fmin * std::pow(fmax / fmin, wparam);
-		float ea = (float)slicePos, eb = sliceLen - (float)slicePos;
-		float env = std::min(sliceFade(shape, ea / fade), sliceFade(shape, eb / fade));
+
+		// A SLICE WITH NOTHING TO HIDE GETS NO FADE. This slice only splices if
+		// it is transformed, or if the one before it was and we are dropping
+		// back to the live signal -- otherwise the audio is read from the write
+		// head sample for sample and is already continuous, and fading it only
+		// punches a hole in it. At the short end of WINDOW that hole is a
+		// twentieth of a millisecond wide, which is not a fade, it is a click,
+		// and it was firing on every slice whether or not anything happened.
+		//
+		// At WINDOW 1 the window IS the effect and belongs on every slice, so
+		// the clean ones scale in with the knob rather than being exempt.
+		if (xf < 0 && prevXf < 0) fade *= wparam;
+
+		float env;
+		if (fade < 1.f) {
+			env = 1.f;                    // nothing to hide: leave the audio alone
+		} else {
+			float ea = (float)slicePos, eb = sliceLen - (float)slicePos;
+			env = std::min(sliceFade(shape, ea / fade), sliceFade(shape, eb / fade));
+		}
 		dispEnv = env; dispXf = xf;
 
 		// DEPTH crossfades the altered slice against the straight signal. With a
