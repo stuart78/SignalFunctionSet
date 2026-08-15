@@ -123,7 +123,7 @@ def struct_arrays(*sources):
     out = {}
     for text in sources:
         for sm in re.finditer(r"struct\s+(\w+)\s*\{([^}]*)\}\s*;", text):
-            sname, fields = sm.group(1), re.findall(r"\b(?:int|float)\s+([\w,\s]+);", sm.group(2))
+            sname, fields = sm.group(1), re.findall(r"\b(?:int|float|bool)\s+([\w,\s]+);", sm.group(2))
             names = [f.strip() for grp in fields for f in grp.split(",") if f.strip()]
             if not names:
                 continue
@@ -137,11 +137,71 @@ def struct_arrays(*sources):
                         cells = [c.strip() for c in row.split(",")]
                         if fi >= len(cells):
                             vals.append(None); continue
+                        cell = cells[fi].strip()
+                        if cell in ("true", "false"):
+                            vals.append(1.0 if cell == "true" else 0.0)
+                            continue
                         try:
-                            vals.append(float(cells[fi].rstrip("f")))
+                            vals.append(float(cell.rstrip("f")))
                         except ValueError:
                             vals.append(None)      # an enum name, not a coordinate
                     out[(arr, fname)] = vals
+    return out
+
+
+def struct_strings(*sources):
+    """`const S arr[N] = {{..., "NAME"}, ...}` as {(arr, field): ["NAME", ...]}.
+
+    struct_arrays deliberately keeps only int/float fields, because it exists to
+    resolve coordinates. Label text lives in the same tables as `const char*`,
+    and without this a panel that states its jack row as a table -- which is the
+    readable way to write it -- exports with every one of those labels missing.
+    """
+    out = {}
+    for text in sources:
+        for sm in re.finditer(r"struct\s+(\w+)\s*\{([^}]*)\}\s*;", text):
+            sname = sm.group(1)
+            # field order must match the initialiser, so read ALL fields, then
+            # record which of them are strings.
+            decls = re.findall(r"\b(?:const\s+char\s*\*|int|float|bool)\s+([\w,\s]+);",
+                               sm.group(2))
+            kinds = re.findall(r"\b(const\s+char\s*\*|int|float|bool)\s+[\w,\s]+;",
+                               sm.group(2))
+            names, isstr = [], []
+            for kind, grp in zip(kinds, decls):
+                for f in grp.split(","):
+                    if f.strip():
+                        names.append(f.strip())
+                        isstr.append("char" in kind)
+            if not any(isstr):
+                continue
+            for am in re.finditer(r"(?:static\s+)?const\s+%s\s+(\w+)\s*\[[^\]]*\]\s*=\s*\{(.*?)\}\s*;"
+                                  % re.escape(sname), text, re.S):
+                arr, abody = am.group(1), am.group(2)
+                rows = re.findall(r"\{([^{}]*)\}", abody)
+                for fi, fname in enumerate(names):
+                    if not isstr[fi]:
+                        continue
+                    vals = []
+                    for row in rows:
+                        cells = split_top(row)
+                        cell = cells[fi].strip() if fi < len(cells) else ""
+                        m = re.match(r'^"(.*)"$', cell)
+                        vals.append(m.group(1) if m else None)
+                    out[(arr, fname)] = vals
+    return out
+
+
+def split_top(row):
+    """Split a struct initialiser on commas that are not inside quotes."""
+    out, cur, q = [], "", False
+    for ch in row:
+        if ch == '"':
+            q = not q
+        if ch == "," and not q:
+            out.append(cur); cur = ""; continue
+        cur += ch
+    out.append(cur)
     return out
 
 

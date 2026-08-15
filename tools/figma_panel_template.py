@@ -70,10 +70,12 @@ LS_LABEL = 0.10 * MM           # letter spacing, 0.30
 LS_NOTE = 0.04 * MM
 
 GAP_KNOB = 5.6 * MM            # control centre -> label centre (NVG_ALIGN_MIDDLE)
+GAP_KNOB_LARGE = 8.6 * MM      # the large knob's body reaches past GAP_KNOB
 GAP_JACK = 5.4 * MM
 GAP_TRIM = 4.4 * MM
 PAIR_SPAN = 2 * HP             # cells from a pot to its jack
 SZ_TRIM, SZ_JACK, SZ_KNOB = 17.856, 23.700, 28.348   # what each helper labels
+SZ_KNOB_LARGE = 37.500                 # RoundLargeBlackKnob, 12.7mm across
 
 RETICULE_W = 0.5               # stroke widths, in Rack units
 LINK_W = 0.35 * MM
@@ -417,14 +419,39 @@ KIND_FILL = {"LABEL": INK, "ON_PLATE": PLATE_INK, "NOTE": INK_SOFT, "TITLE": INK
 KIND_SIZE = {"LABEL": T_LABEL, "ON_PLATE": T_LABEL, "NOTE": T_NOTE, "TITLE": T_TITLE}
 
 
-def labels(body, ev):
+def labels(body, ev, env=None, defs=None):
     """Every PanelLabels call, resolved to where nanovg will actually draw it.
 
     Also returns the ones it could NOT resolve. A call whose coordinates come
-    from a lambda parameter or a loop variable is unreachable to a regex, and a
-    label that quietly fails to appear reads as a label that is not there --
-    which is the one thing this file must never say."""
+    from a lambda parameter is unreachable to a regex, and a label that quietly
+    fails to appear reads as a label that is not there -- which is the one thing
+    this file must never say.
+
+    Calls inside `for (int i = 0; i < N; i++)` ARE resolved, by expanding the
+    loop exactly as panel_reticules does for controls. That is not an exotic
+    shape: a row of eight jacks written as a table and a loop is the readable
+    way to write it, and before this Slice exported with all sixteen of its jack
+    labels missing while every one of its reticules was present, which is what
+    made the gap easy to miss.
+    """
+    import panel_reticules as pr        # same local import the callers use
     texts, links, skipped = [], [], []
+    env = dict(env or {})
+    env.update(defs or {})
+    loops = pr.loop_ranges(body, env, defs or {}) if env else []
+    nums = pr.struct_arrays(body)
+    strs = pr.struct_strings(body)
+
+    def sub_table(expr, var, i):
+        """`ROW[i].py` -> its value in row i, for both number and string tables."""
+        for (arr, fld), vals in list(nums.items()) + list(strs.items()):
+            pat = r"\b%s\s*\[\s*%s\s*\]\s*\.\s*%s\b" % (
+                re.escape(arr), re.escape(var), re.escape(fld))
+            if i < len(vals) and vals[i] is not None:
+                rep = '"%s"' % vals[i] if isinstance(vals[i], str) else repr(vals[i])
+                expr = re.sub(pat, rep, expr)
+        return expr
+
     for m in re.finditer(r"lbl->(\w+)\(", body):
         depth, j = 1, m.end()
         while j < len(body) and depth:
@@ -432,55 +459,115 @@ def labels(body, ev):
             j += 1
         a = split_args(body[m.end():j - 1])
         fn = m.group(1)
-        try:
-            if fn == "link":
-                onplate = len(a) > 4 and "true" in a[4]
-                links.append((ev(a[0]), ev(a[1]), ev(a[2]), ev(a[3]), onplate))
-                continue
-            # pairDown puts the jack's y where the others put the text, so it has
-            # to be unpacked before the common (x, y, text) read below.
-            if fn == "pairDown":
-                x, y, y2 = ev(a[0]), ev(a[1]), ev(a[2])
-                onplate = len(a) > 4 and "true" in a[4]
-                links.append((x, y, x, y2, onplate))
-                texts.append((x, y - gap_for(SZ_TRIM, GAP_TRIM), cstring(a[3]),
-                              "ON_PLATE" if onplate else "LABEL", "middle"))
-                continue
-            x, y, t = ev(a[0]), ev(a[1]), cstring(a[2]) if len(a) > 2 else None
-            if t is None:
-                skipped.append(fn)
-                continue
-            kind, align = "LABEL", "middle"
-            if fn == "knob":
-                y -= gap_for(SZ_KNOB, GAP_KNOB)
-            elif fn == "trim":
-                y -= gap_for(SZ_TRIM, GAP_TRIM)
-            elif fn == "jack":
-                y -= gap_for(SZ_JACK, GAP_JACK)
-            elif fn == "jackOnPlate":
-                y -= gap_for(SZ_JACK, GAP_JACK); kind = "ON_PLATE"
-            elif fn == "note":
-                kind = "NOTE"
-            elif fn == "title":
-                kind, align = "TITLE", "start"
-            elif fn == "pair":
-                onplate = len(a) > 3 and "true" in a[3]
-                kind = "ON_PLATE" if onplate else "LABEL"
-                links.append((x, y, x + PAIR_SPAN / MM, y, onplate))
-                y -= gap_for(SZ_TRIM, GAP_TRIM)
-            elif fn == "add":
-                if len(a) > 3 and "ON_PLATE" in a[3]:
-                    kind = "ON_PLATE"
-                elif len(a) > 3 and "NOTE" in a[3]:
+
+        # innermost enclosing loop, and any `float v = ...;` it declares
+        var, count, lsrc = None, 1, ""
+        for lv, lc, ls, le in loops:
+            if ls <= m.start() <= le:
+                var, count, lsrc = lv, lc, body[ls:le]
+        decls = re.findall(r"float\s+(\w+)\s*=\s*([^;]+);", lsrc) if var else []
+
+        # Which branch is this call in? A row written as
+        #     if (ROW[i].out) lbl->jackOnPlate(...); else lbl->jack(...);
+        # is two calls in one loop, and expanding both over the whole range
+        # stacks a light label on a dark one at every position. Find the nearest
+        # preceding `if (...)` or `else` and carry its condition.
+        guard, negate = None, False
+        if var:
+            head = body[:m.start()]
+            ifm = None
+            for g in re.finditer(r"\bif\s*\(", head):
+                if g.start() >= (loops and 0):
+                    ifm = g
+            elsem = None
+            for g in re.finditer(r"\belse\b", head):
+                elsem = g
+            if ifm and ifm.start() > (m.start() - len(lsrc) if lsrc else 0):
+                depth, k = 1, ifm.end()
+                while k < len(body) and depth:
+                    depth += (body[k] == "(") - (body[k] == ")")
+                    k += 1
+                guard = body[ifm.end():k - 1]
+                negate = bool(elsem and elsem.start() > ifm.start())
+
+        # One pass per iteration. Without a loop that is a single pass with the
+        # arguments untouched, so both paths run the same code below.
+        made, failed = [], False
+        for i in range(count):
+            e = dict(env)
+            args = list(a)
+            if var:
+                e[var] = i
+                if guard is not None:
+                    try:
+                        ok = bool(pr.evaluate(sub_table(guard, var, i).replace("sfs::", ""), e))
+                    except Exception:
+                        failed = True
+                        break
+                    if ok == negate:
+                        continue                    # the other branch owns this i
+                args = [sub_table(x, var, i) for x in args]
+                for nm, expr in decls:
+                    try:
+                        e[nm] = pr.evaluate(sub_table(expr, var, i).replace("sfs::", ""), e)
+                    except Exception:
+                        pass
+            def evl(x):
+                return pr.evaluate(x.replace("sfs::", ""), e)
+            try:
+                if fn == "link":
+                    onplate = len(args) > 4 and "true" in args[4]
+                    links.append((evl(args[0]), evl(args[1]), evl(args[2]), evl(args[3]), onplate))
+                    continue
+                if fn == "pairDown":
+                    x, y, y2 = evl(args[0]), evl(args[1]), evl(args[2])
+                    onplate = len(args) > 4 and "true" in args[4]
+                    links.append((x, y, x, y2, onplate))
+                    made.append((x, y - gap_for(SZ_TRIM, GAP_TRIM), cstring(args[3]),
+                                 "ON_PLATE" if onplate else "LABEL", "middle"))
+                    continue
+                x, y = evl(args[0]), evl(args[1])
+                t = cstring(args[2]) if len(args) > 2 else None
+                if t is None:
+                    failed = True
+                    break
+                kind, align = "LABEL", "middle"
+                if fn == "knob":
+                    y -= gap_for(SZ_KNOB, GAP_KNOB)
+                elif fn == "knobLarge":
+                    y -= gap_for(SZ_KNOB_LARGE, GAP_KNOB_LARGE)
+                elif fn == "trim":
+                    y -= gap_for(SZ_TRIM, GAP_TRIM)
+                elif fn == "jack":
+                    y -= gap_for(SZ_JACK, GAP_JACK)
+                elif fn == "jackOnPlate":
+                    y -= gap_for(SZ_JACK, GAP_JACK); kind = "ON_PLATE"
+                elif fn == "note":
                     kind = "NOTE"
-                if len(a) > 4:
-                    align = ALIGN.get(a[4].strip(), "middle")
-            else:
-                continue
-            texts.append((x, y, t, kind, align))
-        except Exception:
-            skipped.append(fn)
-            continue
+                elif fn == "title":
+                    kind, align = "TITLE", "start"
+                elif fn == "pair":
+                    onplate = len(args) > 3 and "true" in args[3]
+                    kind = "ON_PLATE" if onplate else "LABEL"
+                    links.append((x, y, x + PAIR_SPAN / MM, y, onplate))
+                    y -= gap_for(SZ_TRIM, GAP_TRIM)
+                elif fn == "add":
+                    if len(args) > 3 and "ON_PLATE" in args[3]:
+                        kind = "ON_PLATE"
+                    elif len(args) > 3 and "NOTE" in args[3]:
+                        kind = "NOTE"
+                    if len(args) > 4:
+                        align = ALIGN.get(args[4].strip(), "middle")
+                else:
+                    continue
+                made.append((x, y, t, kind, align))
+            except Exception:
+                failed = True
+                break
+        if failed:
+            skipped.append(fn)          # report it; never emit a partial row
+        else:
+            texts.extend(made)
     return texts, links, skipped
 
 
@@ -510,7 +597,7 @@ def module_svg(key):
     # CrystalLabels -- Share Tech Mono, size in px, no gaps -- so drawing its
     # calls in Figtree at TYPE_LABEL would misrepresent the panel.
     shared = "sfs::PanelLabels" in src
-    texts, links, skipped = labels(body, ev) if shared else ([], [], [])
+    texts, links, skipped = labels(body, ev, env, defs) if shared else ([], [], [])
     plates = [(x * MM, y * MM, w * MM, h * MM) for (x, y, w, h) in pr.PLATES.get(key, [])]
 
     head = open(os.path.join(root, svg)).read()
