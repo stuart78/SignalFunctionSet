@@ -90,18 +90,43 @@ static const char* SLICE_DIVNAME[] = {"/8", "/4", "/2", "x1", "x2", "x4", "x8"};
 static const float SLICE_DIVMUL[]  = {8.f, 4.f, 2.f, 1.f, 0.5f, 0.25f, 0.125f};
 static const int   SLICE_NDIV = (int)(sizeof(SLICE_DIVMUL) / sizeof(SLICE_DIVMUL[0]));
 
-enum SliceShape { SH_HANN, SH_BELL, SH_SQUARE, SH_TRI, SH_COUNT };
-static const char* SLICE_SHAPENAME[SH_COUNT] = {"Hann", "Bell", "Square", "Triangle"};
+// The fade curves, ordered softest to sharpest, so sweeping SHAPE is a sweep
+// of character rather than a jump between unrelated things.
+//
+// SQUARE IS GONE. It returned 1.0 unconditionally, which bypassed the whole
+// fade -- WINDOW, the floor, everything -- so one position of a "shape" control
+// silently switched the envelope off. That is not a shape, it is a hidden mode,
+// and it cost an afternoon of chasing a click that was a setting.
+enum SliceShape { SH_GAUSS, SH_HANN, SH_BELL, SH_TRI, SH_SINC, SH_COUNT };
+static const char* SLICE_SHAPENAME[SH_COUNT] =
+	{"Gaussian", "Hann", "Bell", "Triangle", "Sinc"};
 
-// The fade curve, over t in 0..1 rising into the slice. Square has no fade at
-// all, which is the point of choosing it: the click IS the sound.
+// The curve, over t in 0..1 rising into the slice. Every one of them really
+// reaches 0 at t=0 and 1 at t=1 -- a curve that starts at 0.04 is a step of
+// 0.04, which is the whole problem these exist to avoid.
 static inline float sliceFade(int shape, float t) {
 	t = clamp(t, 0.f, 1.f);
 	switch (shape) {
-		case SH_SQUARE: return 1.f;
-		case SH_TRI:    return t;
-		case SH_BELL:   return t * t * (3.f - 2.f * t);      // smoothstep
-		default:        return 0.5f * (1.f - std::cos(t * (float)M_PI));
+		case SH_GAUSS: {
+			// The rising half of a Gaussian window, sigma 0.4. A Gaussian never
+			// actually reaches zero, so it is shifted and rescaled to; without
+			// that it would start at 0.044 and click quietly.
+			const float S = 0.4f;
+			const float E = std::exp(-0.5f / (S * S));      // its value at t = 0
+			float x = 1.f - t;
+			return (std::exp(-0.5f * x * x / (S * S)) - E) / (1.f - E);
+		}
+		case SH_BELL: return t * t * (3.f - 2.f * t);        // smoothstep
+		case SH_TRI:  return t;
+		case SH_SINC: {
+			// The main lobe of sinc, which is the Lanczos window's basis: it
+			// leaves zero fastest of the five and flattens early, so it is the
+			// most present-sounding fade without being a step. More lobes would
+			// ring past unity, which is a different effect and not a fade.
+			float x = (1.f - t) * (float)M_PI;
+			return (x < 1e-5f) ? 1.f : std::sin(x) / x;
+		}
+		default:      return 0.5f * (1.f - std::cos(t * (float)M_PI));   // Hann
 	}
 }
 
@@ -291,9 +316,10 @@ struct Slice : Module {
 		             {SLICE_DIVNAME[0], SLICE_DIVNAME[1], SLICE_DIVNAME[2],
 		              SLICE_DIVNAME[3], SLICE_DIVNAME[4], SLICE_DIVNAME[5],
 		              SLICE_DIVNAME[6]});
-		configSwitch(SHAPE_PARAM, 0.f, (float)(SH_COUNT - 1), 0.f, "Edge shape",
-		             {SLICE_SHAPENAME[0], SLICE_SHAPENAME[1],
-		              SLICE_SHAPENAME[2], SLICE_SHAPENAME[3]});
+		configSwitch(SHAPE_PARAM, 0.f, (float)(SH_COUNT - 1), (float)SH_HANN,
+		             "Edge shape",
+		             {SLICE_SHAPENAME[0], SLICE_SHAPENAME[1], SLICE_SHAPENAME[2],
+		              SLICE_SHAPENAME[3], SLICE_SHAPENAME[4]});
 		configSwitch(LINK_PARAM, 0.f, 1.f, 1.f, "Channels", {"Independent", "Paired"});
 		// WINDOW is the whole envelope story on one knob. At 0 the fade is a
 		// millisecond at each end and the slice passes at unity between, so
@@ -555,10 +581,10 @@ struct Slice : Module {
 			rdPos = (double)((repStart + p) % bufN);
 			outL = readL(rdPos); outR = readR(rdPos);
 			if (spliceMode == 0 && repLen > 8) {
-				// A raised cosine, NOT the SHAPE curve. SHAPE is allowed to be
-				// Square, which means "no fade" and is chosen for the click at
-				// the slice edges -- but a clean splice has to stay clean
-				// whatever the edges are doing.
+				// A raised cosine, NOT the SHAPE curve: the repeat splice is
+				// hiding a discontinuity inside a slice, which is a different
+				// job from shaping its edges, and it should not change character
+				// when the edge shape does.
 				float f = std::min(SPLICE_MS * 0.001f * sr, (float)repLen * 0.25f);
 				float a = std::min((float)p / f, 1.f);
 				float b = std::min((float)(repLen - p) / f, 1.f);
@@ -574,18 +600,16 @@ struct Slice : Module {
 		// ── envelope ─────────────────────────────────────────────────────────
 		// One envelope, one control. The fade length runs exponentially from a
 		// millisecond up to half the slice; at the top the two fades meet in the
-		// middle and the edge fade IS the whole-slice window, so there is no
-		// mode switch and no discontinuity between the two behaviours.
+		// middle and the edge fade IS the whole-slice window.
 		int shape = (int)std::round(params[SHAPE_PARAM].getValue());
 		float wparam = clamp(params[WINDOW_PARAM].getValue(), 0.f, 1.f);
 		// WINDOW IS A FADE TIME, 5 ms to 200 ms, and that is all it is.
 		//
 		// It used to run from one millisecond, which was a mistake twice over. A
 		// 1 ms ramp on a 261 Hz tone is a quarter of one cycle, so no curve is
-		// distinguishable from any other down there -- Hann and Square sound the
-		// same, which is not something a shape control should ever do. And the
-		// bottom of the knob was simply an unusable setting that looked like a
-		// legitimate one.
+		// distinguishable from any other down there, so the shape control had
+		// nothing to say at the bottom of its range. And the bottom of the knob
+		// was simply an unusable setting that looked like a legitimate one.
 		//
 		// There used to be a longer floor for edges that gate to silence and a
 		// shorter one for edges that splice between two pieces of audio. That
