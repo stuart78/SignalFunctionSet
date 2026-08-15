@@ -193,6 +193,11 @@ struct SkinDisplay : OpaqueWidget {
 
 	void drawLayer(const DrawArgs& args, int layer) override {
 		if (layer != 1) return;
+		// Load the face here, not in the constructor: the window may not exist
+		// yet when the widget is built. Leaving it unloaded is a null deref the
+		// first time anything draws text -- f->handle on a null shared_ptr, which
+		// faults at address 0x8 and takes Rack down the moment Skin is placed.
+		if (!font || font->handle < 0) font = sfs::screenFontFace();
 		nvgScissor(args.vg, RECT_ARGS(Rect(Vec(0, 0), box.size)));
 		if (!module) drawPreview(args); else drawLive(args);
 		nvgResetScissor(args.vg);
@@ -262,6 +267,7 @@ struct SkinDisplay : OpaqueWidget {
 		nvgFill(args.vg);
 
 		// readout
+		if (!font || font->handle < 0) return;
 		sfs::screenFont(args.vg, font, sfs::TYPE_SCREEN);
 		nvgFillColor(args.vg, sfs::SCREEN_DIM);
 		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
@@ -355,14 +361,14 @@ struct SkinWidget : ModuleWidget {
 		// Vertical positions are millimetres on a 128.5 mm panel. Only the
 		// horizontal grid is in HP.
 		const float cx[4] = {13.97f, 41.91f, 69.85f, 97.79f};
-		const float KY1 = 70.f, KY2 = 86.f, TY = 98.f, JY1 = 110.f, JY2 = 122.f;
+		const float KY1 = 71.5f, KY2 = 87.5f, TY = 98.f, JY1 = 110.f, JY2 = 122.f;
 
 		struct K { int p; const char* t; };
 		const K big[4] = {{Skin::SIZE_PARAM, "SIZE"}, {Skin::TENSION_PARAM, "TENSION"},
 		                  {Skin::STIFF_PARAM, "MATERIAL"}, {Skin::AIR_PARAM, "AIR"}};
 		for (int i = 0; i < 4; i++) {
 			addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(cx[i], KY1)), module, big[i].p));
-			lbl->knob(cx[i], KY1, big[i].t);
+			lbl->knobLarge(cx[i], KY1, big[i].t);
 		}
 		const K small[4] = {{Skin::DECAY_PARAM, "DECAY"}, {Skin::TONE_PARAM, "TONE"},
 		                    {Skin::EXCITE_PARAM, "EXCITER"}, {Skin::MUFFLE_PARAM, "MUFFLE"}};

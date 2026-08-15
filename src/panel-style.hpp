@@ -103,6 +103,10 @@ static inline void screenFont(NVGcontext* vg, const std::shared_ptr<Font>& f,
 // Labels sit ABOVE their control; a jack's label clears the jack by a little
 // more because the jack's own bezel reads as part of the shape.
 static const float LABEL_GAP_KNOB = 5.6f;    // mm from control centre to label baseline
+// A RoundLargeBlackKnob is about 12.7 mm across against the standard knob's 9,
+// so its own body reaches past the standard gap and the label lands on top of
+// it. Measured off a rendered panel, not guessed.
+static const float LABEL_GAP_KNOB_LARGE = 8.6f;
 static const float LABEL_GAP_JACK = 5.4f;
 static const float LABEL_GAP_TRIM = 4.4f;
 static const float PLATE_PAD      = 2.6f;    // inset padding around a grouped section
@@ -142,6 +146,7 @@ struct PanelLabels : Widget {
 	}
 	// the common cases, so a caller states the control position and nothing else
 	void knob(float x, float y, const std::string& t)  { add(x, y - LABEL_GAP_KNOB, t); }
+	void knobLarge(float x, float y, const std::string& t) { add(x, y - LABEL_GAP_KNOB_LARGE, t); }
 	void trim(float x, float y, const std::string& t)  { add(x, y - LABEL_GAP_TRIM, t); }
 	void jack(float x, float y, const std::string& t)  { add(x, y - LABEL_GAP_JACK, t); }
 	void jackOnPlate(float x, float y, const std::string& t) {
