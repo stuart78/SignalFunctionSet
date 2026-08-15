@@ -189,6 +189,10 @@ struct Slice : Module {
 	// ── the slot in progress ─────────────────────────────────────────────────
 	int    xf = -1;                   // SliceXf, or -1 for passthrough
 	int    prevXf = -1;               // what the slice before this one did
+	// Whether each END of this slice has a splice to hide. They are separate
+	// questions: the start jumps if this slice or the one before it was
+	// transformed, the end jumps if this slice or the NEXT one is.
+	bool   spliceIn = false, spliceOut = false;
 	double rdPos = 0.0;               // read head into the buffer (absolute, may be fractional)
 	double rdRate = 1.0;
 	long   repLen = 0;                // repeat: fragment length
@@ -557,25 +561,21 @@ struct Slice : Module {
 		float fmax = std::max(sliceLen * 0.5f, fmin);
 		float fade = fmin * std::pow(fmax / fmin, wparam);
 
-		// A SLICE WITH NOTHING TO HIDE GETS NO FADE. This slice only splices if
-		// it is transformed, or if the one before it was and we are dropping
-		// back to the live signal -- otherwise the audio is read from the write
-		// head sample for sample and is already continuous, and fading it only
-		// punches a hole in it. At the short end of WINDOW that hole is a
-		// twentieth of a millisecond wide, which is not a fade, it is a click,
-		// and it was firing on every slice whether or not anything happened.
+		// AN EDGE WITH NOTHING TO HIDE GETS NO FADE, and the two edges are asked
+		// separately. Treating the fade as a property of the whole slice was
+		// wrong in a way that made its own click: a clean slice that followed a
+		// transformed one faded OUT at its end, and the clean slice after it
+		// started at unity, so the signal went to silence and then jumped
+		// straight back to full. A fade-out with no matching fade-in is exactly
+		// the discontinuity the fade exists to prevent.
 		//
-		// At WINDOW 1 the window IS the effect and belongs on every slice, so
-		// the clean ones scale in with the knob rather than being exempt.
-		if (xf < 0 && prevXf < 0) fade *= wparam;
-
-		float env;
-		if (fade < 1.f) {
-			env = 1.f;                    // nothing to hide: leave the audio alone
-		} else {
-			float ea = (float)slicePos, eb = sliceLen - (float)slicePos;
-			env = std::min(sliceFade(shape, ea / fade), sliceFade(shape, eb / fade));
-		}
+		// At WINDOW 1 the window IS the effect and belongs on every edge, so the
+		// clean ones scale in with the knob rather than being exempt.
+		float fIn  = fade * (spliceIn  ? 1.f : wparam);
+		float fOut = fade * (spliceOut ? 1.f : wparam);
+		float ea = (float)slicePos, eb = sliceLen - (float)slicePos;
+		float env = std::min(fIn  < 1.f ? 1.f : sliceFade(shape, ea / fIn),
+		                     fOut < 1.f ? 1.f : sliceFade(shape, eb / fOut));
 		dispEnv = env; dispXf = xf;
 
 		// DEPTH crossfades the altered slice against the straight signal. With a
