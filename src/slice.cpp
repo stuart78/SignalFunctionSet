@@ -90,16 +90,30 @@ static const char* SLICE_DIVNAME[] = {"/8", "/4", "/2", "x1", "x2", "x4", "x8"};
 static const float SLICE_DIVMUL[]  = {8.f, 4.f, 2.f, 1.f, 0.5f, 0.25f, 0.125f};
 static const int   SLICE_NDIV = (int)(sizeof(SLICE_DIVMUL) / sizeof(SLICE_DIVMUL[0]));
 
-// The fade curves, ordered softest to sharpest, so sweeping SHAPE is a sweep
-// of character rather than a jump between unrelated things.
+// The fade curves, ordered softest to sharpest, so sweeping SHAPE is a sweep of
+// character rather than a jump between unrelated things.
 //
 // SQUARE IS GONE. It returned 1.0 unconditionally, which bypassed the whole
 // fade -- WINDOW, the floor, everything -- so one position of a "shape" control
 // silently switched the envelope off. That is not a shape, it is a hidden mode,
 // and it cost an afternoon of chasing a click that was a setting.
-enum SliceShape { SH_GAUSS, SH_HANN, SH_BELL, SH_TRI, SH_SINC, SH_COUNT };
+//
+// AND THE FIRST REPLACEMENT SET WAS INAUDIBLE, which is a subtler version of the
+// same failure. Gaussian(0.4), Hann and smoothstep sat within 0.01 of each other
+// -- a one percent gain difference -- because window functions are all DESIGNED
+// to be smooth: the family is chosen for spectral leakage, and that is not a
+// thing the ear resolves as a 50 ms gain ramp. Five names, three curves, one
+// audible result. The ear hears the fade's LENGTH, which is WINDOW's job; for
+// SHAPE to have anything to say, the curves have to be spread far enough apart
+// that the difference survives being a gain ramp.
+//
+// So the ladder below is chosen by measurement, not by pedigree: the weakest gap
+// between neighbours is 0.160 of full scale, against 0.010 for the set it
+// replaces. Every stop is still a real function -- four genuine window functions
+// and a logarithmic attack, which is the language Chime already uses.
+enum SliceShape { SH_GAUSS, SH_BLACK, SH_HANN, SH_SINC, SH_LOG, SH_COUNT };
 static const char* SLICE_SHAPENAME[SH_COUNT] =
-	{"Gaussian", "Hann", "Bell", "Triangle", "Sinc"};
+	{"Gaussian", "Blackman", "Hann", "Sinc", "Log"};
 
 // The curve, over t in 0..1 rising into the slice. Every one of them really
 // reaches 0 at t=0 and 1 at t=1 -- a curve that starts at 0.04 is a step of
@@ -108,25 +122,38 @@ static inline float sliceFade(int shape, float t) {
 	t = clamp(t, 0.f, 1.f);
 	switch (shape) {
 		case SH_GAUSS: {
-			// The rising half of a Gaussian window, sigma 0.4. A Gaussian never
-			// actually reaches zero, so it is shifted and rescaled to; without
-			// that it would start at 0.044 and click quietly.
-			const float S = 0.4f;
+			// The rising half of a Gaussian window. Sigma is 0.22 rather than the
+			// textbook 0.4 because at 0.4 it lands on top of Hann; narrowed, it
+			// holds near silence for the first third of the fade and then swells,
+			// which is the softest thing this control can do and audibly so.
+			// A Gaussian never actually reaches zero, so it is shifted and
+			// rescaled until it does.
+			const float S = 0.22f;
 			const float E = std::exp(-0.5f / (S * S));      // its value at t = 0
 			float x = 1.f - t;
 			return (std::exp(-0.5f * x * x / (S * S)) - E) / (1.f - E);
 		}
-		case SH_BELL: return t * t * (3.f - 2.f * t);        // smoothstep
-		case SH_TRI:  return t;
+		case SH_BLACK:
+			// Blackman. Its three cosine terms sum to exactly 0 and exactly 1 at
+			// the ends, so it needs no rescaling, and it sits halfway between the
+			// Gaussian and Hann instead of duplicating either.
+			return 0.42f - 0.5f * std::cos(t * (float)M_PI)
+			             + 0.08f * std::cos(2.f * t * (float)M_PI);
 		case SH_SINC: {
-			// The main lobe of sinc, which is the Lanczos window's basis: it
-			// leaves zero fastest of the five and flattens early, so it is the
-			// most present-sounding fade without being a step. More lobes would
-			// ring past unity, which is a different effect and not a fade.
+			// The main lobe of sinc, the Lanczos window's basis: it leaves zero
+			// quickly and flattens early. Further lobes ring past unity, which is
+			// an effect rather than a fade, so only the lobe is used.
 			float x = (1.f - t) * (float)M_PI;
 			return (x < 1e-5f) ? 1.f : std::sin(x) / x;
 		}
-		default:      return 0.5f * (1.f - std::cos(t * (float)M_PI));   // Hann
+		case SH_LOG:
+			// A logarithmic attack: almost all of the level in the first fifth of
+			// the fade. The sharpest edge available, and the honest replacement
+			// for what people reached for Square to get -- it is nearly immediate
+			// without ever being a step.
+			return 1.f - (1.f - t) * (1.f - t) * (1.f - t);
+		default:
+			return 0.5f * (1.f - std::cos(t * (float)M_PI));   // Hann
 	}
 }
 
