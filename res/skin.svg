@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="111.7600mm" height="128.5000mm" viewBox="0 0 330.0049 379.4252">
+  <rect width="330.0049" height="379.4252" fill="#f0f0f0"/>
+  <g id="PanelArt">
+    <rect x="94.14" y="32.48" width="141.73" height="141.73" rx="3.00" fill="#1a1a32"/>
+  </g>
+  <g id="Reticules" style="display:none">
+    <circle cx="41.25" cy="206.70" r="17.82" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="123.75" cy="206.70" r="17.82" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="206.25" cy="206.70" r="17.82" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="288.75" cy="206.70" r="17.82" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="41.25" cy="253.94" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="123.75" cy="253.94" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="206.25" cy="253.94" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="288.75" cy="253.94" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="23.56" cy="289.37" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="70.72" cy="289.37" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="117.85" cy="289.37" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="165.00" cy="289.37" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="212.13" cy="289.37" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="259.29" cy="289.37" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="306.44" cy="289.37" r="8.84" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="23.56" cy="324.81" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="70.72" cy="324.81" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="117.85" cy="324.81" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="165.00" cy="324.81" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="212.13" cy="324.81" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="259.29" cy="324.81" r="10.52" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="306.44" cy="324.81" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="23.56" cy="360.24" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="70.72" cy="360.24" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="117.85" cy="360.24" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="165.00" cy="360.24" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="212.13" cy="360.24" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="259.29" cy="360.24" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="306.44" cy="360.24" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+  </g>
+</svg>

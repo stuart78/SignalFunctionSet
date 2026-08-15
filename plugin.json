@@ -421,6 +421,17 @@
         "Polyphonic"
       ],
       "hidden": true
+    },
+    {
+      "slug": "Skin",
+      "name": "Skin",
+      "description": "Struck membrane modelled mode by mode: tom, timpani, gong or snare.",
+      "tags": [
+        "Physical modeling",
+        "Drum",
+        "Synth voice"
+      ],
+      "hidden": true
     }
   ]
 }
