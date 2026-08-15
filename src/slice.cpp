@@ -630,7 +630,27 @@ struct Slice : Module {
 		// middle and the edge fade IS the whole-slice window.
 		int shape = (int)std::round(params[SHAPE_PARAM].getValue());
 		float wparam = clamp(params[WINDOW_PARAM].getValue(), 0.f, 1.f);
-		// WINDOW IS A FADE TIME, 5 ms to 200 ms, and that is all it is.
+		// WINDOW IS HOW MUCH OF THE SLICE IS WINDOW, expressed as a fade time:
+		// 5 ms at the bottom, half the slice at the top.
+		//
+		// It ran to a fixed 200 ms ceiling until it turned out that ceiling was
+		// quietly holding two different ideas apart. A fade is an EDGE TAPER, and
+		// the curve of an edge taper is nearly inaudible -- the ear hears how long
+		// it is, not what shape it is. A window function is the WHOLE ARC, nought
+		// to one and back, and choosing between Hann and Gaussian only describes
+		// something real when the window spans the thing it is windowing.
+		//
+		// With the ceiling in place, a 940 ms slice at WINDOW maximum still kept a
+		// 540 ms plateau: the two half-curves never met, so every setting was a
+		// Tukey window with a short taper and SHAPE only ever got to bend the
+		// taper. Five window functions, none of which was allowed to be a window.
+		// That is why they all sounded the same.
+		//
+		// Clamped to half the slice, the top of the knob is a true window and the
+		// five shapes separate completely: measured across the whole slice they
+		// run 47 / 70 / 80 / 91 / 97 percent of it above -20 dB, and 5 dB apart in
+		// energy. That is a difference in how LONG each piece sounds, which is a
+		// first-order thing to hear, where taper curvature is a third-order one.
 		//
 		// It used to run from one millisecond, which was a mistake twice over. A
 		// 1 ms ramp on a 261 Hz tone is a quarter of one cycle, so no curve is
@@ -644,12 +664,11 @@ struct Slice : Module {
 		// short enough for the gate case, so one number does both and there is
 		// no conditional left to get wrong.
 		//
-		// Clamped to half the slice: past that the two fades overlap and the
-		// slice never reaches full level, which is a volume drop rather than a
-		// window.
+		// Past half the slice the two fades would overlap and the slice would
+		// never reach full level, which is a volume drop rather than a window.
 		float half = std::max(sliceLen * 0.5f, 1.f);
 		float fLo  = std::min(0.005f * sr, half);
-		float fHi  = std::max(std::min(0.200f * sr, half), fLo);
+		float fHi  = std::max(half, fLo);
 		float fade = fLo * std::pow(fHi / fLo, wparam);
 
 		// An edge with nothing to hide still gets nothing: a run of untransformed
@@ -1092,7 +1111,7 @@ std::string SliceWindowQuantity::getDisplayValueString() {
 	float sr = APP->engine->getSampleRate();
 	float half = std::max(m->sliceLen * 0.5f, 1.f);
 	float lo = std::min(0.005f * sr, half);
-	float hi = std::max(std::min(0.200f * sr, half), lo);
+	float hi = std::max(half, lo);
 	float f = lo * std::pow(hi / lo, clamp(getValue(), 0.f, 1.f));
 	return string::f("%.1f ms", f / sr * 1000.f);
 }
