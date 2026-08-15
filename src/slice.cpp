@@ -101,6 +101,16 @@ static inline float sliceFade(int shape, float t) {
 
 struct Slice;
 
+// REACH counts steps, or bars when a BAR clock is patched, and the unit changes
+// under the user's feet. A fixed unit string in the tooltip would be wrong half
+// the time, and a bare percentage was wrong all of it: as a fraction of a
+// thirty-second buffer the knob's whole lower half rounded to the same one or
+// two slices and no position on it named anything.
+struct SliceReachQuantity : ParamQuantity {
+	std::string getUnit() override;
+	std::string getDescription() override;
+};
+
 struct SliceDisplay : OpaqueWidget {
 	Slice* module = nullptr;
 	std::shared_ptr<Font> font;
@@ -224,7 +234,9 @@ struct Slice : Module {
 		            std::log2(0.125f), "Slice length (only when CLOCK is unpatched)",
 		            " s", 2.f);
 		configParam(DEPTH_PARAM, 0.f, 1.f, 1.f, "Depth", "%", 0.f, 100.f);
-		configParam(RANGE_PARAM, 0.f, 1.f, 0.25f, "Reach back", "%", 0.f, 100.f);
+		configParam<SliceReachQuantity>(RANGE_PARAM, 1.f, (float)REACH_MAX, 8.f,
+		                                "Reach back");
+		getParamQuantity(RANGE_PARAM)->snapEnabled = true;
 		// x1 in the CENTRE of the knob, divide to the left, multiply to the
 		// right, so the control reads like every other clock divider.
 		configSwitch(DIV_PARAM, 0.f, (float)(SLICE_NDIV - 1), 3.f, "Clock rate",
@@ -249,7 +261,7 @@ struct Slice : Module {
 		configInput(LENGTH_INPUT, "Slice length CV (±5V)");
 		configInput(EFFECT_INPUT, "Effect CV (1V per effect)");
 		configInput(EVERY_INPUT, "Rate CV (1V per step)");
-		configInput(RANGE_INPUT, "Reach CV (1V per step or bar)");
+		configInput(RANGE_INPUT, "Reach CV (0.1V per step or bar)");
 		configOutput(L_OUTPUT, "Left");
 		configOutput(R_OUTPUT, "Right");
 		configOutput(SLICE_OUTPUT, "Trigger on every slice boundary");
@@ -291,21 +303,30 @@ struct Slice : Module {
 	// rounded to the same one or two slices, and no position on it corresponded
 	// to anything you could name. In steps, or in bars when a BAR clock is
 	// there, every position is a number you can say out loud.
-	static const int REACH_MAXSTEP = 32;
-	static const int REACH_MAXBAR  = 8;
+	// One range, 1..32, and only the UNIT changes: it is a count of steps, or a
+	// count of bars once BAR is patched. Two ranges would mean three quarters of
+	// the travel doing nothing in bar mode.
+	static const int REACH_MAX = 32;
 	bool reachInBars() { return barLen > 0.f && inputs[BAR_INPUT].isConnected(); }
 	int reachCount() {
-		float v = clamp(params[RANGE_PARAM].getValue()
-		                + inputs[RANGE_INPUT].getVoltage() * 0.1f, 0.f, 1.f);
-		int hi = reachInBars() ? REACH_MAXBAR : REACH_MAXSTEP;
-		return clamp(1 + (int)std::floor(v * (float)hi), 1, hi);
+		float v = params[RANGE_PARAM].getValue()
+		        + inputs[RANGE_INPUT].getVoltage() * (float)REACH_MAX * 0.1f;
+		return clamp((int)std::round(v), 1, REACH_MAX);
+	}
+	// What the buffer can actually deliver. Thirty-two bars at 60 BPM is 128
+	// seconds and the buffer holds thirty, so the request has to be capped --
+	// and the screen shows both numbers when it is, rather than printing a reach
+	// that is not happening.
+	int reachFit() {
+		float unit = reachInBars() ? barLen : std::max(sliceLen, 1.f);
+		float have = std::min((float)bufN, (float)written) - sliceLen * 2.f;
+		if (unit <= 0.f || have < unit) return 1;
+		return clamp((int)std::floor(have / unit), 1, reachCount());
 	}
 	// ...and in samples, for the read head.
 	float reachSamples() {
 		float unit = reachInBars() ? barLen : std::max(sliceLen, 1.f);
-		float back = unit * (float)reachCount();
-		float have = std::min((float)bufN, (float)written) - sliceLen * 2.f;
-		return clamp(back, sliceLen, std::max(have, sliceLen));
+		return std::max(unit * (float)reachFit(), sliceLen);
 	}
 
 	int effIndex() {
@@ -701,11 +722,14 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	                              m->clockedLength() ? "CLK" : "LEN").c_str(), NULL);
 	nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 	nvgFillColor(vg, sfs::SCREEN_TEXT);
-	int rc = m->reachCount();
+	int want = m->reachCount(), got = m->reachFit();
+	const char* unit = m->reachInBars() ? (got == 1 ? "bar" : "bars")
+	                                    : (got == 1 ? "step" : "steps");
+	std::string reach = (got == want) ? string::f("%d %s", got, unit)
+	                                  : string::f("%d/%d %s", got, want, unit);
 	nvgText(vg, x1, (SD_BUFY - 8.f) * s,
-	        string::f("%s /%d  \u2190%d %s", SLICE_EFFNAME[m->effIndex()], m->everyN(),
-	                  rc, m->reachInBars() ? (rc == 1 ? "bar" : "bars")
-	                                       : (rc == 1 ? "step" : "steps")).c_str(), NULL);
+	        string::f("%s /%d  \u2190%s", SLICE_EFFNAME[m->effIndex()], m->everyN(),
+	                  reach.c_str()).c_str(), NULL);
 
 	slicePane(vg, font, s, SD_PANE1, m->scDry[0], m->scOut[0], m->scHead, "L");
 	slicePane(vg, font, s, SD_PANE2, m->scDry[1], m->scOut[1], m->scHead, "R");
@@ -873,5 +897,21 @@ struct SliceWidget : ModuleWidget {
 			}));
 	}
 };
+
+std::string SliceReachQuantity::getUnit() {
+	Slice* m = dynamic_cast<Slice*>(module);
+	bool bars = m && m->reachInBars();
+	bool one = std::round(getValue()) == 1.f;
+	return bars ? (one ? " bar" : " bars") : (one ? " step" : " steps");
+}
+std::string SliceReachQuantity::getDescription() {
+	Slice* m = dynamic_cast<Slice*>(module);
+	if (m && m->reachInBars())
+		return "How far back DELAY and SHUFFLE fetch from, in whole bars. Patched "
+		       "to BAR, the reach lands on a bar line, which is what makes a "
+		       "delayed slice arrive somewhere musical.";
+	return "How far back DELAY and SHUFFLE fetch from, in whole slices. Patch a "
+	       "BAR clock and this counts bars instead.";
+}
 
 Model* modelSlice = createModel<Slice, SliceWidget>("Slice");
