@@ -346,7 +346,9 @@ struct Slide : Module {
 		// In frets, because that is what it is: how far the bar will reach to keep
 		// a held note on the string it is already sounding on. 0 is the pre-2026-08
 		// behaviour, where the solver always took the nearest string.
-		configParam(STICK_PARAM, 0.f, 24.f, 0.f, "Legato reach (bar travel before crossing strings)", " frets");
+		configParam(STICK_PARAM, 0.f, 24.f, 0.f, "Legato reach", " frets");
+		// Frets are countable things; 23.826 of one is not a setting.
+		getParamQuantity(STICK_PARAM)->snapEnabled = true;
 		configParam(VIB_PARAM, 0.f, 1.f, 0.f, "Vibrato depth (bar rocking)", "%", 0.f, 100.f);
 		// Steel vibrato is a rocking wrist, and players differ as much in how
 		// fast they rock as in how far — a slow wide rock and a fast narrow one
@@ -626,14 +628,26 @@ struct Slide : Module {
 				// is not eight independent choices: it is one bar position that
 				// best fits all the notes. Candidates are the positions that put
 				// some note exactly under the bar on some string.
-				// STICK only applies to LEGATO -- a note arriving while another is
-				// still held. After silence a player lifts the bar and places it,
-				// so a fresh attack is free to take the nearest string.
-				float budget = gateHeld ? params[STICK_PARAM].getValue() : 0.f;
+				// LEGATO IS A RINGING STRING, NOT A HELD GATE. Gating this on the
+				// GATE input was wrong twice over: Slide is played by the auto
+				// roll, by the mouse and by Slide X as often as by a gate, and
+				// even a sequencer that does patch one usually drops it between
+				// notes, so the solve lands in the gap and sees nothing held. The
+				// physical question is whether the string you would be sliding on
+				// is still sounding -- if it is, move the bar; if it has died
+				// away, the bar is free to be placed. str[].amp is a real
+				// per-sample envelope, so it answers that directly.
+				float reach = params[STICK_PARAM].getValue();
 				// Snapshot BEFORE the assignment loop overwrites voiceString: the
 				// cost function and the re-pick both need to know where each voice
 				// was sounding a moment ago.
-				for (int q = 0; q < SLIDE_NCH; q++) prevString[q] = voiceString[q];
+				bool contd[SLIDE_NCH]; bool anyContd = false;
+				for (int q = 0; q < SLIDE_NCH; q++) {
+					prevString[q] = voiceString[q];
+					contd[q] = reach > 0.f
+					        && (gateHeld || str[prevString[q]].amp > 0.002f);
+					anyContd |= contd[q];
+				}
 
 				float bestBar = barSm; float bestErr = 1e9f;
 				for (int j = 0; j < nv; j++) {
@@ -649,11 +663,11 @@ struct Slide : Module {
 							// already sounding on is scored ONLY against that string,
 							// so the bar has to travel and you get a slide instead of
 							// a hop. Out of reach and it scores freely, as before.
-							if (budget > 0.f) {
+							if (contd[k]) {
 								int pm = prevString[k];
 								float need = note[k] - tune[pm];
 								if (need >= -0.01f && need <= (float)SLIDE_FRETS + 0.01f
-								    && std::fabs(need - barSm) <= budget)
+								    && std::fabs(need - barSm) <= reach)
 									b = std::fabs(need - cand);
 							}
 							err += b;
@@ -670,7 +684,7 @@ struct Slide : Module {
 						// The home pull exists to break ties TOWARD crossing
 						// strings, which is the opposite of what legato wants.
 						err += 0.10f * std::fabs(cand - barSm)
-						     + 0.05f * (budget > 0.f ? 0.f : 1.f) * std::fabs(cand - home);
+						     + 0.05f * (anyContd ? 0.f : 1.f) * std::fabs(cand - home);
 						if (err < bestErr) { bestErr = err; bestBar = cand; }
 					}
 				}
@@ -686,8 +700,8 @@ struct Slide : Module {
 						float need = note[j] - tune[i];
 						if (need < -0.01f || need > (float)SLIDE_FRETS + 0.01f) continue;
 						float c = std::fabs(need - bestBar);
-						if (budget > 0.f && i == prevString[j]
-						    && std::fabs(need - barSm) <= budget) c = -1.f;
+						if (contd[j] && i == prevString[j]
+						    && std::fabs(need - barSm) <= reach) c = -1.f;
 						if (c < bc) { bc = c; best = i; }
 					}
 					if (best < 0) best = clamp(j, 0, SLIDE_NCH - 1);
@@ -702,11 +716,10 @@ struct Slide : Module {
 				// it. Measured on a held C major scale in C6, the last three notes
 				// came out a third and a fifth flat. Reaching the note needs the
 				// string that reaches it to be sounding.
-				if (gateHeld) {
-					for (int j = 0; j < nv; j++)
-						if (voiceString[j] != prevString[j])
-							pick(voiceString[j], str[prevString[j]].velocity);
-				}
+				for (int j = 0; j < nv; j++)
+					if (voiceString[j] != prevString[j]
+					    && (gateHeld || str[prevString[j]].amp > 0.002f))
+						pick(voiceString[j], str[prevString[j]].velocity);
 				melodyString = voiceString[0];
 			}
 			else barTarget = lastSolvedBar;                    // hold between solves
@@ -1397,8 +1410,6 @@ struct SlideWidget : ModuleWidget {
 		// finished. It is a real param, so it can take a knob at the next
 		// revision without its index moving.
 		menu->addChild(new MenuSeparator);
-		menu->addChild(createMenuLabel("Legato reach: how far the bar travels"));
-		menu->addChild(createMenuLabel("            before crossing strings"));
 		{
 			auto* sl = new SlideStickSlider(m->paramQuantities[Slide::STICK_PARAM]);
 			sl->box.size.x = 200.f;
