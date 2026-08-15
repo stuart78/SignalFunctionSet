@@ -199,6 +199,8 @@ struct Slide : Module {
 		BLOCK_PARAM, SWELL_PARAM, COUPLE_PARAM, VIBRATE_PARAM, DYN_PARAM,
 		// ── appended for the 2026-08 panel ──────────────────────────────────
 		SCALE_PARAM,
+		// ── appended 2026-08: legato bar reach ───────────────────────────────
+		STICK_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -293,6 +295,12 @@ struct Slide : Module {
 	// and slides the bar to it. A melodic line then comes out as a series of
 	// slides at hand speed, which is the instrument's whole voice.
 	int   playMode = 1;                  // 0 = chord, 1 = melody
+	// Legato: a note arriving while another is still held. A steel player does
+	// not lift the bar for that, they move it, which is where the cry comes
+	// from -- so STICK says how many frets the bar will travel before giving up
+	// and crossing to another string instead.
+	bool  gateHeld = false;
+	int   prevString[SLIDE_NCH] = {};
 	int   melodyString = 0;
 	int   voiceString[SLIDE_NCH] = {};   // poly: which string plays each note
 	int   nVoices = 0;
@@ -335,6 +343,10 @@ struct Slide : Module {
 		            " semitones");
 		configParam(SLANT_PARAM, -6.f, 6.f, 0.f, "Bar slant", " semitones across the strings");
 		configParam(GLIDE_PARAM, 0.f, 1.f, 0.35f, "Glide (bar travel rate)", "%", 0.f, 100.f);
+		// In frets, because that is what it is: how far the bar will reach to keep
+		// a held note on the string it is already sounding on. 0 is the pre-2026-08
+		// behaviour, where the solver always took the nearest string.
+		configParam(STICK_PARAM, 0.f, 24.f, 0.f, "Legato reach (bar travel before crossing strings)", " frets");
 		configParam(VIB_PARAM, 0.f, 1.f, 0.f, "Vibrato depth (bar rocking)", "%", 0.f, 100.f);
 		// Steel vibrato is a rocking wrist, and players differ as much in how
 		// fast they rock as in how far — a slow wide rock and a fast narrow one
@@ -614,6 +626,15 @@ struct Slide : Module {
 				// is not eight independent choices: it is one bar position that
 				// best fits all the notes. Candidates are the positions that put
 				// some note exactly under the bar on some string.
+				// STICK only applies to LEGATO -- a note arriving while another is
+				// still held. After silence a player lifts the bar and places it,
+				// so a fresh attack is free to take the nearest string.
+				float budget = gateHeld ? params[STICK_PARAM].getValue() : 0.f;
+				// Snapshot BEFORE the assignment loop overwrites voiceString: the
+				// cost function and the re-pick both need to know where each voice
+				// was sounding a moment ago.
+				for (int q = 0; q < SLIDE_NCH; q++) prevString[q] = voiceString[q];
+
 				float bestBar = barSm; float bestErr = 1e9f;
 				for (int j = 0; j < nv; j++) {
 					for (int i = 0; i < SLIDE_NCH; i++) {
@@ -624,6 +645,17 @@ struct Slide : Module {
 							float b = 1e9f;
 							for (int m = 0; m < SLIDE_NCH; m++)
 								b = std::min(b, std::fabs(note[k] - tune[m] - cand));
+							// Under legato, a note within reach of the string it is
+							// already sounding on is scored ONLY against that string,
+							// so the bar has to travel and you get a slide instead of
+							// a hop. Out of reach and it scores freely, as before.
+							if (budget > 0.f) {
+								int pm = prevString[k];
+								float need = note[k] - tune[pm];
+								if (need >= -0.01f && need <= (float)SLIDE_FRETS + 0.01f
+								    && std::fabs(need - barSm) <= budget)
+									b = std::fabs(need - cand);
+							}
 							err += b;
 						}
 						// Two tie-breaks, and the second is the one that matters.
@@ -635,8 +667,10 @@ struct Slide : Module {
 						// toward crossing strings, and travels LESS doing it: a
 						// major scale goes from one string and 12 semitones of
 						// travel to five strings and 8.
+						// The home pull exists to break ties TOWARD crossing
+						// strings, which is the opposite of what legato wants.
 						err += 0.10f * std::fabs(cand - barSm)
-						     + 0.05f * std::fabs(cand - home);
+						     + 0.05f * (budget > 0.f ? 0.f : 1.f) * std::fabs(cand - home);
 						if (err < bestErr) { bestErr = err; bestBar = cand; }
 					}
 				}
@@ -652,11 +686,26 @@ struct Slide : Module {
 						float need = note[j] - tune[i];
 						if (need < -0.01f || need > (float)SLIDE_FRETS + 0.01f) continue;
 						float c = std::fabs(need - bestBar);
+						if (budget > 0.f && i == prevString[j]
+						    && std::fabs(need - barSm) <= budget) c = -1.f;
 						if (c < bc) { bc = c; best = i; }
 					}
 					if (best < 0) best = clamp(j, 0, SLIDE_NCH - 1);
 					taken[best] = true;
 					voiceString[j] = best;
+				}
+				// THE STRING THAT CHANGES MUST BE PICKED. Nothing picks on a note
+				// change -- every pick() comes from a gate edge, a roll, the mouse
+				// or Slide X -- so when the solver moved a held voice to another
+				// string, that string had no energy in it and the one still
+				// ringing got dragged to whatever pitch the new bar position gave
+				// it. Measured on a held C major scale in C6, the last three notes
+				// came out a third and a fifth flat. Reaching the note needs the
+				// string that reaches it to be sounding.
+				if (gateHeld) {
+					for (int j = 0; j < nv; j++)
+						if (voiceString[j] != prevString[j])
+							pick(voiceString[j], str[prevString[j]].velocity);
 				}
 				melodyString = voiceString[0];
 			}
@@ -787,6 +836,14 @@ struct Slide : Module {
 			{ rollIdx = 0; rollWalk = 0; intPhase = 0.f; }
 
 		int gch = inputs[GATE_INPUT].getChannels();
+		// Read one sample behind the solver, which is fine: this decides whether
+		// the NEXT note change is legato, and a sample is not a phrase.
+		{
+			bool held = false;
+			for (int i = 0; i < std::max(1, gch); i++)
+				if (inputs[GATE_INPUT].getVoltage(i) > 1.f) { held = true; break; }
+			gateHeld = held;
+		}
 		if (gch <= 1) {
 			if (gateTrig.process(inputs[GATE_INPUT].getVoltage(), 0.1f, 1.f)) {
 				float gv = inputs[VEL_INPUT].isConnected()
@@ -1252,6 +1309,10 @@ struct SlideDisplay : OpaqueWidget {
 // Panel — 26HP.
 // =============================================================================
 
+struct SlideStickSlider : ui::Slider {
+	explicit SlideStickSlider(engine::ParamQuantity* q) { quantity = q; }
+};
+
 struct SlideWidget : ModuleWidget {
 	SlideWidget(Slide* module) {
 		setModule(module);
@@ -1332,6 +1393,17 @@ struct SlideWidget : ModuleWidget {
 		assert(m);
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createBoolPtrMenuItem("Auto roll moves the bar", "", &m->autoMovesBar));
+		// A knob would be better and there is no room for one: the panel art is
+		// finished. It is a real param, so it can take a knob at the next
+		// revision without its index moving.
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuLabel("Legato reach: how far the bar travels"));
+		menu->addChild(createMenuLabel("            before crossing strings"));
+		{
+			auto* sl = new SlideStickSlider(m->paramQuantities[Slide::STICK_PARAM]);
+			sl->box.size.x = 200.f;
+			menu->addChild(sl);
+		}
 		menu->addChild(createSubmenuItem("Tuning", "", [=](Menu* sub) {
 			for (int t = 0; t < SLIDE_NTUNINGS; t++)
 				sub->addChild(createMenuItem(SLIDE_TUNINGS[t].name, "",

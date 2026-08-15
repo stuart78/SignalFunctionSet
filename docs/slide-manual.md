@@ -146,6 +146,34 @@ MIX L, MIX R, **EVEN** (strings 2, 4, 6, 8 summed) and **ODD** (1, 3, 5, 7).
 The even/odd pair is a cheap way to get two related but distinct signals out
 without an expander. Send them to different amps and the instrument widens.
 
+## Legato reach
+
+In the context menu, measured in frets.
+
+When a note arrives while another is **still held**, a steel player does not
+lift the bar and put it down somewhere else. They move it, and that movement is
+the sound of the instrument. Legato reach is how far the bar will travel to keep
+that held note on the string it is already sounding on, before it gives up and
+crosses to a different string instead.
+
+At **0** Slide behaves as it always did: it takes whichever string needs the
+least bar movement, so a melodic line comes out as a series of clean attacks on
+different strings. Turn it up and the line stays on one string and slides.
+
+It is a distance, not a strength, and that matters. A stepwise line moves one or
+two frets per note, so anything above about 1 keeps the whole line on one
+string. The control earns its range on **leaps**: over a line of fifths, sevenths
+and octaves it takes the part from seven string crossings down to none, and bar
+travel from five frets to twenty-one, changing at every step in between.
+
+Two things worth knowing:
+
+- **It only applies to legato.** After silence, a fresh note is free to take the
+  nearest string, because that is what a player does when they lift.
+- **It is not an absolute guarantee.** A note past the end of the current
+  string cannot be played on it, so Slide crosses anyway and re-picks the new
+  string so you hear the right pitch.
+
 ## Context menu
 
 | Item | What it does |
