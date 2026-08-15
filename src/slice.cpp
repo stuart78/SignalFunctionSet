@@ -193,6 +193,10 @@ struct Slice : Module {
 	// questions: the start jumps if this slice or the one before it was
 	// transformed, the end jumps if this slice or the NEXT one is.
 	bool   spliceIn = false, spliceOut = false;
+	// ...and whether the audio on the other side of each edge is SILENCE. A
+	// gate needs a far longer fade than a splice, and CUT is the only transform
+	// that gates -- see the envelope maths where the fade is chosen.
+	bool   gateIn = false, gateOut = false;
 	double rdPos = 0.0;               // read head into the buffer (absolute, may be fractional)
 	double rdRate = 1.0;
 	long   repLen = 0;                // repeat: fragment length
@@ -557,9 +561,28 @@ struct Slice : Module {
 		// mode switch and no discontinuity between the two behaviours.
 		int shape = (int)std::round(params[SHAPE_PARAM].getValue());
 		float wparam = clamp(params[WINDOW_PARAM].getValue(), 0.f, 1.f);
-		float fmin = 0.001f * sr;
-		float fmax = std::max(sliceLen * 0.5f, fmin);
-		float fade = fmin * std::pow(fmax / fmin, wparam);
+		// A SPLICE AND A GATE NEED DIFFERENT FADES, and this is what the clicking
+		// at low WINDOW was.
+		//
+		// Substituting one piece of audio for another only has to hide a
+		// discontinuity in the waveform, and a millisecond does that; longer
+		// than that just ducks the signal for no reason. Going to SILENCE is a
+		// different problem: the envelope itself becomes the transient, and its
+		// sidebands land either side of whatever is playing. Measured on a
+		// 261 Hz tone, a 1 ms gate edge puts sidebands 1027 Hz out at -60 dB,
+		// which is heard as a separate tick. By 20 ms they have collapsed to
+		// about 100 Hz out and it just sounds like the note being shaped.
+		//
+		// So a gate edge starts at 18 ms rather than 1, and WINDOW scales up
+		// from there. SHAPE = Square still bypasses the fade entirely, which is
+		// the way to ask for the hard gate on purpose.
+		float fmax     = std::max(sliceLen * 0.5f, 1.f);
+		float fSplice  = 0.001f * sr;
+		float fGate    = std::min(0.018f * sr, sliceLen * 0.2f);
+		auto mapFade = [&](float lo) {
+			lo = std::min(lo, fmax);
+			return lo * std::pow(fmax / lo, wparam);
+		};
 
 		// AN EDGE WITH NOTHING TO HIDE GETS NO FADE, and the two edges are asked
 		// separately. Treating the fade as a property of the whole slice was
@@ -571,8 +594,8 @@ struct Slice : Module {
 		//
 		// At WINDOW 1 the window IS the effect and belongs on every edge, so the
 		// clean ones scale in with the knob rather than being exempt.
-		float fIn  = fade * (spliceIn  ? 1.f : wparam);
-		float fOut = fade * (spliceOut ? 1.f : wparam);
+		float fIn  = mapFade(gateIn  ? fGate : fSplice) * (spliceIn  ? 1.f : wparam);
+		float fOut = mapFade(gateOut ? fGate : fSplice) * (spliceOut ? 1.f : wparam);
 		float ea = (float)slicePos, eb = sliceLen - (float)slicePos;
 		float env = std::min(fIn  < 1.f ? 1.f : sliceFade(shape, ea / fIn),
 		                     fOut < 1.f ? 1.f : sliceFade(shape, eb / fOut));
