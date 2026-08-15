@@ -1,6 +1,7 @@
 #include "plugin.hpp"
 #include "panel-style.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <vector>
 
@@ -38,7 +39,12 @@
 // =============================================================================
 
 static const int   SLICE_NXF     = 7;        // transforms, not counting passthrough
-static const float SLICE_BUFSEC  = 30.f;
+// How much audio to keep. 60s is the default because REACH counts up to 32
+// bars, and at 120 BPM that is 64 seconds -- with a 30s buffer two thirds of
+// that knob's travel was unreachable at ordinary tempos. 120s costs 44 MB at
+// 48k and 176 MB at 192k, per instance, which is why it is a choice.
+static const float SLICE_BUFOPT[] = {30.f, 60.f, 120.f};
+static const int   SLICE_NBUFOPT = 3;
 static const float SLICE_MINLEN  = 0.010f;   // 10ms
 static const float SLICE_MAXLEN  = 1.000f;
 
@@ -142,6 +148,31 @@ struct Slice : Module {
 	// ── the buffer ───────────────────────────────────────────────────────────
 	std::vector<float> bufL, bufR;
 	long  bufN = 0;                   // capacity, samples
+	int   bufSecIdx = 1;              // index into SLICE_BUFOPT; 1 == 60s
+
+	// Changing the buffer size means allocating, and allocating on the audio
+	// thread is a dropout. So the UI thread builds the new vectors and the audio
+	// thread takes them with a std::vector::swap, which is a pointer exchange
+	// and allocates nothing. The old memory rides back out in the pending
+	// vectors and is freed by the widget, off the audio thread.
+	std::vector<float> pendL, pendR;
+	long pendN = 0;
+	std::atomic<bool> pendReady{false}, pendDone{false};
+
+	void requestBuffer(int idx) {
+		// A handover already in flight owns pendL/pendR until the audio thread
+		// has taken them; writing into them now would be writing into a vector
+		// that is about to be swapped in under us.
+		if (pendReady.load()) return;
+		bufSecIdx = clamp(idx, 0, SLICE_NBUFOPT - 1);
+		long n = (long)(SLICE_BUFOPT[bufSecIdx] * APP->engine->getSampleRate());
+		if (n == bufN || n <= 0) return;
+		pendL.assign((size_t)n, 0.f);
+		pendR.assign((size_t)n, 0.f);
+		pendN = n;
+		pendDone = false;
+		pendReady = true;
+	}
 	long  wr = 0;                     // write head
 	bool  primed = false;             // the buffer has been filled once
 	long  written = 0;                // samples written since load (caps reads)
@@ -272,7 +303,12 @@ struct Slice : Module {
 	}
 
 	void onSampleRateChange() override {
-		bufN = (long)(SLICE_BUFSEC * APP->engine->getSampleRate());
+		// Called with the engine in a safe state, so this one can allocate
+		// directly rather than going through the swap.
+		pendReady = false; pendDone = false;
+		pendL.clear(); pendR.clear();
+		bufN = (long)(SLICE_BUFOPT[clamp(bufSecIdx, 0, SLICE_NBUFOPT - 1)]
+		              * APP->engine->getSampleRate());
 		bufL.assign((size_t)bufN, 0.f);
 		bufR.assign((size_t)bufN, 0.f);
 		wr = 0; written = 0; primed = false;
@@ -391,6 +427,14 @@ struct Slice : Module {
 
 	void process(const ProcessArgs& args) override {
 		const float sr = args.sampleRate;
+		// Take a new buffer if one is waiting. swap() exchanges pointers, so
+		// nothing is allocated or freed here.
+		if (pendReady.load()) {
+			bufL.swap(pendL); bufR.swap(pendR);
+			bufN = pendN; wr = 0; written = 0; primed = false;
+			slicePos = 0.0; xf = -1;
+			pendReady = false; pendDone = true;
+		}
 		if (bufN <= 0) return;
 
 		// ── clocks ───────────────────────────────────────────────────────────
@@ -557,6 +601,7 @@ struct Slice : Module {
 		json_object_set_new(r, "fadeMs", json_real(fadeMs));
 		json_object_set_new(r, "freeze", json_boolean(freeze));
 		json_object_set_new(r, "spliceMode", json_integer(spliceMode));
+		json_object_set_new(r, "bufSecIdx", json_integer(bufSecIdx));
 		return r;
 	}
 	void dataFromJson(json_t* r) override {
@@ -565,6 +610,8 @@ struct Slice : Module {
 		if (json_t* j = json_object_get(r, "fadeMs"))      fadeMs = clamp((float)json_number_value(j), 0.5f, 25.f);
 		if (json_t* j = json_object_get(r, "freeze"))      freeze = json_boolean_value(j);
 		if (json_t* j = json_object_get(r, "spliceMode")) spliceMode = clamp((int)json_integer_value(j), 0, 1);
+		if (json_t* j = json_object_get(r, "bufSecIdx"))
+			requestBuffer((int)json_integer_value(j));
 	}
 };
 
@@ -676,13 +723,17 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	// needs, rather than from a fixed set of bins that would be far too coarse
 	// at a one-second window and far too fine at eight bars.
 	const int NB = 240;
+	// bufN and the vectors are swapped a moment apart on the audio thread, so
+	// the drawing takes whichever is smaller and cannot run off the end.
+	long n = std::min(m->bufN, (long)std::min(m->bufL.size(), m->bufR.size()));
+	if (n < 2) return;
 	long step = std::max(1L, (long)(win / (float)NB));
 	float pk[NB];
 	for (int i = 0; i < NB; i++) {
 		long start = m->wr - (long)win + (long)((float)i / NB * win);
 		float p = 0.f;
 		for (long k = 0; k < step; k += std::max(1L, step / 16)) {
-			long a = ((start + k) % m->bufN + m->bufN) % m->bufN;
+			long a = ((start + k) % n + n) % n;
 			p = std::max(p, std::max(std::fabs(m->bufL[(size_t)a]),
 			                         std::fabs(m->bufR[(size_t)a])));
 		}
@@ -873,6 +924,18 @@ struct SliceWidget : ModuleWidget {
 		}
 	}
 
+	// The audio thread hands the old buffer back by swapping it into the pending
+	// vectors; freeing tens of megabytes is not its job, so it happens here.
+	void step() override {
+		Slice* m = dynamic_cast<Slice*>(this->module);
+		if (m && m->pendDone.load()) {
+			m->pendDone = false;
+			m->pendL.clear(); m->pendL.shrink_to_fit();
+			m->pendR.clear(); m->pendR.shrink_to_fit();
+		}
+		ModuleWidget::step();
+	}
+
 	void appendContextMenu(Menu* menu) override {
 		Slice* m = dynamic_cast<Slice*>(this->module);
 		assert(m);
@@ -882,6 +945,18 @@ struct SliceWidget : ModuleWidget {
 		// is the point -- it becomes a gater with a shape control.
 		// REPEAT is the only transform that splices inside a slice, so this is
 		// the only place a click can come from that the edge fades do not cover.
+		menu->addChild(createSubmenuItem("Buffer length",
+			string::f("%.0f s", SLICE_BUFOPT[clamp(m->bufSecIdx, 0, SLICE_NBUFOPT - 1)]),
+			[=](Menu* sub) {
+				for (int i = 0; i < SLICE_NBUFOPT; i++) {
+					float sec = SLICE_BUFOPT[i];
+					float mb = sec * APP->engine->getSampleRate() * 2.f * 4.f / 1048576.f;
+					sub->addChild(createCheckMenuItem(
+						string::f("%.0f s", sec), string::f("%.0f MB", mb),
+						[=]() { return m->bufSecIdx == i; },
+						[=]() { m->requestBuffer(i); }));
+				}
+			}));
 		menu->addChild(createIndexPtrSubmenuItem("Repeat splice",
 			{"Clean", "Dirty"}, &m->spliceMode));
 		menu->addChild(createBoolPtrMenuItem("Envelope the whole slice", "", &m->wholeWindow));
