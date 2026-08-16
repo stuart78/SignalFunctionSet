@@ -290,22 +290,49 @@ struct SkinDisplay : OpaqueWidget {
 	// RADIAL part of a mode, because a flat ring has one value; the whole point
 	// of a drum is that the modes have angular shape too -- (m,1) has m nodal
 	// diameters -- and that is invisible until you tilt it and give it height.
-	void drawHead3D(const DrawArgs& args, float cx, float cy, float rad) {
-		const int RINGS = 11, SECT = 30;
+	//
+	// The head is drawn as wide as the screen allows rather than as wide as the
+	// screen is TALL. Tilted at 0.4 the disc's vertical extent is only 0.8 of
+	// its width, so fitting it to the height wasted most of the radius it could
+	// have had.
+	static constexpr float TILT = 0.40f;
+
+	float head3Rad() const {
+		float wAvail = box.size.x - specW() - mm2px(5.f);
+		// budget: rise above + 0.8r of tilted disc + shell below + margins
+		float byH = (box.size.y - mm2px(5.f)) / (2.f * TILT + 0.30f + 0.34f);
+		return std::min(wAvail * 0.5f, byH);
+	}
+	float specW() const { return mm2px(24.f); }
+	// The object is rise + tilted disc + shell, so its centre is not the box's.
+	// Both the surface and the strike mark must agree about this or the mark
+	// floats off the head.
+	float head3Cy() const {
+		float rad = head3Rad(), hgt = rad * 0.34f;
+		float airv = module ? clamp(module->params[Skin::AIR_PARAM].getValue(), 0.f, 1.f) : 0.35f;
+		float shell = rad * (0.16f + 0.16f * airv);
+		return box.size.y * 0.5f - (shell - hgt) * 0.5f;
+	}
+	float head3Cx() const { return (box.size.x - specW() - mm2px(3.f)) * 0.5f + mm2px(1.5f); }
+
+	void drawHead3D(const DrawArgs& args, float cxIgnored, float cyIgnored, float radIgnored) {
+		(void)cxIgnored; (void)cyIgnored; (void)radIgnored;
+		const int RINGS = 12, SECT = 36, ARCS = 6;
 		const sfs::MembraneShapes& sh = sfs::membraneShapes();
-		const float TILT = 0.40f;               // cosine of the viewing angle
-		float hgt = rad * 0.42f;
+		float rad = head3Rad(), cx = head3Cx();
+		float hgt = rad * 0.34f;
+		// The shell. Tied to AIR, which IS the cavity, so the picture says
+		// something rather than being a constant box.
+		float airv = module ? clamp(module->params[Skin::AIR_PARAM].getValue(), 0.f, 1.f) : 0.35f;
+		float shell = rad * (0.16f + 0.16f * airv);
+		float cy = head3Cy();
 		float sa = module ? module->dispA : 0.f;
 
-		// Angular factor per (mode, sector). A strike orients each doublet along
-		// itself, so the angle is measured from where the head was last hit.
 		static float ang[sfs::Drum::NM][SECT + 1];
 		for (int k = 0; k < sfs::Drum::NM; k++) {
 			int mm = sfs::MEMBRANE_MODES[k].m;
-			for (int j = 0; j <= SECT; j++) {
-				float th = 2.f * (float)M_PI * (float)j / SECT;
-				ang[k][j] = std::cos(mm * (th - sa));
-			}
+			for (int j = 0; j <= SECT; j++)
+				ang[k][j] = std::cos(mm * (2.f * (float)M_PI * (float)j / SECT - sa));
 		}
 		float z[RINGS + 1][SECT + 1];
 		float zmax = 1e-6f;
@@ -314,8 +341,7 @@ struct SkinDisplay : OpaqueWidget {
 			for (int j = 0; j <= SECT; j++) {
 				float v = 0.f;
 				for (int k = 0; k < sfs::Drum::NM; k++) {
-					float a = module ? module->modeVis[k]
-					                 : 0.55f * std::exp(-k * 0.30f);
+					float a = module ? module->modeVis[k] : 0.55f * std::exp(-k * 0.30f);
 					if (a < 1e-4f) continue;
 					v += a * sh.at(k, u) * ang[k][j];
 				}
@@ -323,36 +349,77 @@ struct SkinDisplay : OpaqueWidget {
 				zmax = std::max(zmax, std::fabs(v));
 			}
 		}
-		float zs = hgt / std::max(zmax, 0.35f);      // never blow a quiet head up
+		float zs = hgt / std::max(zmax, 0.35f);
 
-		auto px = [&](int i, int j, float& X, float& Y) {
+		auto PX = [&](int i, int j, float& X, float& Y) {
 			float u = (float)i / RINGS, th = 2.f * (float)M_PI * (float)j / SECT;
 			X = cx + std::cos(th) * u * rad;
 			Y = cy + std::sin(th) * u * rad * TILT - z[i][j] * zs;
 		};
-		// rim first, then the rings inward, then the spokes: painter's order, so
-		// the near edge of the surface covers the far one.
+		// Excited areas warm toward the plugin's orange. Depth cue on top: the
+		// far half of the surface sits back a little.
+		auto col = [&](float amp, float th) {
+			float hot = clamp(amp, 0.f, 1.f);
+			float far = 0.72f + 0.28f * (0.5f + 0.5f * std::sin(th));
+			return nvgRGBAf(0.00f + 0.92f * hot, 0.59f - 0.19f * hot, 0.87f - 0.69f * hot,
+			                (0.30f + 0.60f * hot) * far);
+		};
+
 		nvgLineCap(args.vg, NVG_ROUND);
-		for (int i = RINGS; i >= 1; i--) {
+
+		// ── the shell, drawn first so the head sits on top of it ──────────────
+		{
 			nvgBeginPath(args.vg);
 			for (int j = 0; j <= SECT; j++) {
-				float X, Y; px(i, j, X, Y);
+				float th = 2.f * (float)M_PI * (float)j / SECT;
+				float X = cx + std::cos(th) * rad, Y = cy + std::sin(th) * rad * TILT + shell;
 				if (j == 0) nvgMoveTo(args.vg, X, Y); else nvgLineTo(args.vg, X, Y);
 			}
-			float lit = clamp(std::fabs(z[i][SECT / 4]) * zs / std::max(hgt, 1.f), 0.f, 1.f);
-			nvgStrokeColor(args.vg, i == RINGS
-			               ? sfs::SCREEN_LINE
-			               : nvgRGBAf(0.0f, 0.59f, 0.87f, 0.28f + 0.62f * lit));
-			nvgStrokeWidth(args.vg, i == RINGS ? 1.4f : 0.9f);
+			nvgStrokeColor(args.vg, nvgRGBAf(0.21f, 0.21f, 0.30f, 0.95f));
+			nvgStrokeWidth(args.vg, 1.2f);
 			nvgStroke(args.vg);
+			for (int j = 0; j <= SECT; j += 3) {
+				float th = 2.f * (float)M_PI * (float)j / SECT;
+				if (std::sin(th) < -0.15f) continue;          // the back wall is hidden
+				float X = cx + std::cos(th) * rad, Y0 = cy + std::sin(th) * rad * TILT;
+				nvgBeginPath(args.vg);
+				nvgMoveTo(args.vg, X, Y0); nvgLineTo(args.vg, X, Y0 + shell);
+				nvgStrokeColor(args.vg, nvgRGBAf(0.21f, 0.21f, 0.30f, 0.85f));
+				nvgStrokeWidth(args.vg, 0.9f);
+				nvgStroke(args.vg);
+			}
+		}
+
+		// ── the surface: rings in arcs so colour is local, then spokes ────────
+		for (int i = RINGS; i >= 1; i--) {
+			int per = SECT / ARCS;
+			for (int a = 0; a < ARCS; a++) {
+				int j0 = a * per, j1 = j0 + per;
+				float amp = 0.f;
+				for (int j = j0; j <= j1; j++) amp = std::max(amp, std::fabs(z[i][j]) * zs / hgt);
+				nvgBeginPath(args.vg);
+				for (int j = j0; j <= j1; j++) {
+					float X, Y; PX(i, j, X, Y);
+					if (j == j0) nvgMoveTo(args.vg, X, Y); else nvgLineTo(args.vg, X, Y);
+				}
+				float thm = 2.f * (float)M_PI * (float)(j0 + per / 2) / SECT;
+				nvgStrokeColor(args.vg, i == RINGS ? sfs::SCREEN_LINE : col(amp, thm));
+				nvgStrokeWidth(args.vg, i == RINGS ? 1.5f : 0.9f + amp * 1.6f);
+				nvgStroke(args.vg);
+			}
 		}
 		for (int j = 0; j < SECT; j += 2) {
+			float amp = 0.f;
+			for (int i = 0; i <= RINGS; i++) amp = std::max(amp, std::fabs(z[i][j]) * zs / hgt);
 			nvgBeginPath(args.vg);
 			for (int i = 0; i <= RINGS; i++) {
-				float X, Y; px(i, j, X, Y);
+				float X, Y; PX(i, j, X, Y);
 				if (i == 0) nvgMoveTo(args.vg, X, Y); else nvgLineTo(args.vg, X, Y);
 			}
-			nvgStrokeColor(args.vg, nvgRGBAf(0.0f, 0.59f, 0.87f, 0.20f));
+			float th = 2.f * (float)M_PI * (float)j / SECT;
+			NVGcolor c = col(amp * 0.8f, th);
+			c.a *= 0.65f;
+			nvgStrokeColor(args.vg, c);
 			nvgStrokeWidth(args.vg, 0.7f);
 			nvgStroke(args.vg);
 		}
@@ -362,10 +429,10 @@ struct SkinDisplay : OpaqueWidget {
 		float cy = box.size.y * 0.5f;
 		float rad = headRad(), cx = headCx();
 		if (module && module->headView == 1) {
-			drawHead3D(args, cx, cy, rad);
-			drawSpectrum(args, cx + rad + mm2px(4.f), box.size.x - mm2px(2.f));
-			drawStrikeMark(args, cx, cy, rad);
-			drawReadout(args, cx);
+			drawHead3D(args, 0, 0, 0);
+			drawSpectrum(args, box.size.x - specW(), box.size.x - mm2px(2.f));
+			drawStrikeMark(args, head3Cx(), head3Cy(), head3Rad());
+			drawReadout(args, head3Cx());
 			return;
 		}
 		head(args, cx, cy, rad);
@@ -463,10 +530,11 @@ struct SkinDisplay : OpaqueWidget {
 	void drawPreview(const DrawArgs& args) {
 		float cy = box.size.y * 0.5f;
 		float rad = headRad(), cx = headCx();
-		drawHead3D(args, cx, cy, rad);
-		drawSpectrum(args, cx + rad + mm2px(4.f), box.size.x - mm2px(2.f));
+		drawHead3D(args, 0, 0, 0);
+		drawSpectrum(args, box.size.x - specW(), box.size.x - mm2px(2.f));
 		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, cx + rad * 0.42f, cy - rad * 0.30f * 0.40f, mm2px(1.6f));
+		nvgCircle(args.vg, head3Cx() + head3Rad() * 0.42f,
+		          head3Cy() - head3Rad() * 0.30f * TILT, mm2px(1.6f));
 		nvgFillColor(args.vg, nvgRGBAf(0.93f, 0.40f, 0.18f, 0.9f));
 		nvgFill(args.vg);
 		return;
