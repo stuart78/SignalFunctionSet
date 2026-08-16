@@ -146,6 +146,20 @@ MIX L, MIX R, **EVEN** (strings 2, 4, 6, 8 summed) and **ODD** (1, 3, 5, 7).
 The even/odd pair is a cheap way to get two related but distinct signals out
 without an expander. Send them to different amps and the instrument widens.
 
+## What a gate does
+
+One stroke, never a strum.
+
+- **V/oct set to "places the bar and picks the string"**, with V/OCT patched:
+  the gate picks the string the solver chose for that note.
+- **V/oct set to "transposes"**, or melody mode with nothing in V/OCT: the gate
+  plays one step of the selected roll pattern, exactly as a CLOCK tick would.
+  VEL sets the stroke's strength.
+
+If you want a gate to strum all eight strings, select the **Strum** roll
+pattern. That is a thing to ask for rather than a thing that should happen to
+you, which is why it lives in the pattern selector.
+
 ## Legato reach
 
 In the context menu, measured in frets.

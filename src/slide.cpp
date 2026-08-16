@@ -508,7 +508,10 @@ struct Slide : Module {
 		}
 	}
 
-	void rollStep() {
+	// base is the stroke's velocity before the pattern accent and the DYN
+	// jitter shape it. The auto roll keeps its own 0.92; a gate passes what came
+	// in on VEL.
+	void rollStep(float base = 0.92f) {
 		// ±5V sweeps the WHOLE list. At 1V per pattern -- the convention for
 		// ROOT and SCALE, which have to mean the same thing across modules --
 		// reaching the last of sixteen needs 15V, so an ordinary LFO only ever
@@ -521,7 +524,7 @@ struct Slide : Module {
 		float dyn = clamp(params[DYN_PARAM].getValue(), 0.f, 1.f);
 
 		if (std::string(SLIDE_ROLLS[pat].name) == "Strum") {
-			if (random::uniform() <= density) strum(0.92f);
+			if (random::uniform() <= density) strum(base);
 			rollIdx++;
 			return;
 		}
@@ -540,7 +543,7 @@ struct Slide : Module {
 		// SHAPE and the jitter is only the wobble on top of it. Jitter alone
 		// makes every stroke a different random size, which is not how a hand
 		// plays — it is how a random number generator plays.
-		float vel = 0.92f * (1.f + dyn * (accent - 1.f))
+		float vel = base * (1.f + dyn * (accent - 1.f))
 		          * (1.f + dyn * 0.15f * (2.f * random::uniform() - 1.f));
 		// One move per completed cycle of the roll, so a phrase gets played
 		// somewhere before the hand goes anywhere else.
@@ -861,8 +864,16 @@ struct Slide : Module {
 			if (gateTrig.process(inputs[GATE_INPUT].getVoltage(), 0.1f, 1.f)) {
 				float gv = inputs[VEL_INPUT].isConnected()
 				         ? clamp(inputs[VEL_INPUT].getVoltage() / 10.f, 0.03f, 1.f) : 1.f;
+				// A GATE IS ONE STROKE, NEVER A STRUM. In melody mode with V/OCT
+				// patched that stroke is the solved string. Everywhere else --
+				// transpose mode, or melody with no pitch to go on -- it plays one
+				// step of the selected roll, exactly as a CLOCK tick would. A bare
+				// gate used to strum all eight strings, which is a thing you have
+				// to ask for rather than a thing that should happen to you; it is
+				// still one pattern-selector click away, because "Strum" is one of
+				// the roll patterns.
 				if (playMode == 1 && inputs[VOCT_INPUT].isConnected()) pick(melodyString, gv);
-				else strum(gv);
+				else rollStep(gv);
 			}
 		}
 		else {
