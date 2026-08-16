@@ -11,6 +11,28 @@
 // found. This file is the instrument around it: the parameters, the strike, and
 // a head you can play with the mouse.
 
+// Presets, written as what the instrument IS -- 110 Hz, 1.1 s -- and converted
+// to knob positions by inverting the module's own mappings, so they cannot drift
+// from what process() actually does with the numbers.
+struct SkinPreset {
+	const char* name;
+	float size, tension, material, air, decay, tone, couple, reso,
+	      excite, muffle, bend, snare, snareTune, strikeY;
+};
+static const SkinPreset SKIN_PRESETS[] = {
+	{"Tom",          0.510f, 0.50f, 0.00f, 0.00f, 0.581f, 0.50f, 0.40f, 1.12f, 0.75f, 0.00f, 0.71f, 0.00f, 0.52f, 0.46f},
+	{"Floor tom",    0.654f, 0.50f, 0.00f, 0.00f, 0.640f, 0.45f, 0.45f, 1.08f, 0.70f, 0.05f, 0.86f, 0.00f, 0.52f, 0.41f},
+	{"Timpani",      0.699f, 0.50f, 0.00f, 1.00f, 0.773f, 0.35f, 0.30f, 1.00f, 0.30f, 0.00f, 0.43f, 0.00f, 0.52f, 0.74f},
+	{"Kick",         0.856f, 0.50f, 0.00f, 0.00f, 0.352f, 0.90f, 0.55f, 0.85f, 0.85f, 0.55f, 1.00f, 0.00f, 0.52f, 0.29f},
+	{"Snare",        0.282f, 0.50f, 0.00f, 0.00f, 0.370f, 0.80f, 0.50f, 1.30f, 0.90f, 0.00f, 0.57f, 0.80f, 0.22f, 0.52f},
+	{"Brush snare",  0.282f, 0.50f, 0.00f, 0.00f, 0.400f, 0.70f, 0.50f, 1.30f, 0.15f, 0.00f, 0.57f, 0.60f, 0.12f, 0.72f},
+	{"Gong",         0.799f, 0.50f, 1.00f, 0.00f, 0.689f, 0.20f, 0.20f, 1.00f, 0.50f, 0.00f, 0.29f, 0.00f, 0.52f, 0.52f},
+	{"Steel pan",    0.185f, 0.50f, 0.70f, 0.00f, 0.756f, 0.30f, 0.25f, 1.00f, 0.60f, 0.00f, 0.29f, 0.00f, 0.52f, 0.64f},
+	{"Frame drum",   0.441f, 0.50f, 0.00f, 0.20f, 0.523f, 0.60f, 0.25f, 1.00f, 0.45f, 0.20f, 1.00f, 0.00f, 0.52f, 0.82f},
+	{"Tabla",        0.221f, 0.50f, 0.15f, 0.50f, 0.658f, 0.55f, 0.30f, 1.00f, 0.80f, 0.35f, 1.00f, 0.00f, 0.52f, 0.70f},
+};
+static const int SKIN_NPRESET = (int)(sizeof(SKIN_PRESETS) / sizeof(SKIN_PRESETS[0]));
+
 struct Skin : Module {
 	enum ParamId {
 		SIZE_PARAM, TENSION_PARAM, STIFF_PARAM, AIR_PARAM,
@@ -181,6 +203,29 @@ struct Skin : Module {
 		lights[STRIKE_LIGHT].setBrightness(uiFlash);
 	}
 
+	void loadPreset(int i) {
+		if (i < 0 || i >= SKIN_NPRESET) return;
+		const SkinPreset& p = SKIN_PRESETS[i];
+		params[SIZE_PARAM].setValue(p.size);
+		params[TENSION_PARAM].setValue(p.tension);
+		params[STIFF_PARAM].setValue(p.material);
+		params[AIR_PARAM].setValue(p.air);
+		params[DECAY_PARAM].setValue(p.decay);
+		params[TONE_PARAM].setValue(p.tone);
+		params[COUPLE_PARAM].setValue(p.couple);
+		params[RESO_PARAM].setValue(p.reso);
+		params[EXCITE_PARAM].setValue(p.excite);
+		params[MUFFLE_PARAM].setValue(p.muffle);
+		params[BEND_PARAM].setValue(p.bend);
+		params[SNARE_PARAM].setValue(p.snare);
+		params[SNARETHR_PARAM].setValue(p.snareTune);
+		// Straight up the head: the radius is the tone control, the angle only
+		// matters against the muffle.
+		params[STRIKEX_PARAM].setValue(0.f);
+		params[STRIKEY_PARAM].setValue(p.strikeY);
+		ctl = 0;                       // re-solve the layout on the next sample
+	}
+
 	void onReset() override { drum.clear(); }
 	void onSampleRateChange() override { drum.sr = APP->engine->getSampleRate(); drum.clear(); }
 };
@@ -225,10 +270,16 @@ struct SkinDisplay : OpaqueWidget {
 	// amplitude * J_m(j_mn r) * cos(m theta). Drawn as rings rather than a full
 	// raster because the radial part is what the strike controls, and a ring
 	// reads as a drum head where a heat map reads as a physics demo.
+	// Where the head sits in a wide screen: centred vertically, tucked left, so
+	// the remaining width is a usable panel rather than padding.
+	float headRad() const { return box.size.y * 0.5f - mm2px(1.2f); }
+	float headCx()  const { return mm2px(1.2f) + headRad(); }
+
 	void drawLive(const DrawArgs& args) {
-		float cx = box.size.x * 0.5f, cy = box.size.y * 0.5f;
-		float rad = std::min(cx, cy) - mm2px(1.2f);
+		float cy = box.size.y * 0.5f;
+		float rad = headRad(), cx = headCx();
 		head(args, cx, cy, rad);
+		drawSpectrum(args, cx + rad + mm2px(4.f), box.size.x - mm2px(2.f));
 
 		const sfs::MembraneShapes& sh = sfs::membraneShapes();
 		const int RINGS = 22;
@@ -286,10 +337,30 @@ struct SkinDisplay : OpaqueWidget {
 
 	// The browser thumbnail. Without this the module is a dark slab in the
 	// library and says nothing about what it is.
+	// One bar per mode, tallest at the fundamental: the 1/omega excitation tilt
+	// and the frequency-dependent damping are both visible here and nowhere else.
+	void drawSpectrum(const DrawArgs& args, float x0, float x1) {
+		if (x1 - x0 < mm2px(8.f)) return;
+		float y1 = box.size.y - mm2px(4.f), h = box.size.y - mm2px(9.f);
+		float w = (x1 - x0) / (float)sfs::Drum::NM;
+		for (int k = 0; k < sfs::Drum::NM; k++) {
+			float a = module ? clamp(module->modeVis[k] * 2.2f, 0.f, 1.f)
+			                 : 0.9f * std::exp(-k * 0.12f);
+			float bh = 1.5f + a * h;
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, x0 + k * w, y1 - bh, std::max(w - 1.2f, 1.f), bh);
+			nvgFillColor(args.vg, a > 0.02f
+			             ? nvgRGBAf(0.0f, 0.59f, 0.87f, 0.35f + a * 0.65f)
+			             : sfs::SCREEN_PURP);
+			nvgFill(args.vg);
+		}
+	}
+
 	void drawPreview(const DrawArgs& args) {
-		float cx = box.size.x * 0.5f, cy = box.size.y * 0.5f;
-		float rad = std::min(cx, cy) - mm2px(1.2f);
+		float cy = box.size.y * 0.5f;
+		float rad = headRad(), cx = headCx();
 		head(args, cx, cy, rad);
+		drawSpectrum(args, cx + rad + mm2px(4.f), box.size.x - mm2px(2.f));
 		for (int i = 1; i <= 7; i++) {
 			float u = i / 7.f;
 			float a = 0.55f * std::fabs(std::cos(u * 4.2f)) * (1.f - u * 0.5f);
@@ -307,8 +378,8 @@ struct SkinDisplay : OpaqueWidget {
 
 	void hit(Vec p, float vel) {
 		if (!module) return;
-		float cx = box.size.x * 0.5f, cy = box.size.y * 0.5f;
-		float rad = std::min(cx, cy) - mm2px(1.2f);
+		float cy = box.size.y * 0.5f;
+		float rad = headRad(), cx = headCx();
 		float x = (p.x - cx) / (rad * 0.93f), y = (p.y - cy) / (rad * 0.93f);
 		float r = std::sqrt(x * x + y * y);
 		if (r > 1.f) { x /= r; y /= r; }
@@ -344,6 +415,22 @@ struct SkinDisplay : OpaqueWidget {
 };
 
 struct SkinWidget : ModuleWidget {
+	void appendContextMenu(Menu* menu) override {
+		Skin* m = dynamic_cast<Skin*>(this->module);
+		assert(m);
+		menu->addChild(new MenuSeparator);
+		// These are the instruments the engine was measured against while it was
+		// being built, so they are also the shortest route to hearing whether a
+		// change broke something.
+		menu->addChild(createSubmenuItem("Instruments", "", [=](Menu* sub) {
+			for (int i = 0; i < SKIN_NPRESET; i++) {
+				int idx = i;
+				sub->addChild(createMenuItem(SKIN_PRESETS[i].name, "",
+				                             [=]() { m->loadPreset(idx); }));
+			}
+		}));
+	}
+
 	SkinWidget(Skin* module) {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/skin.svg")));
@@ -356,8 +443,11 @@ struct SkinWidget : ModuleWidget {
 
 		SkinDisplay* disp = new SkinDisplay();
 		disp->module = module;
-		disp->box.pos  = mm2px(Vec(31.88f, 11.f));
-		disp->box.size = mm2px(Vec(48.f, 48.f));
+		// Full width. The head is a circle so its size is set by the height; the
+		// width that buys goes to the mode spectrum beside it, which is the one
+		// thing about this engine you cannot see from the head alone.
+		disp->box.pos  = mm2px(Vec(3.f, 11.f));
+		disp->box.size = mm2px(Vec(105.76f, 48.f));
 		addChild(disp);
 
 		// Vertical positions are millimetres on a 128.5 mm panel. Only the
