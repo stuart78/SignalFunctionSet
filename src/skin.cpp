@@ -11,6 +11,86 @@
 // found. This file is the instrument around it: the parameters, the strike, and
 // a head you can play with the mouse.
 
+// ── tooltips that say something ─────────────────────────────────────────────
+// "Size 45%" tells you nothing you could act on. A drum has a diameter, a head
+// has a pitch, a beater has a weight and a contact time -- and every one of
+// those is already implied by the knob, so printing the percentage instead is
+// throwing information away. Each of these reads the module and reports the
+// quantity the control actually sets.
+struct SkinSizeQ : ParamQuantity {
+	std::string getDisplayValueString() override {
+		// The range spans roughly a 6-inch splash to a 22-inch kick.
+		float in = 6.f * std::pow(22.f / 6.f, clamp(getValue(), 0.f, 1.f));
+		return string::f("%.0f in (%.0f cm)", in, in * 2.54f);
+	}
+};
+struct SkinTensionQ : ParamQuantity {
+	std::string getDisplayValueString() override {
+		float st = (clamp(getValue(), 0.f, 1.f) - 0.5f) * 1.4f * 12.f;
+		return string::f("%+.1f semitones", st);
+	}
+};
+struct SkinDecayQ : ParamQuantity {
+	std::string getDisplayValueString() override {
+		// Depends on SIZE as well, so read it rather than pretending it does not.
+		float sz = 0.45f;
+		if (module) sz = clamp(module->params[0].getValue(), 0.f, 1.f);
+		float sec = 0.08f * std::pow(90.f, clamp(getValue(), 0.f, 1.f)) * (0.6f + 0.8f * sz);
+		return sec < 1.f ? string::f("%.0f ms", sec * 1000.f) : string::f("%.2f s", sec);
+	}
+};
+struct SkinExciteQ : ParamQuantity {
+	std::string getDisplayValueString() override {
+		float h = clamp(getValue(), 0.f, 1.f);
+		// tau ~ pi*sqrt(m/k), the same numbers strike() uses
+		float m = 0.05f - 0.035f * h, k = 1.0e8f * std::pow(0.1f, h);
+		float ms = (float)M_PI * std::sqrt(m / k) * 1000.f * 6.f;   // ~ the measured span
+		const char* n = h < 0.2f ? "soft felt" : h < 0.45f ? "felt mallet"
+		              : h < 0.7f ? "hard mallet" : h < 0.9f ? "wood stick" : "hard stick";
+		return string::f("%s, %.1f ms contact", n, ms);
+	}
+};
+struct SkinWeightQ : ParamQuantity {
+	std::string getDisplayValueString() override {
+		return string::f("%.0f g", clamp(getValue(), 0.3f, 2.f) * 35.f);
+	}
+};
+struct SkinMaterialQ : ParamQuantity {
+	std::string getDisplayValueString() override {
+		float v = clamp(getValue(), 0.f, 1.f);
+		const char* n = v < 0.12f ? "drum head" : v < 0.35f ? "stiff head"
+		              : v < 0.6f ? "thin plate" : v < 0.85f ? "plate" : "gong";
+		return string::f("%s (%.0f%%)", n, v * 100.f);
+	}
+};
+struct SkinAirQ : ParamQuantity {
+	std::string getDisplayValueString() override {
+		float v = clamp(getValue(), 0.f, 1.f);
+		const char* n = v < 0.1f ? "open, no shell" : v < 0.4f ? "shallow shell"
+		              : v < 0.75f ? "deep shell" : "sealed kettle (pitched)";
+		return string::f("%s (%.0f%%)", n, v * 100.f);
+	}
+};
+struct SkinToneQ : ParamQuantity {
+	std::string getDisplayValueString() override {
+		float v = clamp(getValue(), 0.f, 1.f);
+		const char* n = v < 0.2f ? "partials ring on" : v < 0.45f ? "bright"
+		              : v < 0.7f ? "natural" : v < 0.9f ? "dark" : "partials die at once";
+		return string::f("%s (%.0f%%)", n, v * 100.f);
+	}
+};
+struct SkinBendQ : ParamQuantity {
+	std::string getDisplayValueString() override {
+		return string::f("%.1f semitones at full strike", clamp(getValue(), 0.f, 1.f) * 4.2f);
+	}
+};
+struct SkinResoQ : ParamQuantity {
+	std::string getDisplayValueString() override {
+		float v = clamp(getValue(), 0.6f, 1.6f);
+		return string::f("%+.1f semitones vs the batter head", 12.f * std::log2(v));
+	}
+};
+
 // Presets, written as what the instrument IS -- 110 Hz, 1.1 s -- and converted
 // to knob positions by inverting the module's own mappings, so they cannot drift
 // from what process() actually does with the numbers.
@@ -74,23 +154,23 @@ struct Skin : Module {
 		// the same control. They only separate through stiffness, the cavity and
 		// damping, which is why those exist. SIZE is the slow one: a big drum is
 		// low and dark, and it stays dark when you tighten it.
-		configParam(SIZE_PARAM, 0.f, 1.f, 0.45f, "Size", "%", 0.f, 100.f);
-		configParam(TENSION_PARAM, 0.f, 1.f, 0.5f, "Tension", "%", 0.f, 100.f);
-		configParam(STIFF_PARAM, 0.f, 1.f, 0.f, "Material", "%", 0.f, 100.f);
-		configParam(AIR_PARAM, 0.f, 1.f, 0.f, "Air (cavity)", "%", 0.f, 100.f);
-		configParam(DECAY_PARAM, 0.f, 1.f, 0.5f, "Decay", "%", 0.f, 100.f);
-		configParam(TONE_PARAM, 0.f, 1.f, 0.5f, "Tone", "%", 0.f, 100.f);
-		configParam(COUPLE_PARAM, 0.f, 1.f, 0.4f, "Head coupling", "%", 0.f, 100.f);
-		configParam(RESO_PARAM, 0.6f, 1.6f, 1.1f, "Resonant head tune", "x");
-		configParam(EXCITE_PARAM, 0.f, 1.f, 0.7f, "Exciter (soft to stick)", "%", 0.f, 100.f);
-		configParam(WEIGHT_PARAM, 0.3f, 2.f, 1.f, "Beater weight", "x");
-		configParam(BEND_PARAM, 0.f, 1.f, 0.25f, "Bend (tension modulation)", "%", 0.f, 100.f);
+		configParam<SkinSizeQ>(SIZE_PARAM, 0.f, 1.f, 0.45f, "Drum size");
+		configParam<SkinTensionQ>(TENSION_PARAM, 0.f, 1.f, 0.5f, "Head tension");
+		configParam<SkinMaterialQ>(STIFF_PARAM, 0.f, 1.f, 0.f, "Material");
+		configParam<SkinAirQ>(AIR_PARAM, 0.f, 1.f, 0.f, "Air cavity");
+		configParam<SkinDecayQ>(DECAY_PARAM, 0.f, 1.f, 0.5f, "Decay");
+		configParam<SkinToneQ>(TONE_PARAM, 0.f, 1.f, 0.5f, "Tone (how fast partials die)");
+		configParam(COUPLE_PARAM, 0.f, 1.f, 0.4f, "Coupling between the two heads", "%", 0.f, 100.f);
+		configParam<SkinResoQ>(RESO_PARAM, 0.6f, 1.6f, 1.1f, "Resonant head tuning");
+		configParam<SkinExciteQ>(EXCITE_PARAM, 0.f, 1.f, 0.7f, "Beater");
+		configParam<SkinWeightQ>(WEIGHT_PARAM, 0.3f, 2.f, 1.f, "Beater weight");
+		configParam<SkinBendQ>(BEND_PARAM, 0.f, 1.f, 0.25f, "Bend (pitch drop after the hit)");
 		configParam(STRIKEX_PARAM, -1.f, 1.f, 0.f, "Strike X");
 		configParam(STRIKEY_PARAM, -1.f, 1.f, 0.42f, "Strike Y");
-		configParam(MUFFLE_PARAM, 0.f, 1.f, 0.f, "Muffle", "%", 0.f, 100.f);
+		configParam(MUFFLE_PARAM, 0.f, 1.f, 0.f, "Muffle (a hand on the head)", "%", 0.f, 100.f);
 		configParam(MUFFLEANG_PARAM, -1.f, 1.f, 0.f, "Muffle angle");
-		configParam(SNARE_PARAM, 0.f, 1.f, 0.f, "Wires", "%", 0.f, 100.f);
-		configParam(SNARETHR_PARAM, 0.f, 1.f, 0.3f, "Wire tightness", "%", 0.f, 100.f);
+		configParam(SNARE_PARAM, 0.f, 1.f, 0.f, "Snare wires", "%", 0.f, 100.f);
+		configParam(SNARETHR_PARAM, 0.f, 1.f, 0.3f, "Wire tightness (loose buzz to tight snap)", "%", 0.f, 100.f);
 		configParam(LEVEL_PARAM, 0.f, 2.f, 1.f, "Level", "x");
 		configButton(STRIKE_PARAM, "Strike");
 
@@ -297,23 +377,32 @@ struct SkinDisplay : OpaqueWidget {
 	// have had.
 	static constexpr float TILT = 0.40f;
 
-	float head3Rad() const {
-		float wAvail = box.size.x - specW() - mm2px(5.f);
-		// budget: rise above + 0.8r of tilted disc + shell below + margins
-		float byH = (box.size.y - mm2px(5.f)) / (2.f * TILT + 0.30f + 0.34f);
-		return std::min(wAvail * 0.5f, byH);
+	// SIZE is drawn, not just heard: a 22-inch kick should look like one next to
+	// a 6-inch splash. The range is kept off zero so a small drum is still a
+	// drum rather than a dot.
+	float sizeScale() const {
+		float sz = module ? clamp(module->params[Skin::SIZE_PARAM].getValue(), 0.f, 1.f) : 0.55f;
+		return 0.52f + 0.48f * sz;
 	}
-	float specW() const { return mm2px(24.f); }
+	float head3Rad() const {
+		// Centred on the WHOLE screen, so the room either side has to clear the
+		// spectrum on the right -- otherwise "centred" and "does not overlap"
+		// cannot both be true.
+		float wAvail = box.size.x - 2.f * (specW() + mm2px(2.f));
+		float byH = (box.size.y - mm2px(5.f)) / (2.f * TILT + 0.34f + 0.34f);
+		return std::min(wAvail * 0.5f, byH) * sizeScale();
+	}
+	float specW() const { return mm2px(18.f); }
 	// The object is rise + tilted disc + shell, so its centre is not the box's.
 	// Both the surface and the strike mark must agree about this or the mark
 	// floats off the head.
 	float head3Cy() const {
 		float rad = head3Rad(), hgt = rad * 0.34f;
 		float airv = module ? clamp(module->params[Skin::AIR_PARAM].getValue(), 0.f, 1.f) : 0.35f;
-		float shell = rad * (0.16f + 0.16f * airv);
+		float shell = rad * 0.34f * airv;      // no cavity, no shell
 		return box.size.y * 0.5f - (shell - hgt) * 0.5f;
 	}
-	float head3Cx() const { return (box.size.x - specW() - mm2px(3.f)) * 0.5f + mm2px(1.5f); }
+	float head3Cx() const { return box.size.x * 0.5f; }
 
 	void drawHead3D(const DrawArgs& args, float cxIgnored, float cyIgnored, float radIgnored) {
 		(void)cxIgnored; (void)cyIgnored; (void)radIgnored;
@@ -324,7 +413,7 @@ struct SkinDisplay : OpaqueWidget {
 		// The shell. Tied to AIR, which IS the cavity, so the picture says
 		// something rather than being a constant box.
 		float airv = module ? clamp(module->params[Skin::AIR_PARAM].getValue(), 0.f, 1.f) : 0.35f;
-		float shell = rad * (0.16f + 0.16f * airv);
+		float shell = rad * 0.34f * airv;
 		float cy = head3Cy();
 		float sa = module ? module->dispA : 0.f;
 
@@ -351,8 +440,14 @@ struct SkinDisplay : OpaqueWidget {
 		}
 		float zs = hgt / std::max(zmax, 0.35f);
 
+		// A taut head pulls its grid out toward the rim; a slack one lets it
+		// gather in the middle. Same rings, redistributed -- which is what
+		// tension does to a real head's response, and it reads instantly.
+		float tens = module ? clamp(module->params[Skin::TENSION_PARAM].getValue(), 0.f, 1.f) : 0.5f;
+		float warp = 1.f - 0.55f * (tens - 0.5f);        // <1 pushes rings outward
 		auto PX = [&](int i, int j, float& X, float& Y) {
-			float u = (float)i / RINGS, th = 2.f * (float)M_PI * (float)j / SECT;
+			float u = std::pow((float)i / RINGS, warp);
+			float th = 2.f * (float)M_PI * (float)j / SECT;
 			X = cx + std::cos(th) * u * rad;
 			Y = cy + std::sin(th) * u * rad * TILT - z[i][j] * zs;
 		};
@@ -368,7 +463,7 @@ struct SkinDisplay : OpaqueWidget {
 		nvgLineCap(args.vg, NVG_ROUND);
 
 		// ── the shell, drawn first so the head sits on top of it ──────────────
-		{
+		if (shell >= 1.f) {
 			nvgBeginPath(args.vg);
 			for (int j = 0; j <= SECT; j++) {
 				float th = 2.f * (float)M_PI * (float)j / SECT;
@@ -379,6 +474,7 @@ struct SkinDisplay : OpaqueWidget {
 			nvgStrokeWidth(args.vg, 1.2f);
 			nvgStroke(args.vg);
 			for (int j = 0; j <= SECT; j += 3) {
+				if (shell < 1.f) break;
 				float th = 2.f * (float)M_PI * (float)j / SECT;
 				if (std::sin(th) < -0.15f) continue;          // the back wall is hidden
 				float X = cx + std::cos(th) * rad, Y0 = cy + std::sin(th) * rad * TILT;
@@ -389,6 +485,8 @@ struct SkinDisplay : OpaqueWidget {
 				nvgStroke(args.vg);
 			}
 		}
+
+		drawWires(args, cx, cy, rad, shell);
 
 		// ── the surface: rings in arcs so colour is local, then spokes ────────
 		for (int i = RINGS; i >= 1; i--) {
@@ -472,18 +570,57 @@ struct SkinDisplay : OpaqueWidget {
 
 	// Both views mark the strike the same way; in 3D it is flattened onto the
 	// tilted plane so it still sits where you clicked.
+	// The beater, drawn as what it is. A felt mallet is broad and its edge is
+	// soft; a stick is small and hard. Those are the same two things EXCITER
+	// changes in the sound -- contact area and contact time -- so the icon and
+	// the tone move together instead of the icon being decoration.
 	void drawStrikeMark(const DrawArgs& args, float cx, float cy, float rad) {
 		if (!module) return;
 		bool three = module->headView == 1;
-		float tilt = three ? 0.40f : 0.93f;
+		float tilt = three ? TILT : 0.93f;
 		float sr = module->dispR * (three ? 1.f : 0.97f), sa = module->dispA;
 		float sx = cx + std::cos(sa) * sr * rad * (three ? 1.f : 0.93f);
 		float sy = cy + std::sin(sa) * sr * rad * tilt;
 		float f = clamp(module->uiFlash, 0.f, 1.f);
+		float hard = clamp(module->params[Skin::EXCITE_PARAM].getValue(), 0.f, 1.f);
+		float r = mm2px(2.6f - 1.5f * hard) + f * mm2px(1.8f);
+		// soft beater: a wide halo and no rim. stick: tight, with a hard edge.
+		NVGpaint g = nvgRadialGradient(args.vg, sx, sy, r * (0.15f + 0.70f * hard), r,
+		                               nvgRGBAf(0.93f, 0.40f, 0.18f, 0.45f + f * 0.55f),
+		                               nvgRGBAf(0.93f, 0.40f, 0.18f, 0.f));
 		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, sx, sy, mm2px(1.3f) + f * mm2px(2.2f));
-		nvgFillColor(args.vg, nvgRGBAf(0.93f, 0.40f, 0.18f, 0.35f + f * 0.65f));
+		nvgCircle(args.vg, sx, sy, r);
+		nvgFillPaint(args.vg, g);
 		nvgFill(args.vg);
+		if (hard > 0.35f) {
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, sx, sy, r * 0.55f);
+			nvgStrokeColor(args.vg, nvgRGBAf(0.97f, 0.55f, 0.30f,
+			                                 (hard - 0.35f) / 0.65f * (0.5f + f * 0.5f)));
+			nvgStrokeWidth(args.vg, 0.8f + hard);
+			nvgStroke(args.vg);
+		}
+	}
+
+	// The wires, lying across the bottom head. Present at full WIRES, fading out
+	// as it comes down, gone at zero -- so the picture agrees with whether you
+	// are listening to a snare drum or a tom.
+	void drawWires(const DrawArgs& args, float cx, float cy, float rad, float shell) {
+		if (!module) return;
+		float w = clamp(module->params[Skin::SNARE_PARAM].getValue(), 0.f, 1.f);
+		if (w < 0.02f) return;
+		float yb = cy + shell;
+		for (int i = -3; i <= 3; i++) {
+			float o = (float)i / 3.6f;
+			float half = std::sqrt(std::max(0.f, 1.f - o * o)) * rad;
+			float yy = yb + o * rad * TILT;
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, cx - half, yy);
+			nvgLineTo(args.vg, cx + half, yy);
+			nvgStrokeColor(args.vg, nvgRGBAf(0.85f, 0.85f, 0.90f, 0.10f + 0.55f * w * w));
+			nvgStrokeWidth(args.vg, 0.6f + 0.5f * w);
+			nvgStroke(args.vg);
+		}
 	}
 
 	void drawReadout(const DrawArgs& args, float cx) {
@@ -555,9 +692,19 @@ struct SkinDisplay : OpaqueWidget {
 
 	void hit(Vec p, float vel) {
 		if (!module) return;
-		float cy = box.size.y * 0.5f;
-		float rad = headRad(), cx = headCx();
-		float x = (p.x - cx) / (rad * 0.93f), y = (p.y - cy) / (rad * 0.93f);
+		// THE 3D VIEW HAS ITS OWN GEOMETRY and this was still inverting the flat
+		// one: a different centre, a different radius, and no tilt at all. So a
+		// click right of centre mapped past the rim, clamped, and landed on the
+		// edge -- or missed the head entirely and played nothing. The projection
+		// is X = cx + x*r and Y = cy + y*r*TILT, so undoing it means dividing the
+		// vertical by the tilt as well.
+		float cx, cy, rad, sq;
+		if (module->headView == 1) {
+			cx = head3Cx(); cy = head3Cy(); rad = head3Rad(); sq = TILT;
+		} else {
+			cx = headCx(); cy = box.size.y * 0.5f; rad = headRad() * 0.93f; sq = 1.f;
+		}
+		float x = (p.x - cx) / rad, y = (p.y - cy) / (rad * sq);
 		float r = std::sqrt(x * x + y * y);
 		if (r > 1.f) { x /= r; y /= r; }
 		module->pendX = clamp(x, -1.f, 1.f);
