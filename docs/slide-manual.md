@@ -146,6 +146,35 @@ MIX L, MIX R, **EVEN** (strings 2, 4, 6, 8 summed) and **ODD** (1, 3, 5, 7).
 The even/odd pair is a cheap way to get two related but distinct signals out
 without an expander. Send them to different amps and the instrument widens.
 
+## Playing with the mouse
+
+The fretboard is horizontal: along it is position on the neck, across it is the
+eight strings.
+
+- **Take hold of the bar** (the angled line) and drag it to move it.
+- **Click anywhere else** on the board to pick the string you clicked, at
+  whatever position the bar is already in.
+- **Hover** across the strings to strum them, if the Mouse menu is set to
+  "hover strums".
+
+Those are two hands, and they do not have to agree about where to be: the bar
+can be placed by V/OCT, by the BAR knob or by a previous drag, and clicking a
+string picks it there rather than dragging the bar to the click.
+
+## The volume pedal
+
+**SWELL** removes the pick attack and swells the note in behind it. That missing
+transient is the thing a slide can do that a portamento cannot fake.
+
+**VOL** is a pedal, and a pedal is **absolute and unipolar**: 0V is heel-down
+silence, 10V is toe-down full, and it overrides SWELL entirely. Patch a bipolar
+CV here and it spends half its cycle clamped at zero, which reads as the module
+having gone very quiet. That is the pedal doing its job.
+
+To *modulate* a level rather than set one, turn on **"VOL offsets the swell"**
+in the context menu. The input is then added to the knob's position instead of
+replacing it, so a small bipolar CV wobbles around where SWELL already is.
+
 ## What a gate does
 
 One stroke, never a strum.

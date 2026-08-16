@@ -313,6 +313,7 @@ struct Slide : Module {
 	// browser and the pointer crosses the rack.
 	bool  hoverInBackground = false;
 	int   mouseMode = 0;                 // 0 = hover strums, 1 = click-drag only
+	bool  volOffset = false;             // VOL: absolute pedal, or offset the knob
 
 	dsp::SchmittTrigger gateTrig, clockTrig, resetTrig, resetBtn;
 	dsp::SchmittTrigger xGate[SLIDE_NCH];      // Slide X's per-string gates
@@ -428,7 +429,7 @@ struct Slide : Module {
 		configInput(RESET_INPUT,    "Reset the roll");
 		configInput(PATTERN_CV_INPUT, "Roll CV (±5V sweeps all 16)");
 		configInput(DENSITY_CV_INPUT, "Roll density CV (±5V)");
-		configInput(VOL_INPUT, "Volume pedal (0–10V) — the real answer to swells; overrides SWELL");
+		configInput(VOL_INPUT, "Volume pedal, UNIPOLAR 0-10V (overrides SWELL), or bipolar offset by menu");
 		configInput(ROOT_CV_INPUT,  "Root CV (1V/oct, semitone-quantized)");
 		configInput(SCALE_CV_INPUT, "Scale CV (1V per scale; 0V = free)");
 
@@ -1045,7 +1046,16 @@ struct Slide : Module {
 		// The pedal itself, when one is patched: this is what a player's foot is
 		// actually doing, and it beats any envelope baked into the module.
 		if (inputs[VOL_INPUT].isConnected()) {
-			float vg = clamp(inputs[VOL_INPUT].getVoltage() / 10.f, 0.f, 1.f);
+			// A PEDAL IS ABSOLUTE. Heel is silence, toe is full, and 0-10V maps
+			// straight onto that -- which is why a bipolar CV patched here spends
+			// half its cycle clamped at zero and reads as "the module went very
+			// quiet". That is the pedal working, not failing. Offset mode adds
+			// the CV to the knob instead, for modulating a level rather than
+			// setting one.
+			float vg = volOffset
+			         ? clamp((1.f - clamp(params[SWELL_PARAM].getValue(), 0.f, 1.f))
+			                 + inputs[VOL_INPUT].getVoltage() / 10.f, 0.f, 1.f)
+			         : clamp(inputs[VOL_INPUT].getVoltage() / 10.f, 0.f, 1.f);
 			yL *= vg; yR *= vg;
 		}
 
@@ -1079,6 +1089,7 @@ struct Slide : Module {
 		json_object_set_new(r, "pickupType", json_integer(pickupType));
 		json_object_set_new(r, "stereoWidth", json_real(stereoWidth));
 		json_object_set_new(r, "mouseMode", json_integer(mouseMode));
+		json_object_set_new(r, "volOffset", json_boolean(volOffset));
 		json_object_set_new(r, "hoverInBackground", json_boolean(hoverInBackground));
 		json_object_set_new(r, "internalHz", json_real(internalHz));
 		json_t* t = json_array();
@@ -1092,6 +1103,7 @@ struct Slide : Module {
 		if (json_t* j = json_object_get(r, "pickupType")) pickupType = (int)json_integer_value(j);
 		if (json_t* j = json_object_get(r, "stereoWidth")) stereoWidth = json_number_value(j);
 		if (json_t* j = json_object_get(r, "mouseMode")) mouseMode = (int)json_integer_value(j);
+		if (json_t* j = json_object_get(r, "volOffset")) volOffset = json_is_true(j);
 		if (json_t* j = json_object_get(r, "hoverInBackground")) hoverInBackground = json_boolean_value(j);
 		if (json_t* j = json_object_get(r, "internalHz")) internalHz = json_number_value(j);
 		if (json_t* t = json_object_get(r, "tune"))
@@ -1148,9 +1160,22 @@ struct SlideDisplay : OpaqueWidget {
 		Lay L = layout();
 		if (e.pos.y < L.y0 || e.pos.y > L.y1) return;   // a miss falls through
 		e.consume(this);
-		draggingBar = true;
-		dragPos = e.pos;
-		module->params[Slide::BAR_PARAM].setValue(semisAt(L, e.pos.x));
+		// TAKE HOLD OF THE BAR TO MOVE IT; anywhere else on the board is a pick.
+		// Every press used to set BAR_PARAM to the x you clicked, so playing a
+		// string by clicking it always dragged the bar there as well and you
+		// could not pick at a position you had set any other way. On the
+		// instrument these are two hands: the left moves the bar, the right
+		// picks, and they do not have to agree about where to be.
+		float barX = L.fx(module->barSm);
+		if (std::fabs(e.pos.x - barX) <= mm2px(2.4f)) {
+			draggingBar = true;
+			// Grab it where it IS, not where the pointer is, so it does not jump
+			// by the couple of millimetres you were off by.
+			dragPos = Vec(barX, e.pos.y);
+			return;
+		}
+		int hit = stringHit(L, e.pos.y);
+		if (hit >= 0) module->mousePick(hit, 0.85f);
 	}
 
 	void onDragMove(const DragMoveEvent& e) override {
@@ -1438,6 +1463,7 @@ struct SlideWidget : ModuleWidget {
 			{"Modern single coil", "Horseshoe (bark and midrange honk)"}, &m->pickupType));
 		menu->addChild(createIndexPtrSubmenuItem("Mouse",
 			{"Hover strums the strings", "Click and drag only"}, &m->mouseMode));
+		menu->addChild(createBoolPtrMenuItem("VOL offsets the swell (for bipolar CV)", "", &m->volOffset));
 		menu->addChild(createBoolPtrMenuItem("Hover plays when Rack is in the background", "", &m->hoverInBackground));
 	}
 };
