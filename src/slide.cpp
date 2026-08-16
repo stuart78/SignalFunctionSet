@@ -364,7 +364,12 @@ struct Slide : Module {
 		// deleting a param renumbers every one after it and breaks saved patches.
 		configParam(SCRAPE_PARAM, 0.f, 1.f, 0.f, "Scrape (retired)", "%", 0.f, 100.f);
 
-		configParam(DECAY_PARAM, 0.2f, 20.f, 4.f, "Decay", " s");
+		// This is the FUNDAMENTAL's t60, which is what a string decay means --
+		// and it is not the same as how long you hear the note. A pluck puts
+		// most of its energy in the upper partials, DAMP kills those far faster
+		// on purpose, and COUPLE carries energy off to the other strings, so
+		// the audible tail is always shorter than the number here.
+		configParam(DECAY_PARAM, 0.2f, 20.f, 4.f, "Decay (fundamental t60)", " s");
 		configParam(DAMP_PARAM, 0.f, 1.f, 0.6f, "Damping (treble loss)", "%", 0.f, 100.f);
 		configParam(PICK_PARAM, 0.f, 1.f, 0.7f, "Pick hardness", "%", 0.f, 100.f);
 
@@ -969,7 +974,17 @@ struct Slide : Module {
 			s.live *= liveDecay;
 			float openness = 1.f - blockAmt * (1.f - s.live);
 			float t60 = std::max(decaySec * (0.03f + 0.97f * openness), 0.02f);
-			float g = std::min(std::exp(-6.907755f / (freq * t60)), 0.99995f);
+			// g is what the WHOLE LOOP must have, so divide out what the loop
+			// already loses on its own: the in-loop lowpass and the DC blocker
+			// each take a bite at the fundamental every round trip, and neither
+			// was accounted for. Measured on the real loop, a pure fundamental
+			// asked for 20 s rang 18 s before this and 19.5 s after.
+			float cw = std::cos(w), c1 = 1.f - s.dampC;
+			float hlp = s.dampC / std::sqrt(std::max(1e-9f, 1.f - 2.f * c1 * cw + c1 * c1));
+			float hdc = std::sqrt(std::max(0.f, (2.f - 2.f * cw))
+			                    / std::max(1e-9f, 1.f - 2.f * 0.99985f * cw + 0.99985f * 0.99985f));
+			float parasitic = clamp(hlp * hdc, 0.5f, 1.f);
+			float g = std::min(std::exp(-6.907755f / (freq * t60)) / parasitic, 0.99995f);
 
 			// Cubic, because this delay is MOVING — see waveguide.hpp.
 			float v = s.dl.tapCubic(d);

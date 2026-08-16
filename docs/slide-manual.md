@@ -146,6 +146,33 @@ MIX L, MIX R, **EVEN** (strings 2, 4, 6, 8 summed) and **ODD** (1, 3, 5, 7).
 The even/odd pair is a cheap way to get two related but distinct signals out
 without an expander. Send them to different amps and the instrument widens.
 
+## Decay, and why 20 seconds is not 20 seconds
+
+**DECAY sets the fundamental's t60**, which is what a string decay means. It is
+not how long you hear the note, and the gap between those two is large enough to
+be worth spelling out.
+
+Measured on the real string loop, asking for 20 seconds:
+
+| | rings for |
+|---|---|
+| a pure fundamental, COUPLE off | 19.5 s |
+| a plucked note, COUPLE off | 11.2 s |
+| a plucked note, COUPLE at its default 0.3 | 4.9 s |
+| a plucked note, COUPLE at 1.0 | 1.0 s |
+
+Two things are happening, and both are meant to.
+
+**A pluck's energy is mostly in the upper partials**, and DAMP kills those far
+faster than the fundamental on purpose, because that is what a bar resting on a
+string does. So the audible tail is always shorter than the fundamental's t60.
+Turn DAMP down and more of the note survives.
+
+**COUPLE carries energy off to the other strings.** That is the whole point of
+it, and it is what a real instrument does with its strings undamped, but it is
+easily the biggest single influence on how long a note lasts. It is the first
+knob to reach for if a note dies sooner than you want.
+
 ## Playing with the mouse
 
 The fretboard is horizontal: along it is position on the neck, across it is the
