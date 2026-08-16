@@ -57,3 +57,31 @@ core rather than each growing their own.
   MIDI-map and automation; `surfaceDist()` is now unused.
 - **Fill**: dragging a queue row past the visible rows does not auto-scroll,
   and the `×N` repeat read-out is not click-draggable.
+
+## Arbitrary drum shapes (Skin)
+
+Skin uses the closed-form Bessel modes of a circle, which is why strike position
+is a table lookup and the whole thing is cheap. A non-circular head has no closed
+form: you have to mesh the region and solve the Laplacian eigenvalue problem
+numerically, then resynthesise whenever the shape changes.
+
+[eigendrum](https://github.com/BaselAshraf81/eigendrum) does exactly that in the
+browser, with P1 finite elements, the lowest 16 eigenpairs by block inverse
+iteration with Rayleigh-Ritz, and the solver on a worker. It is worth reading
+before anyone attempts this here. It also ships the Kac isospectral pair, two
+different shapes with the same spectrum, which is a good reminder that shape and
+sound are not in one-to-one correspondence.
+
+For Skin this is a different architecture rather than a feature: a mesh, an
+eigensolver, a worker thread and a shape editor. Probably its own module if it
+happens at all.
+
+Two smaller things from the same source, one taken and one not:
+
+* **Taken.** A force impulse gives a mode initial velocity, so amplitude goes as
+  1/omega. Skin was injecting force straight into displacement and every high
+  mode was that much too loud.
+* **Not yet.** Rayleigh damping, `C = alpha*M + beta*K`. The beta term damps high
+  modes as omega squared, where Skin's law is a single power near 1/omega at its
+  default; and the alpha term damps LOW modes, which Skin has no equivalent of
+  at all. That is what stops a real drum's fundamental ringing forever.

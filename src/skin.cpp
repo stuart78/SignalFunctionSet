@@ -132,8 +132,10 @@ struct Skin : Module {
 			drum.strikeR   = r * 0.97f;
 			drum.strikeAng = std::atan2(y, x);
 			dispR = r; dispA = drum.strikeAng;
-			drum.updateStrike();
+			// modes first: updateStrike()'s excitation tilt reads ratio[], which
+			// updateModes() computes. The other order used last frame's layout.
 			drum.updateModes();
+			drum.updateStrike();
 			dispEnergy = drum.energy;
 			for (int k = 0; k < sfs::Drum::NM; k++)
 				modeVis[k] = std::fabs(drum.lo[k].value()) * drum.outGain;

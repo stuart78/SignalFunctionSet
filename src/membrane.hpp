@@ -229,6 +229,18 @@ struct Drum {
 	float snareAmt = 0.f, snareThr = 0.25f, snareTight = 0.25f;
 
 	float energy = 0.f, headDisp = 0.f;
+	// EXCITATION TILT, the thing this bank was missing. A force impulse gives a
+	// mode initial VELOCITY, not displacement, so its amplitude goes as
+	// J*phi(x)/(m*omega) -- a 6 dB/octave rolloff. Injecting the force straight
+	// into displacement, as this did, leaves every high mode that much too loud,
+	// which is most of why the whole range leaned metallic.
+	//
+	// gain[] is used at BOTH ends -- to inject the strike and as the output tap,
+	// since Skin listens where it is hit -- so a tilt of 1 here is 1/omega twice
+	// and 12 dB/octave in the result. Physics asks for one; the ear asked for
+	// two, and the ear was auditioned against the alternatives before this was
+	// written down. 0.5 is the physically exact setting if it is ever wanted.
+	float tilt = 1.f;
 	// The bank works in metres, where a hard hit moves the head about half a
 	// millimetre, so it needs taking up to modular level on the way out.
 	float outGain = 2600.f;
@@ -311,9 +323,16 @@ struct Drum {
 	}
 
 	// Where the strike lands. Radius alone, for the reason at the top.
+	// Call AFTER updateModes(): the tilt needs ratio[], which that computes.
 	void updateStrike() {
 		const MembraneShapes& sh = membraneShapes();
-		for (int k = 0; k < NM; k++) gain[k] = sh.at(k, strikeR);
+		float r0 = ratio[0] > 1e-6f ? ratio[0] : 1.f;
+		for (int k = 0; k < NM; k++) {
+			float g = sh.at(k, strikeR);
+			if (tilt > 0.f && ratio[k] > 1e-6f)
+				g *= std::pow(r0 / ratio[k], tilt);
+			gain[k] = g;
+		}
 	}
 
 	// hardness 0..1 spans felt to wood. Contact time follows from mass and
