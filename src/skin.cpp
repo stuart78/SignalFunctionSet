@@ -602,24 +602,51 @@ struct SkinDisplay : OpaqueWidget {
 		}
 	}
 
-	// The wires, lying across the bottom head. Present at full WIRES, fading out
-	// as it comes down, gone at zero -- so the picture agrees with whether you
-	// are listening to a snare drum or a tom.
+	// The wires, on the bottom head. The first version spread seven of them
+	// evenly across the whole diameter, which is not what a snare looks like at
+	// all -- it read as a set of unrelated horizontal lines drawn through the
+	// drum. Real snare wires are about twenty strands bunched into a BAND a
+	// couple of inches wide, running parallel from a strainer on one side to a
+	// butt plate on the other, so nearly all of them are close to full length
+	// and they sit together rather than dividing the head up.
 	void drawWires(const DrawArgs& args, float cx, float cy, float rad, float shell) {
-		if (!module) return;
-		float w = clamp(module->params[Skin::SNARE_PARAM].getValue(), 0.f, 1.f);
+		// The thumbnail stands in a value, the same way the head stands in a mode
+		// mix, so the browser shows what the module has rather than what a fresh
+		// instance happens to be set to.
+		float w = module ? clamp(module->params[Skin::SNARE_PARAM].getValue(), 0.f, 1.f)
+		                 : 0.85f;
 		if (w < 0.02f) return;
+		// Sixteen rather than twenty, over a slightly wider band: at the size
+		// this screen actually is, twenty strands at full opacity merge into a
+		// grey slab and stop reading as wires at all.
+		const int N = 16;
 		float yb = cy + shell;
-		for (int i = -3; i <= 3; i++) {
-			float o = (float)i / 3.6f;
-			float half = std::sqrt(std::max(0.f, 1.f - o * o)) * rad;
-			float yy = yb + o * rad * TILT;
+		float band = rad * 0.24f;              // how wide the strip of wires is
+		float a0 = 0.07f + 0.48f * w * w;      // squared, like the sound
+		float halfEnd = 0.f;
+		for (int i = 0; i < N; i++) {
+			float o = ((float)i / (N - 1) - 0.5f) * 2.f;      // -1..1 across the band
+			float rr = o * band / std::max(rad, 1.f);
+			float half = std::sqrt(std::max(0.f, 1.f - rr * rr)) * rad;
+			halfEnd = std::max(halfEnd, half);
+			float yy = yb + o * band * TILT;
+			// the strands at the edge of the band catch less light
+			float e = 1.f - 0.35f * std::fabs(o);
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, cx - half, yy);
 			nvgLineTo(args.vg, cx + half, yy);
-			nvgStrokeColor(args.vg, nvgRGBAf(0.85f, 0.85f, 0.90f, 0.10f + 0.55f * w * w));
-			nvgStrokeWidth(args.vg, 0.6f + 0.5f * w);
+			nvgStrokeColor(args.vg, nvgRGBAf(0.86f, 0.87f, 0.92f, a0 * e));
+			nvgStrokeWidth(args.vg, 0.55f);
 			nvgStroke(args.vg);
+		}
+		// strainer and butt plate: the wires are held at both ends, and without
+		// them the band just stops in mid air.
+		for (int sgn = -1; sgn <= 1; sgn += 2) {
+			nvgBeginPath(args.vg);
+			nvgRect(args.vg, cx + sgn * halfEnd - (sgn < 0 ? 0.f : mm2px(1.2f)),
+			        yb - band * TILT, mm2px(1.2f), 2.f * band * TILT);
+			nvgFillColor(args.vg, nvgRGBAf(0.72f, 0.74f, 0.80f, 0.25f + 0.45f * w));
+			nvgFill(args.vg);
 		}
 	}
 
