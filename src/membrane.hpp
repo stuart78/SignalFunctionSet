@@ -243,7 +243,16 @@ struct Drum {
 	float tilt = 1.f;
 	// The bank works in metres, where a hard hit moves the head about half a
 	// millimetre, so it needs taking up to modular level on the way out.
-	float outGain = 2600.f;
+	//
+	// This was 2600, calibrated against a test that passed weight = 0.06 when
+	// the WEIGHT knob's default is 1.0 -- a beater sixteen times too light. Every
+	// preset therefore ran four to sixty times into the soft clip, and the ones
+	// that were reported as "distorted" were only the densest, not the only ones.
+	float outGain = 420.f;
+	// A heavy soft beater really does deliver more momentum than a light stick,
+	// so EXCITER genuinely changes loudness -- but 7 dB across a knob whose job
+	// is timbre is too much of it. Compensated back to about 2 dB.
+	float beaterComp = 1.f;
 	// Newtons of contact force to metres of modal displacement. The mallet and
 	// the head MUST share a unit: the first version left the head in arbitrary
 	// modal units, about 200x larger than the mallet's approach distance, so the
@@ -348,13 +357,15 @@ struct Drum {
 		mallet.expo  = 2.6f - 1.1f * hardness;                    // 2.6 felt, 1.5 wood
 		mallet.stiff = 1.0e8f * std::pow(0.1f, hardness);         // 1e8 .. 1e7
 		mallet.mass  = weight * (0.05f - 0.035f * hardness);      // heavy felt, light stick
+		const float MREF = 0.05f - 0.035f * 0.75f;                // the default EXCITER
+		beaterComp = std::pow(MREF / std::max(mallet.mass, 1e-4f), 0.7f);
 		mallet.strike(vel, 0.0015f);
 	}
 
 	// One sample. head/snare come back separately so the panel can offer both.
 	void process(float& headOut, float& snareOut) {
 		float dt = 1.f / sr;
-		float F = mallet.process(headDisp, dt) * fimp;
+		float F = mallet.process(headDisp, dt) * fimp * beaterComp;
 
 		float sum = 0.f, resoSum = 0.f, disp = 0.f;
 		for (int k = 0; k < NM; k++) {
@@ -367,8 +378,14 @@ struct Drum {
 		headDisp = disp;                    // metres, same unit as the mallet
 		energy += (std::fabs(sum) - energy) * 0.002f;
 
+		// SQUARED, and far quieter. Linear at gain 3 put the wires above the head
+		// at the very first notch of the knob -- 1.24x its level at 0.125 -- so
+		// there was no such thing as a light dusting of snare. Squared, the
+		// bottom of the travel is the whisper it should be and the top still
+		// buries the drum if you want it to.
 		snareOut = snareAmt > 0.f
-		         ? wires.process(resoSum * outGain, snareThr, snareTight, sr) * snareAmt * 3.f
+		         ? wires.process(resoSum * outGain, snareThr, snareTight, sr)
+		           * snareAmt * snareAmt * 0.30f
 		         : 0.f;
 		headOut = sum * outGain;
 	}

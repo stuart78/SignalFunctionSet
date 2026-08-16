@@ -65,6 +65,7 @@ struct Skin : Module {
 	// Mirrors for the display, which must not reach into the audio thread.
 	float dispR = 0.55f, dispA = 0.f, dispEnergy = 0.f;
 	float modeVis[sfs::Drum::NM] = {0.f};
+	int   headView = 1;                  // 0 = flat rings, 1 = 3D surface
 
 	Skin() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -88,8 +89,8 @@ struct Skin : Module {
 		configParam(STRIKEY_PARAM, -1.f, 1.f, 0.42f, "Strike Y");
 		configParam(MUFFLE_PARAM, 0.f, 1.f, 0.f, "Muffle", "%", 0.f, 100.f);
 		configParam(MUFFLEANG_PARAM, -1.f, 1.f, 0.f, "Muffle angle");
-		configParam(SNARE_PARAM, 0.f, 1.f, 0.f, "Snare", "%", 0.f, 100.f);
-		configParam(SNARETHR_PARAM, 0.f, 1.f, 0.3f, "Snare tension", "%", 0.f, 100.f);
+		configParam(SNARE_PARAM, 0.f, 1.f, 0.f, "Wires", "%", 0.f, 100.f);
+		configParam(SNARETHR_PARAM, 0.f, 1.f, 0.3f, "Wire tightness", "%", 0.f, 100.f);
 		configParam(LEVEL_PARAM, 0.f, 2.f, 1.f, "Level", "x");
 		configButton(STRIKE_PARAM, "Strike");
 
@@ -105,7 +106,7 @@ struct Skin : Module {
 		configInput(MUFFLE_INPUT, "Muffle CV (+/-5V)");
 		configOutput(OUT_OUTPUT, "Mix");
 		configOutput(HEAD_OUTPUT, "Head only");
-		configOutput(SNARE_OUTPUT, "Snare wires only");
+		configOutput(SNARE_OUTPUT, "Wires only");
 	}
 
 	inline float pv(int p, int in, float lo = 0.f, float hi = 1.f) {
@@ -226,6 +227,16 @@ struct Skin : Module {
 		ctl = 0;                       // re-solve the layout on the next sample
 	}
 
+	json_t* dataToJson() override {
+		json_t* r = json_object();
+		json_object_set_new(r, "headView", json_integer(headView));
+		return r;
+	}
+	void dataFromJson(json_t* r) override {
+		if (json_t* j = json_object_get(r, "headView"))
+			headView = clamp((int)json_integer_value(j), 0, 1);
+	}
+
 	void onReset() override { drum.clear(); }
 	void onSampleRateChange() override { drum.sr = APP->engine->getSampleRate(); drum.clear(); }
 };
@@ -275,9 +286,88 @@ struct SkinDisplay : OpaqueWidget {
 	float headRad() const { return box.size.y * 0.5f - mm2px(1.2f); }
 	float headCx()  const { return mm2px(1.2f) + headRad(); }
 
+	// The head as a surface rather than a plan. The 2D view can only show the
+	// RADIAL part of a mode, because a flat ring has one value; the whole point
+	// of a drum is that the modes have angular shape too -- (m,1) has m nodal
+	// diameters -- and that is invisible until you tilt it and give it height.
+	void drawHead3D(const DrawArgs& args, float cx, float cy, float rad) {
+		const int RINGS = 11, SECT = 30;
+		const sfs::MembraneShapes& sh = sfs::membraneShapes();
+		const float TILT = 0.40f;               // cosine of the viewing angle
+		float hgt = rad * 0.42f;
+		float sa = module ? module->dispA : 0.f;
+
+		// Angular factor per (mode, sector). A strike orients each doublet along
+		// itself, so the angle is measured from where the head was last hit.
+		static float ang[sfs::Drum::NM][SECT + 1];
+		for (int k = 0; k < sfs::Drum::NM; k++) {
+			int mm = sfs::MEMBRANE_MODES[k].m;
+			for (int j = 0; j <= SECT; j++) {
+				float th = 2.f * (float)M_PI * (float)j / SECT;
+				ang[k][j] = std::cos(mm * (th - sa));
+			}
+		}
+		float z[RINGS + 1][SECT + 1];
+		float zmax = 1e-6f;
+		for (int i = 0; i <= RINGS; i++) {
+			float u = (float)i / RINGS;
+			for (int j = 0; j <= SECT; j++) {
+				float v = 0.f;
+				for (int k = 0; k < sfs::Drum::NM; k++) {
+					float a = module ? module->modeVis[k]
+					                 : 0.55f * std::exp(-k * 0.30f);
+					if (a < 1e-4f) continue;
+					v += a * sh.at(k, u) * ang[k][j];
+				}
+				z[i][j] = v;
+				zmax = std::max(zmax, std::fabs(v));
+			}
+		}
+		float zs = hgt / std::max(zmax, 0.35f);      // never blow a quiet head up
+
+		auto px = [&](int i, int j, float& X, float& Y) {
+			float u = (float)i / RINGS, th = 2.f * (float)M_PI * (float)j / SECT;
+			X = cx + std::cos(th) * u * rad;
+			Y = cy + std::sin(th) * u * rad * TILT - z[i][j] * zs;
+		};
+		// rim first, then the rings inward, then the spokes: painter's order, so
+		// the near edge of the surface covers the far one.
+		nvgLineCap(args.vg, NVG_ROUND);
+		for (int i = RINGS; i >= 1; i--) {
+			nvgBeginPath(args.vg);
+			for (int j = 0; j <= SECT; j++) {
+				float X, Y; px(i, j, X, Y);
+				if (j == 0) nvgMoveTo(args.vg, X, Y); else nvgLineTo(args.vg, X, Y);
+			}
+			float lit = clamp(std::fabs(z[i][SECT / 4]) * zs / std::max(hgt, 1.f), 0.f, 1.f);
+			nvgStrokeColor(args.vg, i == RINGS
+			               ? sfs::SCREEN_LINE
+			               : nvgRGBAf(0.0f, 0.59f, 0.87f, 0.28f + 0.62f * lit));
+			nvgStrokeWidth(args.vg, i == RINGS ? 1.4f : 0.9f);
+			nvgStroke(args.vg);
+		}
+		for (int j = 0; j < SECT; j += 2) {
+			nvgBeginPath(args.vg);
+			for (int i = 0; i <= RINGS; i++) {
+				float X, Y; px(i, j, X, Y);
+				if (i == 0) nvgMoveTo(args.vg, X, Y); else nvgLineTo(args.vg, X, Y);
+			}
+			nvgStrokeColor(args.vg, nvgRGBAf(0.0f, 0.59f, 0.87f, 0.20f));
+			nvgStrokeWidth(args.vg, 0.7f);
+			nvgStroke(args.vg);
+		}
+	}
+
 	void drawLive(const DrawArgs& args) {
 		float cy = box.size.y * 0.5f;
 		float rad = headRad(), cx = headCx();
+		if (module && module->headView == 1) {
+			drawHead3D(args, cx, cy, rad);
+			drawSpectrum(args, cx + rad + mm2px(4.f), box.size.x - mm2px(2.f));
+			drawStrikeMark(args, cx, cy, rad);
+			drawReadout(args, cx);
+			return;
+		}
 		head(args, cx, cy, rad);
 		drawSpectrum(args, cx + rad + mm2px(4.f), box.size.x - mm2px(2.f));
 
@@ -309,17 +399,28 @@ struct SkinDisplay : OpaqueWidget {
 			nvgFill(args.vg);
 		}
 
-		// the strike point
-		float sr = module->dispR * 0.97f, sa = module->dispA;
-		float sx = cx + std::cos(sa) * sr * rad * 0.93f;
-		float sy = cy + std::sin(sa) * sr * rad * 0.93f;
+		drawStrikeMark(args, cx, cy, rad);
+		drawReadout(args, cx);
+	}
+
+	// Both views mark the strike the same way; in 3D it is flattened onto the
+	// tilted plane so it still sits where you clicked.
+	void drawStrikeMark(const DrawArgs& args, float cx, float cy, float rad) {
+		if (!module) return;
+		bool three = module->headView == 1;
+		float tilt = three ? 0.40f : 0.93f;
+		float sr = module->dispR * (three ? 1.f : 0.97f), sa = module->dispA;
+		float sx = cx + std::cos(sa) * sr * rad * (three ? 1.f : 0.93f);
+		float sy = cy + std::sin(sa) * sr * rad * tilt;
 		float f = clamp(module->uiFlash, 0.f, 1.f);
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, sx, sy, mm2px(1.3f) + f * mm2px(2.2f));
 		nvgFillColor(args.vg, nvgRGBAf(0.93f, 0.40f, 0.18f, 0.35f + f * 0.65f));
 		nvgFill(args.vg);
+	}
 
-		// readout
+	void drawReadout(const DrawArgs& args, float cx) {
+		if (!module) return;
 		if (!font || font->handle < 0) return;
 		sfs::screenFont(args.vg, font, sfs::TYPE_SCREEN);
 		nvgFillColor(args.vg, sfs::SCREEN_DIM);
@@ -356,11 +457,19 @@ struct SkinDisplay : OpaqueWidget {
 		}
 	}
 
+	// The browser thumbnail shows the DEFAULT view, which is 3D. drawHead3D
+	// already copes with module == NULL by standing in a plausible mode mix, so
+	// the preview is the same code rather than a second drawing to keep in step.
 	void drawPreview(const DrawArgs& args) {
 		float cy = box.size.y * 0.5f;
 		float rad = headRad(), cx = headCx();
-		head(args, cx, cy, rad);
+		drawHead3D(args, cx, cy, rad);
 		drawSpectrum(args, cx + rad + mm2px(4.f), box.size.x - mm2px(2.f));
+		nvgBeginPath(args.vg);
+		nvgCircle(args.vg, cx + rad * 0.42f, cy - rad * 0.30f * 0.40f, mm2px(1.6f));
+		nvgFillColor(args.vg, nvgRGBAf(0.93f, 0.40f, 0.18f, 0.9f));
+		nvgFill(args.vg);
+		return;
 		for (int i = 1; i <= 7; i++) {
 			float u = i / 7.f;
 			float a = 0.55f * std::fabs(std::cos(u * 4.2f)) * (1.f - u * 0.5f);
@@ -422,6 +531,8 @@ struct SkinWidget : ModuleWidget {
 		// These are the instruments the engine was measured against while it was
 		// being built, so they are also the shortest route to hearing whether a
 		// change broke something.
+		menu->addChild(createIndexPtrSubmenuItem("Head view",
+			{"Flat", "3D"}, &m->headView));
 		menu->addChild(createSubmenuItem("Instruments", "", [=](Menu* sub) {
 			for (int i = 0; i < SKIN_NPRESET; i++) {
 				int idx = i;
@@ -472,7 +583,7 @@ struct SkinWidget : ModuleWidget {
 		const float tx[7] = {7.98f, 23.95f, 39.91f, 55.88f, 71.84f, 87.81f, 103.78f};
 		const K trims[7] = {{Skin::COUPLE_PARAM, "COUPLE"}, {Skin::RESO_PARAM, "RESO"},
 		                    {Skin::BEND_PARAM, "BEND"},     {Skin::WEIGHT_PARAM, "WEIGHT"},
-		                    {Skin::SNARE_PARAM, "SNARE"},   {Skin::SNARETHR_PARAM, "SN TUNE"},
+		                    {Skin::SNARE_PARAM, "WIRES"},   {Skin::SNARETHR_PARAM, "TIGHT"},
 		                    {Skin::LEVEL_PARAM, "LEVEL"}};
 		for (int i = 0; i < 7; i++) {
 			addParam(createParamCentered<Trimpot>(mm2px(Vec(tx[i], TY)), module, trims[i].p));
@@ -491,7 +602,7 @@ struct SkinWidget : ModuleWidget {
 			mm2px(Vec(tx[5], JY1)), module, Skin::STRIKE_PARAM, Skin::STRIKE_LIGHT));
 		lbl->jack(tx[5], JY1, "HIT");
 		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(tx[6], JY1)), module, Skin::SNARE_OUTPUT));
-		lbl->jack(tx[6], JY1, "SNARE");
+		lbl->jack(tx[6], JY1, "WIRES");
 
 		const J in2[5] = {{Skin::SIZE_INPUT, "SIZE"}, {Skin::TENSION_INPUT, "TEN"},
 		                  {Skin::STIFF_INPUT, "MAT"}, {Skin::AIR_INPUT, "AIR"},
