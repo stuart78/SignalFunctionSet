@@ -1046,4 +1046,16 @@ See [build-doc.md](build-doc.md) for detailed build instructions.
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE) for details.
+GPL-3.0-or-later. See [LICENSE](LICENSE) for details. This plugin is free
+software and stays that way.
+
+Signal Function Set is **dual licensed**. The same modules are also sold in
+other formats, currently as a Max for Live pack, under proprietary terms. Both
+grants come from the same copyright holder, who wrote all of this code, and a
+copyright holder is not bound by a licence they grant to others. The GPL release
+is unaffected by the commercial one: every version published here is GPL
+forever, for everyone who has it.
+
+That is also why the project takes bug reports rather than pull requests. See
+[CONTRIBUTING.md](CONTRIBUTING.md), and [CLA.md](CLA.md) for the agreement
+covering the occasional accepted contribution.
