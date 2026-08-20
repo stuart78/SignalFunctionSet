@@ -5,10 +5,7 @@ does not accept code contributions by default, so in most cases you will not
 need this document. It exists for the occasional accepted contribution, and it
 must be agreed **before** any such contribution is merged.
 
-*This agreement has not yet been reviewed by a lawyer. Treat it as a working
-draft.*
-
----
+--
 
 By submitting a Contribution to Signal Function Set, You accept and agree to the
 following terms for that Contribution and for any future Contributions You

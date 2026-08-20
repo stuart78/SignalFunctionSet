@@ -18,8 +18,8 @@ The heart of the module is that **what happens** and **how often** are separate
 controls.
 
 **EFFECT** picks one of seven transforms, or MIXED to rotate through them.
-**EVERY** says how many slices pass between firings. Set EFFECT to REVERSE and
-EVERY to 4 and every fourth slice plays backwards. Nothing else changes.
+**RATIO** says how often it fires, as one slice in N. Set EFFECT to REVERSE and
+RATIO to 1 in 4 and every fourth slice plays backwards. Nothing else changes.
 
 This matters because the obvious designs are worse. Seven per-slice probability
 weights give the same undifferentiated scatter at every setting. Replacing them
@@ -42,8 +42,18 @@ the approach to the downbeat rather than on it.
 | **PITCH** | Plays the previous slice slowed down, so it drops in pitch. |
 | **MIXED** | Walks the seven in order. Still a figure, just a longer one. |
 
-**RESEED** rotates where MIXED starts, so you can shift the sequence without
-changing anything else. It has a button and a trigger input.
+**RESEED** rolls a new set of choices.
+
+Everything Slice decides at random is a function of the slice's index and one
+seed, and of nothing else. That is what makes a pattern a pattern: the same
+slice always makes the same choice, so what you hear repeats exactly rather than
+scattering differently each time round. RESEED changes the seed, which gives you
+a different arrangement that is equally fixed.
+
+It moves four things at once: which earlier slice **SHUFFLE** grabs, how far
+back **DELAY** reaches, whether **PITCH** goes down or up, and where **MIXED**
+starts in its rotation. With LINK off it also re-rolls the right channel's own
+picks. Button and trigger input.
 
 ### Why some transforms reach back a slice
 
@@ -102,7 +112,7 @@ actually distinguishes a window is its **width**, and these are three widths.
 | Control | Range | What it does |
 |---|---|---|
 | **EFFECT** | 8 positions | The seven transforms, plus MIXED. |
-| **EVERY** | 1 / 2 / 3 / 4 / 6 / 8 / 12 / 16 | Slices between firings. Default 4. |
+| **RATIO** | 1 in 1 / 2 / 3 / 4 / 6 / 8 / 12 / 16 | How often the effect fires. Default 1 in 4. |
 | **LENGTH** | 10 ms to 1 s | Slice length, when free-running. |
 | **CLOCK RATE** | /8 /4 /2 **x1** x2 x4 x8 | Slice length as a multiple of the clock interval. x1 is dead centre, division to the left and multiplication to the right. |
 | **DEPTH** | 0 to 100% | Crossfades the altered slice against the straight one. |
@@ -110,7 +120,7 @@ actually distinguishes a window is its **width**, and these are three widths.
 | **WINDOW** | 5 ms to half the slice | See above. |
 | **SHAPE** | 3 positions | See above. |
 | **FREEZE** | latch | Stops the write head and loops what is in the buffer. |
-| **RESEED** | button | Rotates where MIXED starts. |
+| **RESEED** | button | Rolls a new set of choices for SHUFFLE, DELAY, PITCH and MIXED. |
 
 **REACH is a count, and the parameter itself is one.** It is 1 to 32, snapped,
 and only the unit changes when BAR is patched, so the tooltip reads "8 steps" or
@@ -165,11 +175,11 @@ way to see what WINDOW is really doing.
 | **BAR** | Switches REACH to counting bars. |
 | **RESET** | Resets the grid and the pattern. |
 | **FREEZE** | Gate. Freezes the buffer. |
-| **RESEED** | Trigger. Rotates where MIXED starts. |
+| **RESEED** | Trigger. Rolls a new set of choices. |
 | **DEPTH** | ±5V. |
 | **LENGTH** | ±5V. |
 | **EFFECT** | 1V per effect. |
-| **EVERY** | 1V per step. |
+| **RATIO** | 1V per step. |
 | **REACH** | 0.1V per step or bar. |
 
 ## Outputs
@@ -224,17 +234,17 @@ have scattered the audio and clock jacks in among the controls.
 ## Patch ideas
 
 **Start here.** Drums into L, a sixteenth clock into CLOCK, EFFECT to REVERSE,
-EVERY to 4, DEPTH full. One beat in four flips. Then walk EFFECT through the
+RATIO to 1 in 4, DEPTH full. One beat in four flips. Then walk EFFECT through the
 seven and leave everything else alone.
 
 **A grid that is not the drummer's.** Leave CLOCK unpatched and set LENGTH by
 hand, slightly off the tempo. The slice grid drifts against the music and the
 effects land somewhere new each bar.
 
-**Long-memory stutter.** BAR patched, REACH to 4 bars, EFFECT to SHUFFLE, EVERY
-to 8. Fragments from a few bars ago drop into the present, still on the grid.
+**Long-memory stutter.** BAR patched, REACH to 4 bars, EFFECT to SHUFFLE, RATIO
+to 1 in 8. Fragments from a few bars ago drop into the present, still on the grid.
 
-**Grain envelope.** WINDOW to maximum, SHAPE to Gaussian, EVERY to 1. Every
+**Grain envelope.** WINDOW to maximum, SHAPE to Gaussian, RATIO to every slice. Every
 slice becomes a short bloom in the middle of its slot, and Slice stops being an
 effect and becomes a texture.
 

@@ -69,7 +69,7 @@ enum SliceXf {
 // rates, and the ones it did cover were an arbitrary sample of them.
 //
 // So: EFFECT picks one of the seven, or MIXED to rotate through them, and
-// EVERY says how many slices go by between firings. Every combination exists,
+// RATIO says how many slices go by between firings. Every combination exists,
 // each is a figure you can learn, and the old patterns are all still in there
 // as pairs -- Gate 4 is CUT every 4, Stutter is REPEAT every 4, Tumble is MIXED
 // every 2.
@@ -80,8 +80,8 @@ static const char* SLICE_EFFNAME[SLICE_NXF + 1] =
 // How many slices pass between firings. Not a plain 1..16 count: the useful
 // rates are sparse at the top end and a knob that spends half its travel
 // between 12 and 16 is wasted.
-static const int SLICE_EVERY[] = {1, 2, 3, 4, 6, 8, 12, 16};
-static const int SLICE_NEVERY = (int)(sizeof(SLICE_EVERY) / sizeof(SLICE_EVERY[0]));
+static const int SLICE_RATIO[] = {1, 2, 3, 4, 6, 8, 12, 16};
+static const int SLICE_NRATIO = (int)(sizeof(SLICE_RATIO) / sizeof(SLICE_RATIO[0]));
 
 // Slice length as a multiple of the clock interval. "/2" means the slice spans
 // two clocks (half the rate); "x2" means two slices per clock. x1 sits dead
@@ -179,7 +179,7 @@ struct Slice : Module {
 	// Slice has never shipped, so this enum could be rebuilt rather than
 	// appended to. Once it does ship, that stops being true.
 	enum ParamId {
-		EFFECT_PARAM, EVERY_PARAM, LENGTH_PARAM, DEPTH_PARAM,
+		EFFECT_PARAM, RATIO_PARAM, LENGTH_PARAM, DEPTH_PARAM,
 		RANGE_PARAM, DIV_PARAM, SHAPE_PARAM, LINK_PARAM,
 		FREEZE_PARAM, RESEED_PARAM, WINDOW_PARAM,
 		PARAMS_LEN
@@ -187,7 +187,7 @@ struct Slice : Module {
 	enum InputId {
 		L_INPUT, R_INPUT, CLOCK_INPUT, BAR_INPUT, RESET_INPUT,
 		FREEZE_INPUT, RESEED_INPUT,
-		EFFECT_INPUT, EVERY_INPUT, DEPTH_INPUT, LENGTH_INPUT, RANGE_INPUT,
+		EFFECT_INPUT, RATIO_INPUT, DEPTH_INPUT, LENGTH_INPUT, RANGE_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId { L_OUTPUT, R_OUTPUT, SLICE_OUTPUT, XF_OUTPUT, OUTPUTS_LEN };
@@ -311,10 +311,12 @@ struct Slice : Module {
 		for (int i = 0; i <= SLICE_NXF; i++) en.push_back(SLICE_EFFNAME[i]);
 		configSwitch(EFFECT_PARAM, 0.f, (float)SLICE_NXF, 0.f, "Effect", en);
 		std::vector<std::string> ev;
-		for (int i = 0; i < SLICE_NEVERY; i++)
-			ev.push_back(SLICE_EVERY[i] == 1 ? "Every slice"
-			                                 : string::f("Every %d", SLICE_EVERY[i]));
-		configSwitch(EVERY_PARAM, 0.f, (float)(SLICE_NEVERY - 1), 3.f, "Rate", ev);
+		// "1 in 4" says what the setting does; "4" leaves you to guess whether it
+		// is a count, a divisor or a percentage.
+		for (int i = 0; i < SLICE_NRATIO; i++)
+			ev.push_back(SLICE_RATIO[i] == 1 ? "every slice"
+			                                 : string::f("1 in %d slices", SLICE_RATIO[i]));
+		configSwitch(RATIO_PARAM, 0.f, (float)(SLICE_NRATIO - 1), 3.f, "Ratio", ev);
 		// LENGTH only decides anything when there is no clock: patch CLOCK and
 		// the slice comes from the clock interval times DIV instead, and this
 		// knob does nothing. The screen says which of the two is in charge.
@@ -344,7 +346,10 @@ struct Slice : Module {
 		// so it is the default, and 0 is there when you need it transparent.
 		configParam<SliceWindowQuantity>(WINDOW_PARAM, 0.f, 1.f, 1.f, "Window");
 		configSwitch(FREEZE_PARAM, 0.f, 1.f, 0.f, "Freeze the buffer", {"Running", "Frozen"});
-		configButton(RESEED_PARAM, "Reseed (rotates where MIXED starts)");
+		// Not just MIXED. The seed feeds every choice the module makes: which earlier
+		// slice SHUFFLE grabs, how far DELAY reaches, whether PITCH goes down or up,
+		// the right channel's own picks when LINK is off, and where MIXED starts.
+		configButton(RESEED_PARAM, "Reseed: roll a new set of choices");
 
 		configInput(L_INPUT, "Left audio");
 		configInput(R_INPUT, "Right audio (normalled from left)");
@@ -352,11 +357,11 @@ struct Slice : Module {
 		configInput(BAR_INPUT, "Bar (quantizes how far back DELAY and SHUFFLE reach)");
 		configInput(RESET_INPUT, "Reset the grid and the pattern");
 		configInput(FREEZE_INPUT, "Freeze gate");
-		configInput(RESEED_INPUT, "Reseed trigger");
+		configInput(RESEED_INPUT, "Reseed trigger (new choices for SHUFFLE, DELAY, PITCH, MIXED)");
 		configInput(DEPTH_INPUT, "Depth CV (±5V)");
 		configInput(LENGTH_INPUT, "Slice length CV (±5V)");
 		configInput(EFFECT_INPUT, "Effect CV (1V per effect)");
-		configInput(EVERY_INPUT, "Rate CV (1V per step)");
+		configInput(RATIO_INPUT, "Ratio CV (1V per step)");
 		configInput(RANGE_INPUT, "Reach CV (0.1V per step or bar)");
 		configOutput(L_OUTPUT, "Left");
 		configOutput(R_OUTPUT, "Right");
@@ -435,10 +440,10 @@ struct Slice : Module {
 		                        + inputs[EFFECT_INPUT].getVoltage());
 		return clamp(p, 0, SLICE_NXF);
 	}
-	int everyN() {
-		int p = (int)std::round(params[EVERY_PARAM].getValue()
-		                        + inputs[EVERY_INPUT].getVoltage());
-		return SLICE_EVERY[clamp(p, 0, SLICE_NEVERY - 1)];
+	int ratioN() {
+		int p = (int)std::round(params[RATIO_PARAM].getValue()
+		                        + inputs[RATIO_INPUT].getVoltage());
+		return SLICE_RATIO[clamp(p, 0, SLICE_NRATIO - 1)];
 	}
 
 	// Choose what happens to slot `idx`, and set the read head up for it.
@@ -446,7 +451,7 @@ struct Slice : Module {
 		prevXf = xf;
 		xf = -1; swapCh = false; rdRate = 1.0; repLen = 0;
 
-		int n = everyN();
+		int n = ratioN();
 		// The LAST slice of each group is the one that fires, so the effect
 		// lands on the approach to the downbeat rather than on it. The rule is a
 		// pure function of the index, which means the NEXT slice can be asked
@@ -905,7 +910,7 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	std::string reach = (got == want) ? string::f("%d %s", got, unit)
 	                                  : string::f("%d/%d %s", got, want, unit);
 	nvgText(vg, x1, (SD_BUFY - 8.f) * s,
-	        string::f("%s /%d  \u2190%s", SLICE_EFFNAME[m->effIndex()], m->everyN(),
+	        string::f("%s /%d  \u2190%s", SLICE_EFFNAME[m->effIndex()], m->ratioN(),
 	                  reach.c_str()).c_str(), NULL);
 
 	slicePane(vg, font, s, SD_PANE1, m->scDry[0], m->scOut[0], m->scHead, "L");
@@ -992,13 +997,13 @@ struct SliceWidget : ModuleWidget {
 		const float ky1 = hp(11), ky2 = hp(14);
 		// WHAT and HOW OFTEN, side by side, because they are the two questions.
 		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(kx[0], ky1)), module, Slice::EFFECT_PARAM));
-		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(kx[1], ky1)), module, Slice::EVERY_PARAM));
+		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(kx[1], ky1)), module, Slice::RATIO_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[2], ky1)), module, Slice::LENGTH_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[3], ky1)), module, Slice::DEPTH_PARAM));
 		// A large knob is 12.7mm across, so the standard label gap puts the text
 		// inside it. These two get their own.
 		lbl->add(kx[0], ky1 - 8.4f, "EFFECT");
-		lbl->add(kx[1], ky1 - 8.4f, "EVERY");
+		lbl->add(kx[1], ky1 - 8.4f, "RATIO");
 		lbl->knob(kx[2], ky1, "LENGTH");
 		lbl->knob(kx[3], ky1, "DEPTH");
 
@@ -1029,7 +1034,7 @@ struct SliceWidget : ModuleWidget {
 			{Slice::RESEED_INPUT, false, "SEED"}, {Slice::RANGE_INPUT, false, "RCH"},
 		};
 		static const J ROW2[8] = {
-			{Slice::EFFECT_INPUT, false, "EFF"}, {Slice::EVERY_INPUT, false, "EVRY"},
+			{Slice::EFFECT_INPUT, false, "EFF"}, {Slice::RATIO_INPUT, false, "RATIO"},
 			{Slice::DEPTH_INPUT, false, "DPTH"}, {Slice::LENGTH_INPUT, false, "LEN"},
 			{Slice::L_OUTPUT, true, "L"}, {Slice::R_OUTPUT, true, "R"},
 			{Slice::SLICE_OUTPUT, true, "TRIG"}, {Slice::XF_OUTPUT, true, "GATE"},
