@@ -751,9 +751,24 @@ struct Slice : Module {
 // Screen coordinates, in the design's own units (see panel-design.md).
 static const float SD_W = 480.f;
 static const float SD_M = 14.f;
-static const float SD_BUFY = 20.f, SD_BUFH = 36.f;
-// One pane per channel, because this is a stereo module.
-static const float SD_PANE1 = 64.f, SD_PANE2 = 104.f, SD_PANEH = 38.f;
+static const float SD_BUFY = 20.f;
+// The VERTICAL layout is derived from the box, not fixed. These were three
+// constants totalling 142 virtual units, which filled a screen 30 mm tall; the
+// 2026-08 panel made it 56 and the drawing simply sat in the top half with a
+// band of empty navy under it. Everything below is a share of whatever height
+// there actually is, so the next panel change cannot reintroduce that.
+struct SliceRows { float bufY, bufH, p1Y, p2Y, paneH; };
+static inline SliceRows sliceRows(float sh) {     // sh = box height in units
+	SliceRows r;
+	float top = SD_BUFY + 6.f, bot = sh - 6.f, avail = std::max(bot - top, 40.f);
+	float gap = avail * 0.025f;
+	r.bufY = top;
+	r.bufH = avail * 0.45f;                       // the buffer view is the headline
+	r.paneH = avail * 0.25f;
+	r.p1Y = r.bufY + r.bufH + gap;
+	r.p2Y = r.p1Y + r.paneH + gap;
+	return r;
+}
 
 void SliceDisplay::drawLayer(const DrawArgs& args, int layer) {
 	if (layer != 1) { OpaqueWidget::drawLayer(args, layer); return; }
@@ -815,9 +830,10 @@ static void sliceTrace(NVGcontext* vg, const float* v, int head, float x0, float
 }
 
 static void slicePane(NVGcontext* vg, std::shared_ptr<Font> font, float s, float uy,
-                      const float* dry, const float* out, int head, const char* label) {
+                      float uh, const float* dry, const float* out, int head,
+                      const char* label) {
 	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s;
-	float y = uy * s, h = SD_PANEH * s, mid = y + h * 0.5f;
+	float y = uy * s, h = uh * s, mid = y + h * 0.5f;
 	nvgBeginPath(vg); nvgRect(vg, x0, y, x1 - x0, h);
 	nvgFillColor(vg, nvgRGB(0x12, 0x12, 0x20)); nvgFill(vg);
 	nvgBeginPath(vg); nvgMoveTo(vg, x0, mid); nvgLineTo(vg, x1, mid);
@@ -836,7 +852,8 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	NVGcontext* vg = args.vg;
 	Slice* m = module;
 	float s = box.size.x / SD_W;
-	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s, y = SD_BUFY * s, h = SD_BUFH * s;
+	SliceRows R = sliceRows(box.size.y / s);
+	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s, y = R.bufY * s, h = R.bufH * s;
 
 	// NOW IS THE RIGHT-HAND EDGE, always. The first version drew the whole
 	// thirty seconds with the write head sweeping across it, which told you
@@ -913,14 +930,15 @@ void SliceDisplay::drawLive(const DrawArgs& args) {
 	        string::f("%s /%d  \u2190%s", SLICE_EFFNAME[m->effIndex()], m->ratioN(),
 	                  reach.c_str()).c_str(), NULL);
 
-	slicePane(vg, font, s, SD_PANE1, m->scDry[0], m->scOut[0], m->scHead, "L");
-	slicePane(vg, font, s, SD_PANE2, m->scDry[1], m->scOut[1], m->scHead, "R");
+	slicePane(vg, font, s, R.p1Y, R.paneH, m->scDry[0], m->scOut[0], m->scHead, "L");
+	slicePane(vg, font, s, R.p2Y, R.paneH, m->scDry[1], m->scOut[1], m->scHead, "R");
 }
 
 void SliceDisplay::drawPreview(const DrawArgs& args) {
 	NVGcontext* vg = args.vg;
 	float s = box.size.x / SD_W;
-	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s, y = SD_BUFY * s, h = SD_BUFH * s;
+	SliceRows R = sliceRows(box.size.y / s);
+	float x0 = SD_M * s, x1 = (SD_W - SD_M) * s, y = R.bufY * s, h = R.bufH * s;
 	nvgBeginPath(vg); nvgRect(vg, x0, y, x1 - x0, h);
 	nvgFillColor(vg, nvgRGB(0x12, 0x12, 0x20)); nvgFill(vg);
 	float pk[240];
@@ -960,8 +978,8 @@ void SliceDisplay::drawPreview(const DrawArgs& args) {
 		float e = clamp(std::min((float)into, 12.f - (float)into) * 0.9f, 0.f, 1.f);
 		out[i] = (slot % 4 == 3) ? 0.f : dry[i] * e;
 	}
-	slicePane(vg, font, s, SD_PANE1, dry, out, Slice::SCOPE - 1, "L");
-	slicePane(vg, font, s, SD_PANE2, dry, out, Slice::SCOPE - 1, "R");
+	slicePane(vg, font, s, R.p1Y, R.paneH, dry, out, Slice::SCOPE - 1, "L");
+	slicePane(vg, font, s, R.p2Y, R.paneH, dry, out, Slice::SCOPE - 1, "R");
 }
 
 // =============================================================================
