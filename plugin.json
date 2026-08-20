@@ -423,8 +423,8 @@
       "hidden": true
     },
     {
-      "slug": "Skin",
-      "name": "Skin",
+      "slug": "Kit",
+      "name": "Kit",
       "description": "Struck membrane modelled mode by mode: tom, timpani, gong or snare.",
       "tags": [
         "Physical modeling",

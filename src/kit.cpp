@@ -4,7 +4,7 @@
 #include "waveguide.hpp"   // softClip
 #include <cmath>
 
-// Skin -- a struck membrane, modelled mode by mode.
+// Kit -- a struck membrane, modelled mode by mode.
 //
 // The DSP lives in membrane.hpp so it can be measured without Rack in the way,
 // which is how the mallet's 38 ms contact times and 296-bounce chatter were
@@ -17,20 +17,20 @@
 // those is already implied by the knob, so printing the percentage instead is
 // throwing information away. Each of these reads the module and reports the
 // quantity the control actually sets.
-struct SkinSizeQ : ParamQuantity {
+struct KitSizeQ : ParamQuantity {
 	std::string getDisplayValueString() override {
 		// The range spans roughly a 6-inch splash to a 22-inch kick.
 		float in = 6.f * std::pow(22.f / 6.f, clamp(getValue(), 0.f, 1.f));
 		return string::f("%.0f in (%.0f cm)", in, in * 2.54f);
 	}
 };
-struct SkinTensionQ : ParamQuantity {
+struct KitTensionQ : ParamQuantity {
 	std::string getDisplayValueString() override {
 		float st = (clamp(getValue(), 0.f, 1.f) - 0.5f) * 1.4f * 12.f;
 		return string::f("%+.1f semitones", st);
 	}
 };
-struct SkinDecayQ : ParamQuantity {
+struct KitDecayQ : ParamQuantity {
 	std::string getDisplayValueString() override {
 		// Depends on SIZE as well, so read it rather than pretending it does not.
 		float sz = 0.45f;
@@ -39,7 +39,7 @@ struct SkinDecayQ : ParamQuantity {
 		return sec < 1.f ? string::f("%.0f ms", sec * 1000.f) : string::f("%.2f s", sec);
 	}
 };
-struct SkinExciteQ : ParamQuantity {
+struct KitExciteQ : ParamQuantity {
 	std::string getDisplayValueString() override {
 		float h = clamp(getValue(), 0.f, 1.f);
 		// tau ~ pi*sqrt(m/k), the same numbers strike() uses
@@ -50,12 +50,12 @@ struct SkinExciteQ : ParamQuantity {
 		return string::f("%s, %.1f ms contact", n, ms);
 	}
 };
-struct SkinWeightQ : ParamQuantity {
+struct KitWeightQ : ParamQuantity {
 	std::string getDisplayValueString() override {
 		return string::f("%.0f g", clamp(getValue(), 0.3f, 2.f) * 35.f);
 	}
 };
-struct SkinMaterialQ : ParamQuantity {
+struct KitMaterialQ : ParamQuantity {
 	std::string getDisplayValueString() override {
 		float v = clamp(getValue(), 0.f, 1.f);
 		const char* n = v < 0.12f ? "drum head" : v < 0.35f ? "stiff head"
@@ -63,7 +63,7 @@ struct SkinMaterialQ : ParamQuantity {
 		return string::f("%s (%.0f%%)", n, v * 100.f);
 	}
 };
-struct SkinAirQ : ParamQuantity {
+struct KitAirQ : ParamQuantity {
 	std::string getDisplayValueString() override {
 		float v = clamp(getValue(), 0.f, 1.f);
 		const char* n = v < 0.1f ? "open, no shell" : v < 0.4f ? "shallow shell"
@@ -71,7 +71,7 @@ struct SkinAirQ : ParamQuantity {
 		return string::f("%s (%.0f%%)", n, v * 100.f);
 	}
 };
-struct SkinToneQ : ParamQuantity {
+struct KitToneQ : ParamQuantity {
 	std::string getDisplayValueString() override {
 		float v = clamp(getValue(), 0.f, 1.f);
 		const char* n = v < 0.2f ? "partials ring on" : v < 0.45f ? "bright"
@@ -79,12 +79,12 @@ struct SkinToneQ : ParamQuantity {
 		return string::f("%s (%.0f%%)", n, v * 100.f);
 	}
 };
-struct SkinBendQ : ParamQuantity {
+struct KitBendQ : ParamQuantity {
 	std::string getDisplayValueString() override {
 		return string::f("%.1f semitones at full strike", clamp(getValue(), 0.f, 1.f) * 4.2f);
 	}
 };
-struct SkinResoQ : ParamQuantity {
+struct KitResoQ : ParamQuantity {
 	std::string getDisplayValueString() override {
 		float v = clamp(getValue(), 0.6f, 1.6f);
 		return string::f("%+.1f semitones vs the batter head", 12.f * std::log2(v));
@@ -94,12 +94,12 @@ struct SkinResoQ : ParamQuantity {
 // Presets, written as what the instrument IS -- 110 Hz, 1.1 s -- and converted
 // to knob positions by inverting the module's own mappings, so they cannot drift
 // from what process() actually does with the numbers.
-struct SkinPreset {
+struct KitPreset {
 	const char* name;
 	float size, tension, material, air, decay, tone, couple, reso,
 	      excite, muffle, bend, snare, snareTune, strikeY;
 };
-static const SkinPreset SKIN_PRESETS[] = {
+static const KitPreset KIT_PRESETS[] = {
 	{"Tom",          0.510f, 0.50f, 0.00f, 0.00f, 0.581f, 0.50f, 0.40f, 1.12f, 0.75f, 0.00f, 0.71f, 0.00f, 0.52f, 0.46f},
 	{"Floor tom",    0.654f, 0.50f, 0.00f, 0.00f, 0.640f, 0.45f, 0.45f, 1.08f, 0.70f, 0.05f, 0.86f, 0.00f, 0.52f, 0.41f},
 	{"Timpani",      0.699f, 0.50f, 0.00f, 1.00f, 0.773f, 0.35f, 0.30f, 1.00f, 0.30f, 0.00f, 0.43f, 0.00f, 0.52f, 0.74f},
@@ -111,9 +111,9 @@ static const SkinPreset SKIN_PRESETS[] = {
 	{"Frame drum",   0.441f, 0.50f, 0.00f, 0.20f, 0.523f, 0.60f, 0.25f, 1.00f, 0.45f, 0.20f, 1.00f, 0.00f, 0.52f, 0.82f},
 	{"Tabla",        0.221f, 0.50f, 0.15f, 0.50f, 0.658f, 0.55f, 0.30f, 1.00f, 0.80f, 0.35f, 1.00f, 0.00f, 0.52f, 0.70f},
 };
-static const int SKIN_NPRESET = (int)(sizeof(SKIN_PRESETS) / sizeof(SKIN_PRESETS[0]));
+static const int KIT_NPRESET = (int)(sizeof(KIT_PRESETS) / sizeof(KIT_PRESETS[0]));
 
-struct Skin : Module {
+struct Kit : Module {
 	enum ParamId {
 		SIZE_PARAM, TENSION_PARAM, STIFF_PARAM, AIR_PARAM,
 		DECAY_PARAM, TONE_PARAM, COUPLE_PARAM, RESO_PARAM,
@@ -144,27 +144,33 @@ struct Skin : Module {
 	bool  pendHit = false;
 	// Mirrors for the display, which must not reach into the audio thread.
 	float dispR = 0.55f, dispA = 0.f, dispEnergy = 0.f;
+	// The screen must draw what the ENGINE is using, not what the knobs say. CV
+	// is summed into locals in process() and never written back to the params,
+	// so a display reading params[] shows the knob and silently ignores every
+	// patched cable -- which is exactly how it behaved.
+	float dispSize = 0.45f, dispTens = 0.5f, dispAir = 0.f;
+	float dispExcite = 0.7f, dispWires = 0.f, dispMuffle = 0.f, dispCouple = 0.4f;
 	float modeVis[sfs::Drum::NM] = {0.f};
 	int   headView = 1;                  // 0 = flat rings, 1 = 3D surface
 
-	Skin() {
+	Kit() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		// SIZE and TENSION both move the pitch, and for an ideal membrane that
 		// is ALL they do -- the mode ratios are scale-invariant, so the two are
 		// the same control. They only separate through stiffness, the cavity and
 		// damping, which is why those exist. SIZE is the slow one: a big drum is
 		// low and dark, and it stays dark when you tighten it.
-		configParam<SkinSizeQ>(SIZE_PARAM, 0.f, 1.f, 0.45f, "Drum size");
-		configParam<SkinTensionQ>(TENSION_PARAM, 0.f, 1.f, 0.5f, "Head tension");
-		configParam<SkinMaterialQ>(STIFF_PARAM, 0.f, 1.f, 0.f, "Material");
-		configParam<SkinAirQ>(AIR_PARAM, 0.f, 1.f, 0.f, "Air cavity");
-		configParam<SkinDecayQ>(DECAY_PARAM, 0.f, 1.f, 0.5f, "Decay");
-		configParam<SkinToneQ>(TONE_PARAM, 0.f, 1.f, 0.5f, "Tone (how fast partials die)");
+		configParam<KitSizeQ>(SIZE_PARAM, 0.f, 1.f, 0.45f, "Drum size");
+		configParam<KitTensionQ>(TENSION_PARAM, 0.f, 1.f, 0.5f, "Head tension");
+		configParam<KitMaterialQ>(STIFF_PARAM, 0.f, 1.f, 0.f, "Material");
+		configParam<KitAirQ>(AIR_PARAM, 0.f, 1.f, 0.f, "Air cavity");
+		configParam<KitDecayQ>(DECAY_PARAM, 0.f, 1.f, 0.5f, "Decay");
+		configParam<KitToneQ>(TONE_PARAM, 0.f, 1.f, 0.5f, "Tone (how fast partials die)");
 		configParam(COUPLE_PARAM, 0.f, 1.f, 0.4f, "Coupling between the two heads", "%", 0.f, 100.f);
-		configParam<SkinResoQ>(RESO_PARAM, 0.6f, 1.6f, 1.1f, "Resonant head tuning");
-		configParam<SkinExciteQ>(EXCITE_PARAM, 0.f, 1.f, 0.7f, "Beater");
-		configParam<SkinWeightQ>(WEIGHT_PARAM, 0.3f, 2.f, 1.f, "Beater weight");
-		configParam<SkinBendQ>(BEND_PARAM, 0.f, 1.f, 0.25f, "Bend (pitch drop after the hit)");
+		configParam<KitResoQ>(RESO_PARAM, 0.6f, 1.6f, 1.1f, "Resonant head tuning");
+		configParam<KitExciteQ>(EXCITE_PARAM, 0.f, 1.f, 0.7f, "Beater");
+		configParam<KitWeightQ>(WEIGHT_PARAM, 0.3f, 2.f, 1.f, "Beater weight");
+		configParam<KitBendQ>(BEND_PARAM, 0.f, 1.f, 0.25f, "Bend (pitch drop after the hit)");
 		configParam(STRIKEX_PARAM, -1.f, 1.f, 0.f, "Strike X");
 		configParam(STRIKEY_PARAM, -1.f, 1.f, 0.42f, "Strike Y");
 		configParam(MUFFLE_PARAM, 0.f, 1.f, 0.f, "Muffle (a hand on the head)", "%", 0.f, 100.f);
@@ -235,6 +241,10 @@ struct Skin : Module {
 			drum.strikeR   = r * 0.97f;
 			drum.strikeAng = std::atan2(y, x);
 			dispR = r; dispA = drum.strikeAng;
+			dispSize = size; dispTens = tens; dispAir = drum.air;
+			dispMuffle = drum.muffle; dispCouple = drum.couple;
+			dispExcite = clamp(params[EXCITE_PARAM].getValue(), 0.f, 1.f);
+			dispWires  = clamp(params[SNARE_PARAM].getValue(), 0.f, 1.f);
 			// modes first: updateStrike()'s excitation tilt reads ratio[], which
 			// updateModes() computes. The other order used last frame's layout.
 			drum.updateModes();
@@ -285,8 +295,8 @@ struct Skin : Module {
 	}
 
 	void loadPreset(int i) {
-		if (i < 0 || i >= SKIN_NPRESET) return;
-		const SkinPreset& p = SKIN_PRESETS[i];
+		if (i < 0 || i >= KIT_NPRESET) return;
+		const KitPreset& p = KIT_PRESETS[i];
 		params[SIZE_PARAM].setValue(p.size);
 		params[TENSION_PARAM].setValue(p.tension);
 		params[STIFF_PARAM].setValue(p.material);
@@ -324,8 +334,8 @@ struct Skin : Module {
 // ── the head ────────────────────────────────────────────────────────────────
 // A drum seen from above. It is not a picture of the module's settings, it is
 // the drum: click it to play it, and where you click is where it is struck.
-struct SkinDisplay : OpaqueWidget {
-	Skin* module = nullptr;
+struct KitDisplay : OpaqueWidget {
+	Kit* module = nullptr;
 	std::shared_ptr<Font> font;
 	Vec dragFrom;
 
@@ -334,7 +344,7 @@ struct SkinDisplay : OpaqueWidget {
 		// Load the face here, not in the constructor: the window may not exist
 		// yet when the widget is built. Leaving it unloaded is a null deref the
 		// first time anything draws text -- f->handle on a null shared_ptr, which
-		// faults at address 0x8 and takes Rack down the moment Skin is placed.
+		// faults at address 0x8 and takes Rack down the moment Kit is placed.
 		if (!font || font->handle < 0) font = sfs::screenFontFace();
 		nvgScissor(args.vg, RECT_ARGS(Rect(Vec(0, 0), box.size)));
 		if (!module) drawPreview(args); else drawLive(args);
@@ -381,8 +391,20 @@ struct SkinDisplay : OpaqueWidget {
 	// a 6-inch splash. The range is kept off zero so a small drum is still a
 	// drum rather than a dot.
 	float sizeScale() const {
-		float sz = module ? clamp(module->params[Skin::SIZE_PARAM].getValue(), 0.f, 1.f) : 0.55f;
-		return 0.52f + 0.48f * sz;
+		return 0.52f + 0.48f * (module ? clamp(module->dispSize, 0.f, 1.f) : 0.55f);
+	}
+	// EVERY drum here has two heads and a shell between them -- COUPLE and RESO
+	// only mean anything because it does -- so the shell is always drawn, and its
+	// depth simply follows the drum's size the way a real one does.
+	//
+	// It used to follow AIR, which was wrong twice: AIR is the CAVITY morph, the
+	// thing that pulls the modes into a kettledrum's harmonic series, and a kick
+	// wants none of that while having the deepest shell of anything here. So the
+	// kick rendered with no shell at all. AIR now closes the BOTTOM instead,
+	// which is what a kettle actually is: one head over a sealed bowl.
+	float shellDepth(float rad) const { return rad * 0.30f; }
+	float airAmt() const {
+		return module ? clamp(module->dispAir, 0.f, 1.f) : 0.35f;
 	}
 	float head3Rad() const {
 		// Centred on the WHOLE screen, so the room either side has to clear the
@@ -398,8 +420,7 @@ struct SkinDisplay : OpaqueWidget {
 	// floats off the head.
 	float head3Cy() const {
 		float rad = head3Rad(), hgt = rad * 0.34f;
-		float airv = module ? clamp(module->params[Skin::AIR_PARAM].getValue(), 0.f, 1.f) : 0.35f;
-		float shell = rad * 0.34f * airv;      // no cavity, no shell
+		float shell = shellDepth(rad);
 		return box.size.y * 0.5f - (shell - hgt) * 0.5f;
 	}
 	float head3Cx() const { return box.size.x * 0.5f; }
@@ -412,8 +433,7 @@ struct SkinDisplay : OpaqueWidget {
 		float hgt = rad * 0.34f;
 		// The shell. Tied to AIR, which IS the cavity, so the picture says
 		// something rather than being a constant box.
-		float airv = module ? clamp(module->params[Skin::AIR_PARAM].getValue(), 0.f, 1.f) : 0.35f;
-		float shell = rad * 0.34f * airv;
+		float shell = shellDepth(rad), airv = airAmt();
 		float cy = head3Cy();
 		float sa = module ? module->dispA : 0.f;
 
@@ -443,7 +463,7 @@ struct SkinDisplay : OpaqueWidget {
 		// A taut head pulls its grid out toward the rim; a slack one lets it
 		// gather in the middle. Same rings, redistributed -- which is what
 		// tension does to a real head's response, and it reads instantly.
-		float tens = module ? clamp(module->params[Skin::TENSION_PARAM].getValue(), 0.f, 1.f) : 0.5f;
+		float tens = module ? clamp(module->dispTens, 0.f, 1.f) : 0.5f;
 		float warp = 1.f - 0.55f * (tens - 0.5f);        // <1 pushes rings outward
 		auto PX = [&](int i, int j, float& X, float& Y) {
 			float u = std::pow((float)i / RINGS, warp);
@@ -486,7 +506,29 @@ struct SkinDisplay : OpaqueWidget {
 			}
 		}
 
-		drawWires(args, cx, cy, rad, shell);
+		// AIR closes the bottom. At zero it is an open shell with a resonant head
+		// across it, which is a tom or a kick; wound up it bellies into a sealed
+		// bowl, which is a kettledrum -- and a kettledrum is exactly what the
+		// harmonic series AIR imposes belongs to. Same knob, same story, twice.
+		if (airv > 0.02f) {
+			int NB = 5;
+			for (int b = 1; b <= NB; b++) {
+				float t = (float)b / NB;                    // 0 at the rim, 1 at the pole
+				float rr = rad * std::sqrt(std::max(0.f, 1.f - t * t));
+				float yy = cy + shell + airv * rad * 0.55f * t;
+				nvgBeginPath(args.vg);
+				for (int j = 0; j <= SECT; j++) {
+					float th = 2.f * (float)M_PI * (float)j / SECT;
+					float X = cx + std::cos(th) * rr, Y = yy + std::sin(th) * rr * TILT;
+					if (j == 0) nvgMoveTo(args.vg, X, Y); else nvgLineTo(args.vg, X, Y);
+				}
+				nvgStrokeColor(args.vg, nvgRGBAf(0.21f, 0.21f, 0.30f, 0.30f + 0.55f * airv));
+				nvgStrokeWidth(args.vg, 0.8f);
+				nvgStroke(args.vg);
+			}
+		}
+		// The resonant head and its wires only exist while the bottom is open.
+		if (airv < 0.85f) drawWires(args, cx, cy, rad, shell);
 
 		// ── the surface: rings in arcs so colour is local, then spokes ────────
 		for (int i = RINGS; i >= 1; i--) {
@@ -553,9 +595,9 @@ struct SkinDisplay : OpaqueWidget {
 		}
 
 		// where the muffle sits
-		float mu = module->params[Skin::MUFFLE_PARAM].getValue();
+		float mu = module->dispMuffle;
 		if (mu > 0.01f) {
-			float ma = module->params[Skin::MUFFLEANG_PARAM].getValue() * (float)M_PI;
+			float ma = module->params[Kit::MUFFLEANG_PARAM].getValue() * (float)M_PI;
 			float mr = rad * 0.82f * 0.93f;
 			nvgBeginPath(args.vg);
 			nvgCircle(args.vg, cx + std::cos(ma) * mr, cy + std::sin(ma) * mr,
@@ -582,7 +624,7 @@ struct SkinDisplay : OpaqueWidget {
 		float sx = cx + std::cos(sa) * sr * rad * (three ? 1.f : 0.93f);
 		float sy = cy + std::sin(sa) * sr * rad * tilt;
 		float f = clamp(module->uiFlash, 0.f, 1.f);
-		float hard = clamp(module->params[Skin::EXCITE_PARAM].getValue(), 0.f, 1.f);
+		float hard = clamp(module->dispExcite, 0.f, 1.f);
 		float r = mm2px(2.6f - 1.5f * hard) + f * mm2px(1.8f);
 		// soft beater: a wide halo and no rim. stick: tight, with a hard edge.
 		NVGpaint g = nvgRadialGradient(args.vg, sx, sy, r * (0.15f + 0.70f * hard), r,
@@ -613,8 +655,7 @@ struct SkinDisplay : OpaqueWidget {
 		// The thumbnail stands in a value, the same way the head stands in a mode
 		// mix, so the browser shows what the module has rather than what a fresh
 		// instance happens to be set to.
-		float w = module ? clamp(module->params[Skin::SNARE_PARAM].getValue(), 0.f, 1.f)
-		                 : 0.85f;
+		float w = module ? clamp(module->dispWires, 0.f, 1.f) : 0.85f;
 		if (w < 0.02f) return;
 		// Sixteen rather than twenty, over a slightly wider band: at the size
 		// this screen actually is, twenty strands at full opacity merge into a
@@ -765,9 +806,9 @@ struct SkinDisplay : OpaqueWidget {
 	}
 };
 
-struct SkinWidget : ModuleWidget {
+struct KitWidget : ModuleWidget {
 	void appendContextMenu(Menu* menu) override {
-		Skin* m = dynamic_cast<Skin*>(this->module);
+		Kit* m = dynamic_cast<Kit*>(this->module);
 		assert(m);
 		menu->addChild(new MenuSeparator);
 		// These are the instruments the engine was measured against while it was
@@ -776,25 +817,25 @@ struct SkinWidget : ModuleWidget {
 		menu->addChild(createIndexPtrSubmenuItem("Head view",
 			{"Flat", "3D"}, &m->headView));
 		menu->addChild(createSubmenuItem("Instruments", "", [=](Menu* sub) {
-			for (int i = 0; i < SKIN_NPRESET; i++) {
+			for (int i = 0; i < KIT_NPRESET; i++) {
 				int idx = i;
-				sub->addChild(createMenuItem(SKIN_PRESETS[i].name, "",
+				sub->addChild(createMenuItem(KIT_PRESETS[i].name, "",
 				                             [=]() { m->loadPreset(idx); }));
 			}
 		}));
 	}
 
-	SkinWidget(Skin* module) {
+	KitWidget(Kit* module) {
 		setModule(module);
-		setPanel(createPanel(asset::plugin(pluginInstance, "res/skin.svg")));
+		setPanel(createPanel(asset::plugin(pluginInstance, "res/kit.svg")));
 		using sfs::hp;
 
 		sfs::PanelLabels* lbl = new sfs::PanelLabels();
 		lbl->box.size = box.size;
 		addChild(lbl);
-		lbl->title(hp(1), hp(1.6f), "SKIN");
+		lbl->title(hp(1), hp(1.6f), "KIT");
 
-		SkinDisplay* disp = new SkinDisplay();
+		KitDisplay* disp = new KitDisplay();
 		disp->module = module;
 		// Full width. The head is a circle so its size is set by the height; the
 		// width that buys goes to the mode spectrum beside it, which is the one
@@ -809,55 +850,55 @@ struct SkinWidget : ModuleWidget {
 		const float KY1 = 71.5f, KY2 = 87.5f, TY = 98.f, JY1 = 110.f, JY2 = 122.f;
 
 		struct K { int p; const char* t; };
-		const K big[4] = {{Skin::SIZE_PARAM, "SIZE"}, {Skin::TENSION_PARAM, "TENSION"},
-		                  {Skin::STIFF_PARAM, "MATERIAL"}, {Skin::AIR_PARAM, "AIR"}};
+		const K big[4] = {{Kit::SIZE_PARAM, "SIZE"}, {Kit::TENSION_PARAM, "TENSION"},
+		                  {Kit::STIFF_PARAM, "MATERIAL"}, {Kit::AIR_PARAM, "AIR"}};
 		for (int i = 0; i < 4; i++) {
 			addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(cx[i], KY1)), module, big[i].p));
 			lbl->knobLarge(cx[i], KY1, big[i].t);
 		}
-		const K small[4] = {{Skin::DECAY_PARAM, "DECAY"}, {Skin::TONE_PARAM, "TONE"},
-		                    {Skin::EXCITE_PARAM, "EXCITER"}, {Skin::MUFFLE_PARAM, "MUFFLE"}};
+		const K small[4] = {{Kit::DECAY_PARAM, "DECAY"}, {Kit::TONE_PARAM, "TONE"},
+		                    {Kit::EXCITE_PARAM, "EXCITER"}, {Kit::MUFFLE_PARAM, "MUFFLE"}};
 		for (int i = 0; i < 4; i++) {
 			addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(cx[i], KY2)), module, small[i].p));
 			lbl->knob(cx[i], KY2, small[i].t);
 		}
 
 		const float tx[7] = {7.98f, 23.95f, 39.91f, 55.88f, 71.84f, 87.81f, 103.78f};
-		const K trims[7] = {{Skin::COUPLE_PARAM, "COUPLE"}, {Skin::RESO_PARAM, "RESO"},
-		                    {Skin::BEND_PARAM, "BEND"},     {Skin::WEIGHT_PARAM, "WEIGHT"},
-		                    {Skin::SNARE_PARAM, "WIRES"},   {Skin::SNARETHR_PARAM, "TIGHT"},
-		                    {Skin::LEVEL_PARAM, "LEVEL"}};
+		const K trims[7] = {{Kit::COUPLE_PARAM, "COUPLE"}, {Kit::RESO_PARAM, "RESO"},
+		                    {Kit::BEND_PARAM, "BEND"},     {Kit::WEIGHT_PARAM, "WEIGHT"},
+		                    {Kit::SNARE_PARAM, "WIRES"},   {Kit::SNARETHR_PARAM, "TIGHT"},
+		                    {Kit::LEVEL_PARAM, "LEVEL"}};
 		for (int i = 0; i < 7; i++) {
 			addParam(createParamCentered<Trimpot>(mm2px(Vec(tx[i], TY)), module, trims[i].p));
 			lbl->trim(tx[i], TY, trims[i].t);
 		}
 
 		struct J { int id; const char* t; };
-		const J in1[5] = {{Skin::GATE_INPUT, "GATE"}, {Skin::VEL_INPUT, "VEL"},
-		                  {Skin::VOCT_INPUT, "V/OCT"}, {Skin::STRIKEX_INPUT, "X"},
-		                  {Skin::STRIKEY_INPUT, "Y"}};
+		const J in1[5] = {{Kit::GATE_INPUT, "GATE"}, {Kit::VEL_INPUT, "VEL"},
+		                  {Kit::VOCT_INPUT, "V/OCT"}, {Kit::STRIKEX_INPUT, "X"},
+		                  {Kit::STRIKEY_INPUT, "Y"}};
 		for (int i = 0; i < 5; i++) {
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(tx[i], JY1)), module, in1[i].id));
 			lbl->jack(tx[i], JY1, in1[i].t);
 		}
 		addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(
-			mm2px(Vec(tx[5], JY1)), module, Skin::STRIKE_PARAM, Skin::STRIKE_LIGHT));
+			mm2px(Vec(tx[5], JY1)), module, Kit::STRIKE_PARAM, Kit::STRIKE_LIGHT));
 		lbl->jack(tx[5], JY1, "HIT");
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(tx[6], JY1)), module, Skin::SNARE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(tx[6], JY1)), module, Kit::SNARE_OUTPUT));
 		lbl->jack(tx[6], JY1, "WIRES");
 
-		const J in2[5] = {{Skin::SIZE_INPUT, "SIZE"}, {Skin::TENSION_INPUT, "TEN"},
-		                  {Skin::STIFF_INPUT, "MAT"}, {Skin::AIR_INPUT, "AIR"},
-		                  {Skin::MUFFLE_INPUT, "MUFF"}};
+		const J in2[5] = {{Kit::SIZE_INPUT, "SIZE"}, {Kit::TENSION_INPUT, "TEN"},
+		                  {Kit::STIFF_INPUT, "MAT"}, {Kit::AIR_INPUT, "AIR"},
+		                  {Kit::MUFFLE_INPUT, "MUFF"}};
 		for (int i = 0; i < 5; i++) {
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(tx[i], JY2)), module, in2[i].id));
 			lbl->jack(tx[i], JY2, in2[i].t);
 		}
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(tx[5], JY2)), module, Skin::HEAD_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(tx[5], JY2)), module, Kit::HEAD_OUTPUT));
 		lbl->jack(tx[5], JY2, "HEAD");
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(tx[6], JY2)), module, Skin::OUT_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(tx[6], JY2)), module, Kit::OUT_OUTPUT));
 		lbl->jack(tx[6], JY2, "OUT");
 	}
 };
 
-Model* modelSkin = createModel<Skin, SkinWidget>("Skin");
+Model* modelKit = createModel<Kit, KitWidget>("Kit");

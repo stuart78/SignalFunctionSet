@@ -45,4 +45,4 @@ extern Model* modelSlide;
 extern Model* modelOpMorph;
 extern Model* modelSlideX;
 extern Model* modelSlice;
-extern Model* modelSkin;
+extern Model* modelKit;

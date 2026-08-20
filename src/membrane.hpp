@@ -1,5 +1,5 @@
 #pragma once
-// Modal synthesis of a struck circular membrane, for Skin.
+// Modal synthesis of a struck circular membrane, for Kit.
 //
 // A drum head is a 2D wave equation on a disc, and its solutions are the Bessel
 // modes J_m(j_mn * r/R) * cos(m*theta). Rather than run a mesh over the disc,
@@ -236,7 +236,7 @@ struct Drum {
 	// which is most of why the whole range leaned metallic.
 	//
 	// gain[] is used at BOTH ends -- to inject the strike and as the output tap,
-	// since Skin listens where it is hit -- so a tilt of 1 here is 1/omega twice
+	// since Kit listens where it is hit -- so a tilt of 1 here is 1/omega twice
 	// and 12 dB/octave in the result. Physics asks for one; the ear asked for
 	// two, and the ear was auditioned against the alternatives before this was
 	// written down. 0.5 is the physically exact setting if it is ever wanted.

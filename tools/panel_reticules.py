@@ -471,7 +471,7 @@ MODULES = {
     "slice": ("Slice", "src/slice.cpp", "res/slice.svg",
                {"SLICE_NXF": 7}),
     "opmorph": ("OpMorph", "src/opmorph.cpp", "res/opmorph.svg", {"OPM_COLS": 4, "OPM_ROWS": 4, "OPM_SLOTS": 16}),
-    "skin":    ("Skin",    "src/skin.cpp",    "res/skin.svg",    {}),
+    "kit":     ("Kit",     "src/kit.cpp",     "res/kit.svg",     {}),
 }
 
 # Panels whose artwork is hand-made and is now the SOURCE of the layout rather
