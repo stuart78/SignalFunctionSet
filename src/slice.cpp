@@ -979,80 +979,57 @@ struct SliceWidget : ModuleWidget {
 	SliceWidget(Slice* module) {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/slice.svg")));
-		using sfs::hp;
 
-		sfs::PanelLabels* lbl = new sfs::PanelLabels();
-		lbl->box.size = box.size;
-		addChild(lbl);
-		lbl->title(hp(1), hp(1.6f), "SLICE");
-
+		// NO PanelLabels HERE, and no title. This panel's artwork carries its own
+		// text as outlined paths -- which Rack does render, unlike <text> -- so
+		// drawing them again in Figtree printed every label on the panel twice,
+		// half a millimetre out. Positions below are read from the guides in
+		// design/slice.svg, which is now the source of the layout.
 		SliceDisplay* disp = new SliceDisplay();
 		disp->module = module;
-		disp->box.pos  = mm2px(Vec(hp(1), hp(2.4f)));
-		disp->box.size = mm2px(Vec(hp(19), hp(6)));
+		disp->box.pos  = mm2px(Vec(5.08f, 10.16f));
+		disp->box.size = mm2px(Vec(101.60f, 56.22f));
 		addChild(disp);
 
-		// ── controls ─────────────────────────────────────────────────────────
-		const float kx[4] = {hp(3), hp(8), hp(14), hp(19)};
-		const float ky1 = hp(11), ky2 = hp(14);
-		// WHAT and HOW OFTEN, side by side, because they are the two questions.
-		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(kx[0], ky1)), module, Slice::EFFECT_PARAM));
-		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(kx[1], ky1)), module, Slice::RATIO_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[2], ky1)), module, Slice::LENGTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(kx[3], ky1)), module, Slice::DEPTH_PARAM));
-		// A large knob is 12.7mm across, so the standard label gap puts the text
-		// inside it. These two get their own.
-		lbl->add(kx[0], ky1 - 8.4f, "EFFECT");
-		lbl->add(kx[1], ky1 - 8.4f, "RATIO");
-		lbl->knob(kx[2], ky1, "LENGTH");
-		lbl->knob(kx[3], ky1, "DEPTH");
-
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[0], ky2)), module, Slice::RANGE_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[1], ky2)), module, Slice::DIV_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[2], ky2)), module, Slice::SHAPE_PARAM));
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(kx[3], ky2)), module, Slice::WINDOW_PARAM));
-		lbl->trim(kx[0], ky2, "REACH");
-		lbl->trim(kx[1], ky2, "DIV");
-		lbl->trim(kx[2], ky2, "SHAPE");
-		lbl->trim(kx[3], ky2, "WINDOW");
-
-		const float by = hp(17.4f);
+		// ── the controls, one row ────────────────────────────────────────────
+		const float CY = 81.28f, TY = 80.39f;
+		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(8.47f,  CY)), module, Slice::EFFECT_PARAM));
+		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(23.71f, CY)), module, Slice::RATIO_PARAM));
+		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(38.95f, CY)), module, Slice::SHAPE_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(54.99f, TY)), module, Slice::DEPTH_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(66.84f, TY)), module, Slice::LENGTH_PARAM));
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<GreenLight>>>(
-			mm2px(Vec(hp(6.5f), by)), module, Slice::FREEZE_PARAM, Slice::FREEZE_LIGHT));
-		addParam(createParamCentered<VCVButton>(mm2px(Vec(hp(15.5f), by)), module, Slice::RESEED_PARAM));
-		lbl->trim(hp(6.5f), by, "FREEZE");
-		lbl->trim(hp(15.5f), by, "RESEED");
+			mm2px(Vec(78.70f, TY)), module, Slice::FREEZE_PARAM, Slice::FREEZE_LIGHT));
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(90.55f, TY)), module, Slice::RESEED_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(102.32f, TY)), module, Slice::RANGE_PARAM));
 
-		// ── jacks, all of them, along the foot ───────────────────────────────
-		const float jy1 = hp(20.6f), jy2 = hp(23.1f);
-		const float jx0 = hp(1.9f), jdx = hp(2.6f);
-		struct J { int id; bool out; const char* name; };
-		static const J ROW1[8] = {
-			{Slice::L_INPUT, false, "L"}, {Slice::R_INPUT, false, "R"},
-			{Slice::CLOCK_INPUT, false, "CLK"}, {Slice::BAR_INPUT, false, "BAR"},
-			{Slice::RESET_INPUT, false, "RST"}, {Slice::FREEZE_INPUT, false, "FRZ"},
-			{Slice::RESEED_INPUT, false, "SEED"}, {Slice::RANGE_INPUT, false, "RCH"},
+		// ── CV row: each jack under the control it feeds ─────────────────────
+		const float JY1 = 102.40f;
+		struct J { float x; int id; };
+		static const J CV[9] = {
+			{  7.58f, Slice::EFFECT_INPUT }, { 19.43f, Slice::RATIO_INPUT  },
+			{ 31.28f, Slice::CLOCK_INPUT  }, { 43.14f, Slice::BAR_INPUT    },
+			{ 54.99f, Slice::DEPTH_INPUT  }, { 66.84f, Slice::LENGTH_INPUT },
+			{ 78.70f, Slice::FREEZE_INPUT }, { 90.55f, Slice::RESEED_INPUT },
+			{102.40f, Slice::RANGE_INPUT  },
 		};
-		static const J ROW2[8] = {
-			{Slice::EFFECT_INPUT, false, "EFF"}, {Slice::RATIO_INPUT, false, "RATIO"},
-			{Slice::DEPTH_INPUT, false, "DPTH"}, {Slice::LENGTH_INPUT, false, "LEN"},
-			{Slice::L_OUTPUT, true, "L"}, {Slice::R_OUTPUT, true, "R"},
-			{Slice::SLICE_OUTPUT, true, "TRIG"}, {Slice::XF_OUTPUT, true, "GATE"},
-		};
-		for (int i = 0; i < 8; i++) {
-			float x = jx0 + jdx * (float)i;
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(x, jy1)), module, ROW1[i].id));
-			lbl->jack(x, jy1, ROW1[i].name);
-		}
-		for (int i = 0; i < 8; i++) {
-			float x = jx0 + jdx * (float)i;
-			if (ROW2[i].out)
-				addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(x, jy2)), module, ROW2[i].id));
-			else
-				addInput(createInputCentered<PJ301MPort>(mm2px(Vec(x, jy2)), module, ROW2[i].id));
-			if (ROW2[i].out) lbl->jackOnPlate(x, jy2, ROW2[i].name);
-			else             lbl->jack(x, jy2, ROW2[i].name);
-		}
+		for (int i = 0; i < 9; i++)
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(CV[i].x, JY1)), module, CV[i].id));
+
+		// ── audio in, two trims, reset, then the outputs on their plate ──────
+		const float JY2 = 121.03f;
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(7.58f,  JY2)), module, Slice::L_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(19.43f, JY2)), module, Slice::R_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(31.28f, JY2)), module, Slice::DIV_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(43.05f, JY2)), module, Slice::WINDOW_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(54.91f, JY2)), module, Slice::RESET_INPUT));
+		// TRIG, GATE, L, R -- the order the plate is lettered, which is not the
+		// order the enum is in. Getting this backwards puts the audio out under
+		// the label that says TRIG, and nothing about it looks wrong on screen.
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(66.84f,  JY2)), module, Slice::SLICE_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(78.70f,  JY2)), module, Slice::XF_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(90.47f,  JY2)), module, Slice::L_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(102.40f, JY2)), module, Slice::R_OUTPUT));
 	}
 
 	// The audio thread hands the old buffer back by swapping it into the pending
