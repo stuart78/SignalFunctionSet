@@ -41,7 +41,7 @@ applies until it comes out.
 - [ ] **Enums are append-only.** Params, inputs, outputs and lights serialise by
       index. Retire in place with a `"(retired)"` label; never delete or insert.
 
-- [ ] **Static analysis is clean.** `./tools/cppcheck.sh` — see below. This is a
+- [ ] **Static analysis is clean.** `./tools/static-check.sh` — see below. This is a
       release-prep check, not something to run on every build.
 
 ## The metadata
@@ -68,7 +68,7 @@ applies until it comes out.
 
 ## The release
 
-- [ ] `./tools/cppcheck.sh` clean.
+- [ ] `./tools/static-check.sh` clean.
 - [ ] Version bumped in `plugin.json`.
 - [ ] `./build.sh prod` compiles.
 - [ ] `./tools/screenshots.sh` if any panel art changed.
@@ -79,14 +79,23 @@ applies until it comes out.
 
 ## Static analysis
 
-The Library runs cppcheck on every submission and opens an issue with whatever
-it finds. Run it before they do — but **only when preparing a release**. It
-takes a couple of minutes over the whole tree, it has nothing useful to say
-about a change that has not been finished yet, and running it on every dev build
-just makes the build slow enough to stop wanting to run.
+**The Library runs TWO checkers: cppcheck and clang-tidy.** It opens an issue
+with whatever either of them finds. Run both before they do, but **only when
+preparing a release**.
+
+2.18.0 shipped with fourteen clang-tidy findings after this checklist had been
+worked through and declared static analysis clean, because the script only ran
+cppcheck. cppcheck agreed with us exactly; the gap was never a disagreement
+between us and the Library, it was a checker we never ran. **If the Library adds
+a checker, add it to the script the same day.**
+
+clang-tidy is not part of the Xcode toolchain. `brew install llvm`. The script
+says so and carries on rather than failing, so a machine without it still gets
+the cppcheck pass -- but that is the state 2.18.0 was released in, so treat the
+"NOT INSTALLED" line as a finding of its own.
 
 ```bash
-./tools/cppcheck.sh          # exit status is the number of findings in our code
+./tools/static-check.sh          # exit status is the number of findings in our code
 ```
 
 It is not a formality. The first report ([#11](https://github.com/stuart78/SignalFunctionSet-VCV-Rack/issues/11))

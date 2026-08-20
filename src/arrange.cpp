@@ -295,8 +295,12 @@ struct ArrangeDisplay : OpaqueWidget {
 			txt(vg, rc.pos.x+rc.size.x-4.5f*s, rc.pos.y+12*s, 9.f*s, rCol, NVG_ALIGN_RIGHT|NVG_ALIGN_MIDDLE, NOTE_NAMES[clamp(root[i],0,11)]);
 			// scale name, truncated so it stays inside the cell ("Chromatic" → "Chroma")
 			char scName[8]; const char* scFull = sfs::SCALES[clamp(scl[i],0,sfs::NUM_SCALES-1)].shortName;
-			if (std::strlen(scFull) > 7) { std::strncpy(scName, scFull, 6); scName[6] = '\0'; }
-			else { std::strcpy(scName, scFull); }
+			// Bounded by construction. The previous version was safe -- strlen <= 7
+			// plus a NUL is exactly 8 -- but it took a branch and an unbounded
+			// strcpy to be safe, and neither the reader nor the analyser can see
+			// that at a glance.
+			std::snprintf(scName, sizeof(scName), "%.*s",
+			              std::strlen(scFull) > 7 ? 6 : 7, scFull);
 			txt(vg, rc.pos.x+rc.size.x*0.5f, rc.pos.y+rc.size.y-9*s, 9.f*s, sCol, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE, scName);
 			// per-phrase BPM, centered under the cell (bright orange on the playing phrase)
 			txt(vg, rc.pos.x+rc.size.x*0.5f, uc(60.5f), 8.f*s, (i==cur) ? nvgRGB(0xec,0x65,0x2e) : bCol, NVG_ALIGN_CENTER|NVG_ALIGN_MIDDLE, string::f("%d BPM", bpm[i]).c_str());

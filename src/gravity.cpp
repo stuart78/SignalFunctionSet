@@ -1189,8 +1189,7 @@ struct Gravity : Module {
 			float remain = (1.f - hmProg) * segLen;
 			if (hmFrom != hmTo && dist < remain) {
 				hmProg += dist / segLen;
-				dist = 0.f;
-				break;
+				break;                       // dist is not read again after this
 			}
 			// Reached hmTo (or we were stationary): eat its dots, score, advance.
 			dist -= remain;
@@ -1203,8 +1202,7 @@ struct Gravity : Module {
 				hmLevel++;
 				hmLevelFlash = 2.0f;
 				hmNewMaze();
-				dist = 0.f;
-				break;
+				break;                       // dist is not read again after this
 			}
 			// Head to nearest big dot; if none, nearest ANY dot (full BFS, so he
 			// can never stall while dots remain). Deprioritize reversing.

@@ -229,9 +229,15 @@ static std::string dpSlug(const std::string& s) {
 static bool loadDrumPatternsTxt(const std::string& path, Library& lib) {
 	FILE* f = std::fopen(path.c_str(), "rb");
 	if (!f) return false;
+	// A short read means EOF *or* an error, and this loop could not tell them
+	// apart: a disk error partway through imported a truncated bank and said
+	// nothing. ferror() is the difference between "that is the whole file" and
+	// "that is as much of it as I got".
 	std::string text; char buf[4096]; size_t r;
 	while ((r = std::fread(buf, 1, sizeof(buf), f)) > 0) text.append(buf, r);
+	bool readFailed = std::ferror(f) != 0;
 	std::fclose(f);
+	if (readFailed) return false;
 
 	float bpm = 120.f, swing = 0.f;
 	int tsN = 4, tsD = 4;
@@ -1813,7 +1819,9 @@ struct FillWidget : ModuleWidget {
 			if (FILE* f = std::fopen(tmp.c_str(), "rb")) {
 				char buf[4096]; size_t r;
 				while ((r = std::fread(buf, 1, sizeof(buf), f)) > 0) data.append(buf, r);
+				bool readFailed = std::ferror(f) != 0;
 				std::fclose(f);
+				if (readFailed) data.clear();   // a partial download is not a bank
 			}
 			system::remove(tmp);
 			std::string txt = (data.find("<code") != std::string::npos || data.find("<html") != std::string::npos)

@@ -241,10 +241,7 @@ struct Intone : Module {
 		// vowelPos in 0-1, 5 vowels evenly spaced
 		float scaled = vowelPos * 4.f; // 0..4
 		int idx = (int)scaled;
-		if (idx >= 4) {
-			idx = 4;
-			return VOWEL_FREQS[4][formantIdx];
-		}
+		if (idx >= 4) return VOWEL_FREQS[4][formantIdx];
 		float frac = scaled - (float)idx;
 		return VOWEL_FREQS[idx][formantIdx] * (1.f - frac) +
 		       VOWEL_FREQS[idx + 1][formantIdx] * frac;

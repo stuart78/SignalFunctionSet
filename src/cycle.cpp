@@ -370,8 +370,11 @@ struct CycleDisplay : OpaqueWidget {
 		}
 		float bf = preview ? 0.f : module->dispBeatFrac;
 		if (bf > 0.02f) {
-			for (float p = bf; p < 0.999f; p += bf) {
-				float x = padL + p * plotW;
+			// Counted, not accumulated: repeatedly adding a float drifts, and at
+			// small bf the last tick lands somewhere other than where the maths
+			// says it should.
+			for (int bi = 1; (float)bi * bf < 0.999f; bi++) {
+				float x = padL + (float)bi * bf * plotW;
 				nvgBeginPath(vg); nvgMoveTo(vg, x, padT + plotH - 3.f); nvgLineTo(vg, x, padT + plotH);
 				nvgStrokeColor(vg, nvgRGBA(0x50, 0x5a, 0x70, 0xcc)); nvgStrokeWidth(vg, 0.7f); nvgStroke(vg);
 			}
@@ -392,7 +395,11 @@ struct CycleDisplay : OpaqueWidget {
 				float t = (float) s / SEG;
 				float ph = t + off;
 				float pw = ph - std::floor(ph);
-				int ridx = clamp((int)(pw * n), 0, n - 1);
+				// Bounded against the ARRAY, not just against n. n comes from
+				// another thread and is clamped to 64 a hundred lines away in a
+				// different function, so nothing here can see that it is safe --
+				// which is precisely what the analyser objected to.
+				int ridx = clamp((int)(pw * n), 0, std::min(n, Cycle::MAX_STEPS) - 1);
 				float rv = preview ? std::sin(ridx * 2.4f) : module->randSteps[ridx];
 				float v = clamp(lfoShape(ph, shape, n, rv) * amp * scale, -1.f, 1.f);
 				float x = padL + t * plotW;

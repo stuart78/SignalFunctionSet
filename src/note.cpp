@@ -1365,10 +1365,10 @@ void NoteDisplay::drawPreview(const DrawArgs& args) {
 
 	// Matrix
 	for (int col = 0; col < N_STEPS; col++) {
-		int litRow = (col < editLen && actCols[col % N_STEPS] ?
-			pitches[col] : (col < editLen ? pitches[col] : -1));
-		// All preview cols active
-		litRow = pitches[col];
+		// All preview cols are active, so the lit row is simply the pitch. The
+		// live path's conditional was copied in here and then overwritten on the
+		// next line, which is dead code that reads like a rule.
+		int litRow = pitches[col];
 		for (int row = 0; row < N_ROWS; row++) {
 			rack::math::Rect cr = cellRectFor(col, row);
 			bool isOctaveRow = (row == scaleSize);

@@ -425,8 +425,7 @@ struct KitDisplay : OpaqueWidget {
 	}
 	float head3Cx() const { return box.size.x * 0.5f; }
 
-	void drawHead3D(const DrawArgs& args, float cxIgnored, float cyIgnored, float radIgnored) {
-		(void)cxIgnored; (void)cyIgnored; (void)radIgnored;
+	void drawHead3D(const DrawArgs& args) {
 		const int RINGS = 12, SECT = 36, ARCS = 6;
 		const sfs::MembraneShapes& sh = sfs::membraneShapes();
 		float rad = head3Rad(), cx = head3Cx();
@@ -569,7 +568,7 @@ struct KitDisplay : OpaqueWidget {
 		float cy = box.size.y * 0.5f;
 		float rad = headRad(), cx = headCx();
 		if (module && module->headView == 1) {
-			drawHead3D(args, 0, 0, 0);
+			drawHead3D(args);
 			drawSpectrum(args, box.size.x - specW(), box.size.x - mm2px(2.f));
 			drawStrikeMark(args, head3Cx(), head3Cy(), head3Rad());
 			drawReadout(args, head3Cx());
@@ -733,27 +732,11 @@ struct KitDisplay : OpaqueWidget {
 	// already copes with module == NULL by standing in a plausible mode mix, so
 	// the preview is the same code rather than a second drawing to keep in step.
 	void drawPreview(const DrawArgs& args) {
-		float cy = box.size.y * 0.5f;
-		float rad = headRad(), cx = headCx();
-		drawHead3D(args, 0, 0, 0);
+		drawHead3D(args);
 		drawSpectrum(args, box.size.x - specW(), box.size.x - mm2px(2.f));
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, head3Cx() + head3Rad() * 0.42f,
 		          head3Cy() - head3Rad() * 0.30f * TILT, mm2px(1.6f));
-		nvgFillColor(args.vg, nvgRGBAf(0.93f, 0.40f, 0.18f, 0.9f));
-		nvgFill(args.vg);
-		return;
-		for (int i = 1; i <= 7; i++) {
-			float u = i / 7.f;
-			float a = 0.55f * std::fabs(std::cos(u * 4.2f)) * (1.f - u * 0.5f);
-			nvgBeginPath(args.vg);
-			nvgCircle(args.vg, cx, cy, rad * u * 0.93f);
-			nvgStrokeColor(args.vg, nvgRGBAf(0.0f, 0.59f, 0.87f, a));
-			nvgStrokeWidth(args.vg, 1.f + a * 2.2f);
-			nvgStroke(args.vg);
-		}
-		nvgBeginPath(args.vg);
-		nvgCircle(args.vg, cx + rad * 0.42f, cy - rad * 0.30f, mm2px(1.6f));
 		nvgFillColor(args.vg, nvgRGBAf(0.93f, 0.40f, 0.18f, 0.9f));
 		nvgFill(args.vg);
 	}
