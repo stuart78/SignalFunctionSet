@@ -58,7 +58,9 @@ fi
 # The Library runs the clang-analyzer-* checks. Everything else clang-tidy can
 # do is off: the readability and modernize packs produce thousands of notes it
 # does not report, and a checker that cries wolf is how a real finding gets
-# missed.
+# missed. optin.* is excluded for the same reason -- it is opt-in, the Library's
+# report contains none of it, and its padding check wants struct fields
+# reordered for six bytes.
 TIDY="$(command -v clang-tidy || true)"
 [ -n "$TIDY" ] || TIDY="$(ls /opt/homebrew/opt/llvm/bin/clang-tidy 2>/dev/null || true)"
 
@@ -70,15 +72,40 @@ if [ -z "$TIDY" ]; then
     echo "Findings it reports will arrive as a GitHub issue instead."
     tn=0
 else
-    traw=""
+    # -isysroot is NOT optional. Homebrew's clang does not find the macOS SDK on
+    # its own, every translation unit fails on <inttypes.h>, and clang-tidy then
+    # analyses NOTHING while exiting 0. With stderr discarded that reads as a
+    # clean run. A checker that cannot tell "clean" from "did not run" is worse
+    # than no checker, so the compile is verified below rather than assumed.
+    SDKROOT_PATH="$(xcrun --show-sdk-path 2>/dev/null || true)"
+    TFLAGS=(-std=c++11 -I "$ROOT/src" -I "$RACK_DIR/include" -I "$RACK_DIR/dep/include")
+    [ -n "$SDKROOT_PATH" ] && TFLAGS+=(-isysroot "$SDKROOT_PATH")
+
+    traw=""; broke=""
     for f in "$ROOT"/src/*.cpp; do
         case "$(basename "$f")" in dr_flac.cpp) continue ;; esac
-        traw+="$("$TIDY" --quiet --checks='-*,clang-analyzer-*' "$f" -- \
-                 -std=c++11 -I "$ROOT/src" -I "$RACK_DIR/include" \
-                 -I "$RACK_DIR/dep/include" 2>/dev/null \
-                 | grep -E "^$ROOT/src/[a-z_-]+\\.(cpp|hpp):" \
-                 | grep -v "/msfa/" | sed "s|^$ROOT/||" || true)"
+        out="$("$TIDY" --quiet --checks='-*,clang-analyzer-*,-clang-analyzer-optin.*' "$f" -- "${TFLAGS[@]}" 2>&1 || true)"
+        # A file that would not compile was not analysed. Say so; do not count
+        # its silence as a pass.
+        if printf '%s' "$out" | grep -q "clang-diagnostic-error"; then
+            broke+="$(basename "$f") "
+            continue
+        fi
+        # WARNINGS ONLY. clang-tidy prints a "note:" trace under each warning
+        # explaining the path it took, and counting those turned fourteen real
+        # findings into a hundred and seventeen. The notes are worth reading, but
+        # they are not findings.
+        traw+="$(printf '%s' "$out" | grep -E "^$ROOT/src/[a-z_-]+\\.(cpp|hpp):.*warning:" \
+                 | grep -v "/msfa/" | sed "s|^$ROOT/||" || true)
+"
     done
+    if [ -n "$broke" ]; then
+        echo
+        echo "── clang-tidy COULD NOT ANALYSE these; they did not compile ──"
+        echo "   $broke"
+        echo "   Treat this as a failure, not a pass. Check the SDK path."
+        tn=$((tn + 1))
+    fi
     traw="$(printf '%s\n' "$traw" | grep . || true)"
     if [ -n "$traw" ]; then
         echo

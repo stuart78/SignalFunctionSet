@@ -233,8 +233,14 @@ static bool loadDrumPatternsTxt(const std::string& path, Library& lib) {
 	// apart: a disk error partway through imported a truncated bank and said
 	// nothing. ferror() is the difference between "that is the whole file" and
 	// "that is as much of it as I got".
+	// STOP ON A SHORT READ. `while ((r = fread(...)) > 0)` calls fread once more
+	// after the last partial block, with the stream already at EOF -- a call
+	// with no effect, and one that leaves the position indeterminate if the
+	// short read was an error rather than the end. A short read IS the end, so
+	// the loop can say so; ferror() then separates the end from a failure.
 	std::string text; char buf[4096]; size_t r;
-	while ((r = std::fread(buf, 1, sizeof(buf), f)) > 0) text.append(buf, r);
+	do { r = std::fread(buf, 1, sizeof(buf), f); text.append(buf, r); }
+	while (r == sizeof(buf));
 	bool readFailed = std::ferror(f) != 0;
 	std::fclose(f);
 	if (readFailed) return false;
@@ -1818,7 +1824,8 @@ struct FillWidget : ModuleWidget {
 			std::string data;
 			if (FILE* f = std::fopen(tmp.c_str(), "rb")) {
 				char buf[4096]; size_t r;
-				while ((r = std::fread(buf, 1, sizeof(buf), f)) > 0) data.append(buf, r);
+				do { r = std::fread(buf, 1, sizeof(buf), f); data.append(buf, r); }
+				while (r == sizeof(buf));
 				bool readFailed = std::ferror(f) != 0;
 				std::fclose(f);
 				if (readFailed) data.clear();   // a partial download is not a bank

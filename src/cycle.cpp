@@ -395,11 +395,12 @@ struct CycleDisplay : OpaqueWidget {
 				float t = (float) s / SEG;
 				float ph = t + off;
 				float pw = ph - std::floor(ph);
-				// Bounded against the ARRAY, not just against n. n comes from
-				// another thread and is clamped to 64 a hundred lines away in a
-				// different function, so nothing here can see that it is safe --
-				// which is precisely what the analyser objected to.
-				int ridx = clamp((int)(pw * n), 0, std::min(n, Cycle::MAX_STEPS) - 1);
+				// Bounded on the ARRAY and nothing else. The first attempt used
+				// min(n, MAX_STEPS) - 1, which still leans on n: at n <= 0 the
+				// upper bound goes negative and the analyser rightly would not
+				// accept it. n comes from another thread, so the only bound worth
+				// writing here is the one that cannot be wrong.
+				int ridx = clamp((int)(pw * n), 0, Cycle::MAX_STEPS - 1);
 				float rv = preview ? std::sin(ridx * 2.4f) : module->randSteps[ridx];
 				float v = clamp(lfoShape(ph, shape, n, rv) * amp * scale, -1.f, 1.f);
 				float x = padL + t * plotW;
