@@ -118,7 +118,7 @@ actually distinguishes a window is its **width**, and these are three widths.
 | **DEPTH** | 0 to 100% | Crossfades the altered slice against the straight one. |
 | **REACH** | 1 to 32 | How far back DELAY and SHUFFLE may pull from, counted in **steps**, or in **bars** once BAR is patched. |
 | **WINDOW** | 5 ms to half the slice | See above. |
-| **SHAPE** | 3 positions | See above. |
+| **SHAPE** | 3 positions | See above. A large knob, because after WINDOW it is the control that decides the character. |
 | **FREEZE** | latch | Stops the write head and loops what is in the buffer. |
 | **RESEED** | button | Rolls a new set of choices for SHUFFLE, DELAY, PITCH and MIXED. |
 
@@ -224,12 +224,20 @@ DELAY, so the two sides pull from different places.
 
 ## The panel
 
-Slice departs from the plugin's usual pot-over-jack pairs: **screen on top,
-controls in the middle, every jack in two rows of eight at the foot**, with the
-outputs on their own plate.
+**One row of controls, then two rows of jacks**, under a screen that takes the
+top half of the module.
 
-Slice has twelve inputs and only five of them modulate a knob, so pairing would
-have scattered the audio and clock jacks in among the controls.
+The control row runs left to right from the two things you reach for most:
+**EFFECT** and **RATIO** as large knobs, then **SHAPE**, then DEPTH, LENGTH,
+FREEZE, RESEED and REACH.
+
+Under it, the **CV row sits directly beneath the control each jack feeds** -- the
+DEPTH jack is under the DEPTH knob and so on -- with CLOCK and BAR filling the
+two positions that have no knob above them.
+
+The bottom row is everything else: audio in, the two set-and-forget trims
+(**DIV** and **WINDOW**), RESET, and then the four outputs on their own dark
+plate. TRIG and GATE come first there, then L and R.
 
 ## Patch ideas
 

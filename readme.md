@@ -28,6 +28,7 @@ Modules grouped by function:
 - [Tine](#tine): Tunable pingable resonator (Gamelan Resonator circuit)
 
 **Effects**
+- [Slice](#slice): Cuts a stereo stream onto a grid and reworks each piece
 - [Crystal](#crystal): Quad echo chamber shaped like a real crystal
 
 **Clocks & Sequencers**
@@ -412,6 +413,31 @@ A tunable 3rd-order pingable resonator based on the Gamelan Resonator circuit fr
 - VCA Mode (anti-click): Toggle crossfade envelope on retrigger (default: on)
 
 ### Effects
+
+#### Slice
+
+<img src="screenshots/Slice.png" alt="Slice panel" height="320"> 
+
+Cuts a stereo stream onto a grid and reworks each piece. Audio runs into a circular buffer, a grid of slices runs over it, and every so often one slice is replaced by an altered version of itself. The rest pass through untouched.
+
+**What happens and how often are two knobs, not one.** EFFECT picks one of seven transforms or MIXED to rotate through them; RATIO says how often it fires, as one slice in N. Two earlier designs are worth knowing about because they were worse: seven per-slice probability weights gave the same undifferentiated scatter at every setting, and replacing them with twelve named patterns welded the two questions together so most effects were stuck at one rate.
+
+**Features:**
+- **Seven transforms:** cut, swap, delay, shuffle, reverse, repeat, pitch, plus MIXED which walks them in order. The last slice of each group fires, so the effect lands on the approach to the downbeat rather than on it.
+- **Zero latency when it passes through.** An untouched slice is read from the write head sample for sample. But you cannot reverse a slice you are still recording, so REVERSE and PITCH work on the previous one; REPEAT stays live, playing the first 1/N as it arrives and then looping it.
+- **WINDOW sweeps from declick to grain envelope.** It is a fade time, 5 ms up to half the slice, and at the top the two fades meet so the slice becomes a real window. Near the bottom SHAPE is correctly almost inaudible: the ear hears a taper's length, not its curve. At the top SHAPE decides everything.
+- **Three window shapes, because there are only three.** Gaussian keeps 47% of the slice loud, Hann 80%, Log 97%. A longer list of famous names collapses into one wide arc no listener can separate, since window functions are all designed to be smooth. Width is what distinguishes them.
+- **REACH is a count.** 1 to 32 steps, or bars once BAR is patched, with the unit swapping in the tooltip. As a percentage of the buffer its whole lower half rounded to the same slice.
+- **Everything random is seeded and repeatable.** Each choice is a function of the slice index and one seed, so a pattern repeats exactly instead of scattering afresh. RESEED rolls a different but equally fixed arrangement.
+- **The screen is anchored to NOW**, the write head at the right edge, the window exactly REACH wide. Under it one pane per channel: blue filled is what leaves the jack, orange outline is what came in. Only the audible one is solid.
+
+**Controls:** Effect, Ratio, Shape, Depth, Length, Freeze, Reseed, Reach, Div, Window.
+**Inputs:** L, R (normalled from L), Clock, Bar, Reset, Freeze, Reseed, and CV for Effect, Ratio, Depth, Length, Reach.
+**Outputs:** L, R, Trig (every slice boundary), Gate (high while a slice is altered).
+
+**Context menu:** Buffer length (30 / 60 / 120 s, with the memory cost shown), Repeat splice (clean / dirty), Channels (paired / independent).
+
+Full detail in the [Slice manual](docs/slice-manual.md).
 
 #### Crystal
 
