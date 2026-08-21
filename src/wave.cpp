@@ -50,11 +50,27 @@ struct Bookmark {
 
 // ---------- Tables for one slot (mipmap + thumbnail) ----------
 
-struct SlotTables {
-	float levels[NUM_LEVELS][TABLE_SIZE] = {};
+// ALIGNED, because these buffers go straight into pffft. Rack's dsp/fft.hpp
+// says it plainly -- "Buffers must be aligned to 16-byte boundaries" -- and a
+// plain float array in a plain struct is aligned to 4.
+//
+// The struct alignas matters as much as the member one. Without it sizeof was
+// 90372, which is 4 mod 16, so every successive slot shifted its alignment by
+// four bytes and at most two of the eight could ever be aligned. Measured
+// before the fix: 6 of 8 slots misaligned, and all 11 mip levels within a slot,
+// since the levels inherit whatever the slot has.
+//
+// It was reported as intermittent and heap-dependent. It is neither: it is
+// decided by struct layout, and which slot you happen to build is what varies.
+struct alignas(16) SlotTables {
+	alignas(16) float levels[NUM_LEVELS][TABLE_SIZE] = {};
 	float mini[MINI_SIZE] = {};
 	bool  ready = false;
 };
+// A slot whose size is not a multiple of 16 knocks every later slot out of
+// alignment, silently. Fail the build instead.
+static_assert(sizeof(SlotTables) % 16 == 0, "SlotTables must stay 16-byte sized");
+static_assert(alignof(SlotTables) >= 16,    "SlotTables must stay 16-byte aligned");
 
 
 // =============================================================================
@@ -133,7 +149,13 @@ struct Wave : Module {
 
 	// --- FFT ---
 	dsp::RealFFT* fft = nullptr;
-	std::vector<float> fftSpectrum;
+	// Members rather than vectors: std::vector's data() carries no alignment
+	// guarantee beyond alignof(float), and although operator new happens to
+	// return 16-byte-aligned memory on every platform we ship to, "happens to"
+	// is not a thing to hand to a SIMD library. buildMipmap is called
+	// synchronously from one place, so sharing one scratch pair is safe.
+	alignas(16) float fftSpectrum[TABLE_SIZE * 2] = {};
+	alignas(16) float fftWork[TABLE_SIZE * 2] = {};
 
 	// --- Param quantities ---
 	struct PeaksQuantity : ParamQuantity {
@@ -200,7 +222,6 @@ struct Wave : Module {
 		configOutput(AUDIO_OUTPUT, "Audio");
 
 		fft = new dsp::RealFFT(TABLE_SIZE);
-		fftSpectrum.resize(TABLE_SIZE * 2);
 
 		snapCount = 0;
 		for (int s = 0; s < NUM_SLOTS; s++) captureOrder[s] = s;
@@ -352,21 +373,21 @@ struct Wave : Module {
 	// Build full mipmap into slot s.
 	void buildMipmap(int s, const Bookmark& bm) {
 		renderShape(bm, tables[s].levels[0]);
-		fft->rfft(tables[s].levels[0], fftSpectrum.data());
+		fft->rfft(tables[s].levels[0], fftSpectrum);
 
 		const int N = TABLE_SIZE;
-		std::vector<float> work(N * 2);
+		float* work = fftWork;
 
 		for (int k = 1; k < NUM_LEVELS; k++) {
 			int maxBin = (N / 2) >> k;
 			if (maxBin < 1) maxBin = 1;
-			std::memcpy(work.data(), fftSpectrum.data(), sizeof(float) * N);
+			std::memcpy(work, fftSpectrum, sizeof(float) * N);
 			if (maxBin < N / 2) work[1] = 0.f;
 			for (int b = maxBin + 1; b < N / 2; b++) {
 				work[2 * b]     = 0.f;
 				work[2 * b + 1] = 0.f;
 			}
-			fft->irfft(work.data(), tables[s].levels[k]);
+			fft->irfft(work, tables[s].levels[k]);
 			float a = 1.f / (float)N;
 			for (int i = 0; i < N; i++) tables[s].levels[k][i] *= a;
 		}
