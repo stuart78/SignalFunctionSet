@@ -44,6 +44,7 @@ void init(Plugin* p) {
 	p->addModel(modelSlideX);
 	p->addModel(modelSlice);
 	p->addModel(modelKit);
+	p->addModel(modelTrace);
 
 	// Add modules here
 	// p->addModel(modelMyModule);

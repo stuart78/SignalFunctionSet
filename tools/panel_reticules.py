@@ -442,6 +442,7 @@ PLATES = {
     # every jack is at the foot, so the only thing separating the four outputs
     # from the three CV inputs beside them is this plate
     "slice": [(60.96, 109.98, 47.50, 17.10)],   # mm, read from the design file
+    "trace": [(134.60, 13.40, 34.10, 69.20)],   # the output matrix, one row per lane
     # A plate bleeds about a cell past its outermost control -- enough to read as
     # a region rather than a box, without running the width of the panel.
     "chime": [(hp(7.25), hp(13.5), hp(20.0), hp(6.0)),   # the eight note out rows
@@ -472,6 +473,7 @@ MODULES = {
                {"SLICE_NXF": 7}),
     "opmorph": ("OpMorph", "src/opmorph.cpp", "res/opmorph.svg", {"OPM_COLS": 4, "OPM_ROWS": 4, "OPM_SLOTS": 16}),
     "kit":     ("Kit",     "src/kit.cpp",     "res/kit.svg",     {}),
+    "trace":   ("Trace",   "src/trace.cpp",   "res/trace.svg",   {"TR_LANES": 4}),
 }
 
 # Panels whose artwork is hand-made and is now the SOURCE of the layout rather

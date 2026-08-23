@@ -431,6 +431,19 @@
         "Synth voice"
       ],
       "hidden": true
+    },
+    {
+      "slug": "Trace",
+      "name": "Trace",
+      "description": "A paper loop and four brushes: draw four CVs, or let the patch draw them.",
+      "tags": [
+        "Controller",
+        "LFO",
+        "Sequencer",
+        "Sample and hold",
+        "Utility"
+      ],
+      "hidden": true
     }
   ]
 }

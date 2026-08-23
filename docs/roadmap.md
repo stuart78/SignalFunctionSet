@@ -5,6 +5,27 @@ Modules and work that are planned but not started. Shipped work lives in
 
 ## Planned modules
 
+### Trace — v1 built, hidden
+A paper loop running behind the panel, four brushes drawing lines on it, one
+read head per lane. Part Oramics, part chart recorder. The two ideas that carry
+it are that the transport is uncoupled from the brush (so where your mouse sits
+relative to the head decides whether you are editing the past, composing the
+future, or performing), and that ink thickness is a second output per lane:
+write heads lay it down, read heads lift it off, and it pools where the lines
+cross. Events come from the line's *shape* rather than its value -- each lane
+classifies its slope as up, down or flat and fires on the transitions, so a
+scribble makes notes where it turns around with no quantization involved. Patch
+a CV into a lane and it becomes a CV tape recorder, with a thickness input
+alongside for the velocity contour. Specified in full in `docs/trace-design.md`,
+which also records where v1 departs from the spec and, at length, every way the
+display managed to invent movement that was not in the paper.
+
+Unproven by ear: the flat-threshold default, whether crossings are the right
+source for ink, and whether drawing onto moving paper feels direct or fights
+you. Known gap: the browser preview and the live display now draw the ribbon the
+same way, but the preview's content is still a synthetic sine rather than
+anything the module would produce.
+
 ### Comb filter
 A comb as an instrument rather than a utility: the delay-line half of what
 Loom's strings already do, exposed on its own so it can colour any source.

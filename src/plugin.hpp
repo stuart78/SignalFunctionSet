@@ -46,3 +46,4 @@ extern Model* modelOpMorph;
 extern Model* modelSlideX;
 extern Model* modelSlice;
 extern Model* modelKit;
+extern Model* modelTrace;
