@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "scale-bus.hpp"
 #include "scales.hpp"
 #include <cmath>
 
@@ -447,6 +448,15 @@ struct Muse : Module {
 		lastPitchAddr = -1;
 	}
 
+	// Muse reads eight flattened degrees rather than a scale, so a bus scale has
+	// to be flattened the same way: degree i, continuing past the end of the
+	// scale by repeating at its PERIOD. That is exactly the rule the canonical
+	// museSemis[] tables were built with, so nothing moves for the nineteen.
+	sfs::BusScale busScale;
+	float museDegree(int i) const {
+		if (!busScale.extended) return sfs::SCALES[busScale.index].museSemis[i & 7];
+		return busScale.degree(i & 7);
+	}
 	int currentScaleIdx() {
 		float v = params[SCALE_PARAM].getValue();
 		if (inputs[SCALE_CV_INPUT].isConnected()) {
@@ -459,15 +469,17 @@ struct Muse : Module {
 	float voctForPitchAddr(int addr) {
 		int idx3 = addr & 0x7;
 		int oct  = (addr >> 3) & 0x1;
-		const MuseScale& sc = MUSE_SCALES[currentScaleIdx()];
 		float rootSemis = params[ROOT_PARAM].getValue();
 		if (inputs[ROOT_CV_INPUT].isConnected())
 			rootSemis += inputs[ROOT_CV_INPUT].getVoltage() * 12.f;  // 1V/oct
-		float semis = sc.museSemis[idx3] + 12.f * (float)oct + rootSemis;
+		float semis = museDegree(idx3) + busScale.period * (float)oct + rootSemis;
 		return semis / 12.f;
 	}
 
 	void process(const ProcessArgs& args) override {
+		busScale = sfs::busResolve(inputs[SCALE_CV_INPUT],
+		                           (int)std::round(params[SCALE_PARAM].getValue()));
+
 		// --- Expander linking: read left-neighbor master's state (if any) ---
 		followingThisFrame = false;
 		uint32_t recvSr = 0;
@@ -631,12 +643,12 @@ struct Muse : Module {
 		if (cvScaleMode == CV_SCALE_VOCT) {
 			cvOut = voctForPitchAddr(addrNow);
 		} else {
-			const MuseScale& sc = MUSE_SCALES[currentScaleIdx()];
+			(void)0;
 			int idx3 = addrNow & 0x7;
 			int oct  = (addrNow >> 3) & 0x1;
-			float pitchSemis = sc.museSemis[idx3] + 12.f * (float)oct;
-			// The scale's full Muse range (idx3=7, D=1) = sc.museSemis[7] + 12.
-			float scaleMaxSemis = sc.museSemis[7] + 12.f;
+			float pitchSemis = museDegree(idx3) + busScale.period * (float)oct;
+			// The scale's full Muse range (idx3=7, D=1) = top degree + a period.
+			float scaleMaxSemis = museDegree(7) + busScale.period;
 			if (scaleMaxSemis < 0.001f) scaleMaxSemis = 24.f;  // safety
 			float targetV;
 			switch (cvScaleMode) {

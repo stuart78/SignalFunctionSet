@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "scale-bus.hpp"
 #include "panel-style.hpp"
 #include "waveguide.hpp"
 #include "scales.hpp"
@@ -226,6 +227,7 @@ struct Slide : Module {
 	float tune[SLIDE_NCH] = {};
 
 	int curScale = -1;                   // -1 = free; else an index into sfs::SCALES
+	sfs::BusScale scale;                 // the whole scale, if one is on the wire
 
 	// Where the auto player has walked the bar to, as an offset from the BAR
 	// knob. A roll on a stationary bar is an arpeggio, not a steel: a player
@@ -248,25 +250,25 @@ struct Slide : Module {
 	float transposeDegrees(float semis, int steps) const {
 		if (steps == 0) return semis;
 		if (curScale < 0 || curScale >= sfs::NUM_SCALES) return semis + (float)steps;
-		const sfs::Scale& sc = sfs::SCALES[curScale];
+		const sfs::BusScale& sc = scale;
 		int bestOct = 0, bestD = 0; float bestErr = 1e9f;
 		for (int oct = -3; oct <= 4; oct++)
 			for (int d = 0; d < sc.size; d++) {
-				float e = std::fabs(sc.intervals[d] + 12.f * oct - semis);
+				float e = std::fabs(sc.intervals[d] + sc.period * oct - semis);
 				if (e < bestErr) { bestErr = e; bestOct = oct; bestD = d; }
 			}
 		int idx = bestOct * sc.size + bestD + steps;
 		int oct = (int)std::floor((float)idx / (float)sc.size);
-		return sc.intervals[idx - oct * sc.size] + 12.f * oct;
+		return sc.intervals[idx - oct * sc.size] + sc.period * oct;
 	}
 
 	float snapBar(float semis) const {
 		if (curScale < 0 || curScale >= sfs::NUM_SCALES) return semis;
-		const sfs::Scale& sc = sfs::SCALES[curScale];
+		const sfs::BusScale& sc = scale;
 		float best = semis, bestD = 1e9f;
 		for (int oct = -2; oct <= 3; oct++)
 			for (int d = 0; d < sc.size; d++) {
-				float cand = sc.intervals[d] + 12.f * oct;
+				float cand = sc.intervals[d] + sc.period * oct;
 				float dist = std::fabs(cand - semis);
 				if (dist < bestD) { bestD = dist; best = cand; }
 			}
@@ -572,6 +574,7 @@ struct Slide : Module {
 		// ── the bar ───────────────────────────────────────────────────────────
 		curScale = clamp((int)std::round(params[SCALE_PARAM].getValue()
 		                 + inputs[SCALE_CV_INPUT].getVoltage()), 0, sfs::NUM_SCALES) - 1;
+		scale = sfs::busResolve(inputs[SCALE_CV_INPUT], std::max(curScale, 0));
 		// POS is 1V/oct and the trimpot is an offset on it -- the same shape as
 		// V/OCT plus a tune knob everywhere else. The bar position IS pitch here
 		// (fret n is n semitones, because a bar at the 12th halves the string),

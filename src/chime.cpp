@@ -24,6 +24,7 @@
 // =============================================================================
 
 #include "plugin.hpp"
+#include "scale-bus.hpp"
 #include "scales.hpp"
 #include "panel-style.hpp"
 #include <algorithm>
@@ -172,6 +173,8 @@ struct Chime : Module {
 		reseed();
 	}
 
+	// The whole scale when one is on the wire, refreshed every block.
+	sfs::BusScale scale;
 	int curScale() {
 		float sv = params[SCALE_PARAM].getValue();
 		if (inputs[SCALE_INPUT].isConnected()) sv += inputs[SCALE_INPUT].getVoltage();
@@ -186,12 +189,16 @@ struct Chime : Module {
 
 	// degree index → semitones above root-C3
 	float degreeSemis(int deg, int scaleIdx) {
-		const sfs::Scale& sc = sfs::SCALES[scaleIdx];
+		(void)scaleIdx;                       // the resolved scale knows its index
+		const sfs::BusScale& sc = scale;
+		if (sc.size <= 0) return 0.f;
 		int oct = deg / sc.size, step = deg % sc.size;
-		return sc.intervals[step] + 12.f * oct;
+		return sc.intervals[step] + sc.period * oct;
 	}
 
 	void process(const ProcessArgs& args) override {
+		scale = sfs::busResolve(inputs[SCALE_INPUT],
+		                        (int)std::round(params[SCALE_PARAM].getValue()));
 		if (reseedBtnTrig.process(params[RESEED_PARAM].getValue()) ||
 		    reseedTrig.process(inputs[RESEED_INPUT].getVoltage(), 0.1f, 1.f))
 			reseed();
@@ -383,9 +390,18 @@ struct ChimeDisplay : Widget {
 
 	// semitones above the engine's base note (130.81Hz = C3)
 	int noteSemis(int deg, int scaleIdx, int root, int octShift) {
-		const sfs::Scale& sc = sfs::SCALES[scaleIdx];
+		// The widget has no scale of its own; take the module's resolved one so
+		// the label cannot disagree with the pitch, and fall back to the index
+		// for the browser preview where there is no module.
+		sfs::BusScale fb; sfs::busScaleFromIndex(scaleIdx, fb);
+		const sfs::BusScale& sc = module ? module->scale : fb;
+		if (sc.size <= 0) return root;
 		int oct = deg / sc.size, step = deg % sc.size;
-		return root + (int)sc.intervals[step] + 12 * (oct + octShift);
+		// Rounded only because a note NAME is a twelve-tone idea; the pitch
+		// itself keeps its fractional degree. A label is the one place where
+		// collapsing onto 12-TET is honest rather than lossy.
+		return root + (int)std::lround(sc.intervals[step]
+		                               + sc.period * (float)oct) + 12 * octShift;
 	}
 	// actual sounding note for a degree, e.g. root A + dorian degree 3 → "C4"
 	std::string noteLabel(int semis) {

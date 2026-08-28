@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "scale-bus.hpp"
 #include "scales.hpp"
 #include "pulse-width.hpp"
 
@@ -8,6 +9,9 @@
 // as an alias to the shared struct so the existing DSP (scale.intervals /
 // scale.size) compiles unchanged.
 using ScaleInfo = sfs::Scale;
+// The scale actually in force. An index can only name one of the canonical
+// nineteen; a polyphonic SCALE input carries the whole thing, which is the only
+// way a Scala file or a custom mask reaches here.
 static const sfs::Scale* const FUGUE_SCALES = sfs::SCALES;
 static const int NUM_SCALES_FUGUE = sfs::NUM_SCALES;
 
@@ -425,9 +429,12 @@ struct MetaFugue : Module {
 
 	// ─── Scale Quantization ──────────────────────────────────────────────────
 
+	sfs::BusScale busScale;   // the scale in force, index or full bus
+
 	float faderToVoltage(float faderValue, int rootNote, int scaleIndex, float faderRange) {
 		float rawVoltage = faderValue * faderRange;
-		const ScaleInfo& scale = sfs::SCALES[scaleIndex];
+		const sfs::BusScale& scale = busScale;
+		(void)scaleIndex;
 
 		float bestVoltage = 0.f;
 		float bestDist = 999.f;
@@ -437,7 +444,7 @@ struct MetaFugue : Module {
 
 		for (int oct = 0; oct <= maxOctaves; oct++) {
 			for (int d = 0; d < scale.size; d++) {
-				float semitone = (float)(oct * 12) + scale.intervals[d];
+				float semitone = (float)oct * scale.period + scale.intervals[d];
 				float noteVoltage = semitone / 12.f;
 
 				if (noteVoltage > faderRange + 0.05f) break;
@@ -491,7 +498,7 @@ struct MetaFugue : Module {
 		}
 		else {
 			// ── Diatonic / Pentatonic mode: scale-degree-based ──
-			const ScaleInfo& scale = sfs::SCALES[scaleIndex];
+			const sfs::BusScale& scale = busScale;
 			bool isPenta = (scale.size == 5);
 			const DeviationTier* tiers = isPenta ? PENTATONIC_TIERS : DIATONIC_TIERS;
 			int numTiers = isPenta ? NUM_PENTATONIC_TIERS : NUM_DIATONIC_TIERS;
@@ -561,7 +568,8 @@ struct MetaFugue : Module {
 					targetDegree = raw % scale.size;
 				}
 
-				float targetSemi = (float)(targetOctave * 12) + scale.intervals[targetDegree];
+				float targetSemi = (float)targetOctave * scale.period
+				                 + scale.intervals[targetDegree];
 				float dev = (float)rootNote / 12.f + targetSemi / 12.f;
 				return clamp(dev, baseVoltage - faderRange, baseVoltage + faderRange);
 			}
@@ -678,6 +686,9 @@ struct MetaFugue : Module {
 			scaleIndex += (int)std::round(inputs[SCALE_CV_INPUT].getVoltage());
 		}
 		scaleIndex = clamp(scaleIndex, 0, NUM_SCALES_FUGUE - 1);
+		busScale = sfs::busResolve(inputs[SCALE_CV_INPUT],
+		                           (int)std::round(params[SCALE_PARAM].getValue()));
+		if (busScale.extended) scaleIndex = busScale.index;
 
 		int numSteps = (int)std::round(params[STEPS_PARAM].getValue());
 

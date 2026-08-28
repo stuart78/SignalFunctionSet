@@ -91,10 +91,43 @@ custom note mask, a loaded Scala file, or a scale whose period is not an octave.
 | 1 | the period, in volts (12 semitones = 1V) |
 | 2 … n+1 | the n degrees, as 1V/oct offsets from the root; channel 2 is always 0 |
 
-`Port::getVoltage()` returns channel 0 whatever the channel count, and every
-existing consumer (Note, Fugue, MetaFugue, Muse, Chime) calls exactly that — so
-**the extra channels are invisible to them and change nothing.** A module that
-wants the real scale reads the further channels instead.
+`Port::getVoltage()` returns channel 0 whatever the channel count, so **the
+extra channels are invisible to a module that only wants an index, and change
+nothing for it.** A module that wants the real scale reads the further channels
+instead.
+
+### Use `scale-bus.hpp` — do not re-implement it
+
+The format, one encoder and one **validated** decoder live in
+`src/scale-bus.hpp`. It began inside `key.cpp`, which was fine while Key was the
+only module that spoke it; the moment Note needed it too, a second copy of a
+wire format would have been a bug waiting for someone to fix only one of them.
+
+A consumer needs three lines:
+
+```cpp
+#include "scale-bus.hpp"
+sfs::BusScale scale;                                    // a member
+scale = sfs::busResolve(inputs[SCALE_INPUT], knobIndex); // once per block
+```
+
+`BusScale` names its fields `intervals[]` and `size` **deliberately, to match
+`sfs::Scale`**, so existing code that reads `sc.intervals[k]` and `sc.size` keeps
+working and only the line the scale *comes from* has to change.
+
+Then two rules:
+
+* **Wrap by `scale.period`, never by 12.** `sc.intervals[d] + 12.f * oct` is the
+  single most common way a module silently forces a scale back onto the octave.
+  Bohlen-Pierce repeats at 19.02 semitones.
+* **Do not round a degree to a whole semitone.** Pelog, Slendro and the harmonic
+  series carry fractional intervals before Scala is even involved; Chance was
+  quietly flattening all three onto 12-TET with an `lround` long before any of
+  this existed.
+
+A module that also has a SCALE **output** should relay the whole bus with
+`sfs::busScaleToOutput`, not just the index. Relaying only the index makes that
+module the point where every scale an index cannot name dies.
 
 Where the key cannot be named by an index — a custom mask, or Scala — channel 0
 carries the canonical scale sharing the most pitch classes with it, so an
@@ -109,3 +142,58 @@ every canonical scale and most Scala files; a 31-note Scala scale is truncated.
 SCALE input would otherwise be read as a scale. Require an ascending degree list
 starting at 0, all degrees inside the period, and a period between 1 and 48
 semitones; anything else falls back to plain index behaviour.
+
+## Audit: who speaks the protocol (2026-08)
+
+| module | canonical index | reads the bus | SCALE out | relays the bus |
+|---|---|---|---|---|
+| Note | yes | yes | yes | yes |
+| Key | yes | yes (`busScaleFromInput`) | yes | yes |
+| Chance | yes | yes | — | — |
+| Fugue | yes | yes | — | — |
+| MetaFugue | yes | yes | — | — |
+| Muse | yes | yes | — | — |
+| Loom | yes | yes | — | — |
+| Slide | yes | yes | — | — |
+| Chime | yes | yes | — | — |
+| Arrange | yes | no input | yes | index only |
+| Play, Record | yes | **no SCALE input** | — | — |
+| Cycle | n/a | n/a | — | — |
+
+Notes on the three that are not a plain "yes":
+
+* **Arrange** emits a bare index because a bare index is all it has: its scale
+  comes from a trimpot per phrase. A consumer reading it with `busResolve` falls
+  back to index behaviour correctly, so this works — it simply cannot carry a
+  scale that an index cannot name. If Arrange ever gains a scale input, it
+  should relay with `busScaleToOutput`.
+* **Play** and **Record** use a scale for one thing only: the **pad grid**
+  (`pushgrid.hpp`) — which notes the In-Key layout puts on the pads, and which
+  pads get the in-scale highlight in the chromatic layout. It never quantises
+  anything, never touches incoming V/OCT, and never reaches audio.
+
+  `gridNoteAt()` returns an **int MIDI note**, so the grid is 12-TET by
+  construction rather than by oversight: a pad has to send a note, and a
+  multisample library is indexed by note. Its `lround` on a degree and its
+  `* 12` per octave are therefore correct here, and are the one place those two
+  patterns are not the bug they are everywhere else.
+
+  A SCALE input would let the pads follow the patch key, which is worth
+  something — but it could only ever read channel 0, so it would carry the KEY
+  and not the TUNING. Deliberately not added: the value did not justify the
+  jack.
+* **Cycle**'s `SCALE` is an LFO depth, not a musical scale. It shows up in any
+  grep for `SCALE_INPUT` and is not part of this convention.
+
+Two bug classes were found by this audit and fixed, both of which predate the
+bus and were wrong for shipped canonical scales:
+
+* **`intervals[d] + 12 * oct`** in Loom, Slide, Chime, Fugue and MetaFugue —
+  wrapping at the octave rather than the scale's own period.
+* **Rounding a degree to a whole semitone**, in Chance's pitch path and in
+  Chime's and Chance's note read-outs. That flattened Pelog, Slendro and the
+  harmonic series onto 12-TET with no Scala involved at all.
+
+A display that reads the canonical table while the pitch comes off the bus will
+silently disagree with itself. Chime's note label and Chance's octave axis both
+did; both now take the module's resolved scale.

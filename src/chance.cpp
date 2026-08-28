@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "scale-bus.hpp"
 #include "scales.hpp"
 #include "chance-markov.hpp"
 #include "sfs_lut.hpp"
@@ -173,6 +174,11 @@ struct Chance : Module {
 	int walkPat() { return started ? playPat : editPat; }
 
 	int curScale = 0, curRoot = 0, maxPosDeg = 7;
+	// The scale in force: the canonical entry named by curScale, or the whole
+	// thing read off a polyphonic SCALE input. curScale stays as the index
+	// because the Markov tables are keyed on it -- those describe a musical
+	// STYLE, which a Scala file has no opinion about.
+	sfs::BusScale scale;
 	float curGateFrac = 0.5f;
 
 	// per node-index (so the display aligns with the columns)
@@ -264,11 +270,14 @@ struct Chance : Module {
 	}
 
 	float voltsFromPos(int pos) {
-		const sfs::Scale& sc = sfs::SCALES[curScale];
-		int sz = sc.size;
+		const sfs::BusScale& sc = scale;
+		int sz = std::max(sc.size, 1);
 		int oct = ifloordiv(pos, sz);
 		int deg = pos - oct * sz;
-		float semis = oct * 12 + (int)std::lround(sc.intervals[deg]);
+		// The PERIOD, not twelve, and the degree unrounded. Rounding to a whole
+		// semitone here quietly flattened Pelog and Slendro onto 12-TET long
+		// before Scala existed as an option.
+		float semis = (float)oct * sc.period + sc.intervals[deg];
 		return (float)curRoot / 12.f + semis / 12.f;
 	}
 
@@ -281,7 +290,7 @@ struct Chance : Module {
 
 	// Build the window order + the deterministic core skeleton (stable per seed).
 	void computeCore() {
-		const sfs::Scale& sc = sfs::SCALES[curScale];
+		const sfs::BusScale& sc = scale;
 		int sz = sc.size;
 		maxPosDeg = sz * rangeOctaves;
 
@@ -307,7 +316,7 @@ struct Chance : Module {
 	// MUST mirror computeCore + computeCycle's pitch logic (kept in sync by hand).
 	int buildPlayedPreview(int pat, int* out) {
 		uint32_t seed = patternSeed[pat];
-		const sfs::Scale& sc = sfs::SCALES[curScale];
+		const sfs::BusScale& sc = scale;
 		int sz = sc.size, mp = sz * rangeOctaves;
 		float gGrav = clamp(params[GRAVITY_PARAM].getValue() + inputs[GRAVITY_CV_INPUT].getVoltage() / 5.f, -1.f, 1.f);
 		float gDrift = clamp(params[DRIFT_PARAM].getValue() + inputs[DRIFT_CV_INPUT].getVoltage() / 10.f, 0.f, 1.f);
@@ -349,7 +358,7 @@ struct Chance : Module {
 	// Degree offset for node ni. Fixed modes ignore ni; "Varied" picks a seeded
 	// consonant interval per step so the 2nd voice weaves instead of running parallel.
 	int harmonyOffsetFor(int ni) {
-		int sz = sfs::SCALES[curScale].size;
+		int sz = std::max(scale.size, 1);
 		switch ((int)std::round(params[HARMONY_PARAM].getValue())) {
 			case 1: return  2;    // 3rd up
 			case 2: return  4;    // 5th up
@@ -369,7 +378,7 @@ struct Chance : Module {
 	// Each cycle: keep the stable core, then decide live, per-step strays.
 	void computeCycle() {
 		computeCore();
-		const sfs::Scale& sc = sfs::SCALES[curScale];
+		const sfs::BusScale& sc = scale;
 		int sz = sc.size;
 		float gGrav = clamp(params[GRAVITY_PARAM].getValue() + inputs[GRAVITY_CV_INPUT].getVoltage() / 5.f, -1.f, 1.f);
 		float gDrift = clamp(params[DRIFT_PARAM].getValue() + inputs[DRIFT_CV_INPUT].getVoltage() / 10.f, 0.f, 1.f);
@@ -484,6 +493,9 @@ struct Chance : Module {
 
 		int scaleCv = inputs[SCALE_CV_INPUT].isConnected() ? (int)std::round(inputs[SCALE_CV_INPUT].getVoltage()) : 0;
 		curScale = clamp((int)std::round(params[KEY_PARAM].getValue()) + scaleCv, 0, NUM_SCALES - 1);
+		scale = sfs::busResolve(inputs[SCALE_CV_INPUT],
+		                        (int)std::round(params[KEY_PARAM].getValue()));
+		if (scale.extended) curScale = scale.index;
 		int rootKnob = (int)std::round(params[ROOT_PARAM].getValue());
 		int rootCv = inputs[ROOT_CV_INPUT].isConnected() ? (int)std::round(inputs[ROOT_CV_INPUT].getVoltage() * 12.f) : 0;
 		curRoot = ((rootKnob + rootCv) % 12 + 12) % 12;
@@ -610,7 +622,10 @@ void ChanceDisplay::drawScene(const DrawArgs& args, const int* core, const int* 
 	if (maxPos < 1 || seqLen < 1) return;
 
 	const float top = walkTop(), bot = walkBot(), pad = SH(3);
-	int szOct = sfs::SCALES[clamp(scaleIdx, 0, NUM_SCALES - 1)].size; if (szOct < 1) szOct = 1;
+	Chance* mScale = dynamic_cast<Chance*>(module);
+	sfs::BusScale busFallback; sfs::busScaleFromIndex(clamp(scaleIdx, 0, NUM_SCALES - 1), busFallback);
+	const sfs::BusScale& scRes = mScale ? mScale->scale : busFallback;
+	int szOct = scRes.size; if (szOct < 1) szOct = 1;
 	// Auto-fit to the BASE contour (core + base melody + base harmony) — NOT the octave
 	// leaps — so the base sequence keeps a stable scale regardless of per-run leaps. `harm`
 	// and `play` carry the octave overlay; strip it (play-base) for the harmony's base.
@@ -637,14 +652,15 @@ void ChanceDisplay::drawScene(const DrawArgs& args, const int* core, const int* 
 	// octave axis: a faint line + note-name label at each root octave in the visible range
 	if (font) {
 		static const char* NN[12] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
-		const sfs::Scale& sc = sfs::SCALES[clamp(scaleIdx, 0, NUM_SCALES - 1)];
+		const sfs::BusScale& sc = scRes;
 		int sz = sc.size > 0 ? sc.size : 1;
 		nvgFontFaceId(vg, font->handle); nvgFontSize(vg, SH(11));
 		nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 		for (int oct = (int)std::floor((float)lo / sz) - 1; oct <= (int)std::ceil((float)hi / sz) + 1; oct++) {
 			int pos = oct * sz;
 			if (pos < lo || pos > hi) continue;
-			int midi = 60 + root + oct * 12 + (int)std::lround(sc.intervals[0]);
+			int midi = 60 + root
+			         + (int)std::lround((float)oct * sc.period + sc.intervals[0]);
 			float yy = Y(pos);
 			nvgBeginPath(vg); nvgMoveTo(vg, SX(52), yy); nvgLineTo(vg, X(NUM_NODES - 1), yy);
 			nvgStrokeColor(vg, nvgRGBA(0xff, 0xff, 0xff, 0x0e)); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);

@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "scale-bus.hpp"
 #include "scales.hpp"
 #include "pulse-width.hpp"
 #include <cmath>
@@ -7,7 +8,17 @@
 static const int N_PATTERNS = 8;
 static const int N_STEPS    = 8;
 // Matrix rows: max scale size (12) + 1 extra row at the top showing root +1oct
-static const int N_ROWS     = 13;
+// The STORAGE ceiling, not the number of rows drawn. Twelve was exactly the
+// largest canonical scale plus its octave row; the scale bus carries up to
+// fourteen degrees, and Bohlen-Pierce is thirteen, so a 13-row matrix could not
+// hold the 13-degree scale that is the whole reason for the bus. Raising it is
+// safe for saved patches: stored pitches are clamped on load and every existing
+// value is smaller.
+static const int N_ROWS     = 15;
+// The matrix's own box, in the display's 174-unit design space. It was 13 rows
+// of 9; the height is what stays fixed now that the row count varies.
+static const float MATRIX_Y = 35.f;
+static const float MATRIX_H = 117.f;
 static const int N_REPEATS  = 8;
 
 
@@ -60,6 +71,8 @@ struct NoteDisplay : OpaqueWidget {
 
 	void computeLayout();
 	rack::math::Rect cellRectFor(int col, int row);
+	int   rowsShown() const;
+	float rowHeight() const;
 	int hitTestMatrixCol(rack::math::Vec p);
 	int hitTestMatrixRow(rack::math::Vec p);
 	int hitTestPattern(rack::math::Vec p);
@@ -138,7 +151,11 @@ struct Note : Module {
 	bool firstClockPending = true;
 
 	int rootNote = 0;          // 0..11 semitones (C=0)
-	int scaleIndex = 0;        // 0..NUM_SCALES-1
+	int scaleIndex = 0;        // 0..NUM_SCALES-1, the knob plus 1V-per-scale CV
+	// The scale actually in force. Either the canonical entry named by the
+	// index, or the whole scale read off a polyphonic SCALE input -- which is
+	// the only way a Scala file or a custom mask can reach here at all.
+	sfs::BusScale scale;
 	int octaveShift = 0;       // -2..+2
 
 	float currentVelocity = 1.f;
@@ -241,9 +258,9 @@ struct Note : Module {
 		return from;
 	}
 
-	int currentScaleSize() const { return SCALES[scaleIndex].size; }
+	int currentScaleSize() const { return std::max(scale.size, 1); }
 	// Number of selectable rows per scale = scale size + 1 (extra octave row at top)
-	int currentRowCount() const { return SCALES[scaleIndex].size + 1; }
+	int currentRowCount() const { return currentScaleSize() + 1; }
 
 	// V/oct (relative to C0=0) for a given matrix row in the current scale.
 	// The extra row above the scale (row == scaleSize) is root + 12 for every
@@ -254,21 +271,21 @@ struct Note : Module {
 		if (row < 0 || row > sz) return 0.f;
 		float semis;
 		if (row == sz) {
-			// The extra row above the scale. For a scale that lives inside an
-			// octave, the root an octave up IS its next step, which is why this
-			// was simply 12. The harmonic series climbs to 43 semitones, so 12
-			// lands BELOW nine of its own degrees and the top row of the matrix
-			// plays lower than the middle of it. Continue by the scale's own
-			// final interval instead -- which leaves every octave-bounded scale
-			// at exactly 12, so nothing else moves.
-			const sfs::Scale& sc = SCALES[scaleIndex];
-			semis = 12.f;
-			if (sz > 0 && semis <= sc.intervals[sz - 1]) {
-				float step = (sz > 1) ? sc.intervals[sz - 1] - sc.intervals[sz - 2] : 12.f;
-				semis = sc.intervals[sz - 1] + step;
+			// The extra row above the scale. For a scale that lives inside its
+			// own period, the root a period up IS its next step. The harmonic
+			// series climbs to 43 semitones inside a nominal period of 12, so
+			// the period lands BELOW nine of its own degrees and the top row of
+			// the matrix would play lower than the middle of it. Continue by
+			// the scale's own final interval instead -- which leaves every
+			// scale bounded by its period at exactly the period, so nothing
+			// else moves.
+			semis = scale.period;
+			if (sz > 0 && semis <= scale.intervals[sz - 1]) {
+				float step = (sz > 1) ? scale.intervals[sz - 1] - scale.intervals[sz - 2] : scale.period;
+				semis = scale.intervals[sz - 1] + step;
 			}
 		} else {
-			semis = SCALES[scaleIndex].intervals[row];
+			semis = scale.intervals[row];
 		}
 		semis += (float)rootNote;
 		semis += (float)octaveShift * 12.f;
@@ -353,6 +370,8 @@ struct Note : Module {
 
 		rootNote    = (((rootK + rootCV) % 12) + 12) % 12;
 		scaleIndex  = clamp(scaleK + scaleCV, 0, NUM_SCALES - 1);
+		// The whole scale if one is on the wire, the canonical entry otherwise.
+		scale = sfs::busResolve(inputs[SCALE_INPUT], scaleK);
 		octaveShift = clamp(octK + octCV, -4, 4);
 
 		// Reset
@@ -444,7 +463,9 @@ struct Note : Module {
 
 		// Relays (for chaining)
 		outputs[ROOT_OUTPUT].setVoltage((float)rootNote / 12.f);
-		outputs[SCALE_OUTPUT].setVoltage((float)scaleIndex);
+		// Relay the WHOLE scale, not just the index. A module that passes on
+		// only the index is where every scale an index cannot name goes to die.
+		sfs::busScaleToOutput(outputs[SCALE_OUTPUT], scale);
 	}
 
 	json_t* dataToJson() override {
@@ -622,14 +643,27 @@ void NoteDisplay::computeLayout() {
 	}
 }
 
+// The matrix keeps its height and divides it by however many rows the scale
+// actually has, rather than always drawing thirteen and dimming the unused
+// ones. A pentatonic scale gets six tall bands instead of six live rows adrift
+// in seven dead ones, and a thirteen-degree Scala scale fits at all.
+int NoteDisplay::rowsShown() const {
+	return module ? module->currentRowCount() : 8;   // preview: Major + octave
+}
+float NoteDisplay::rowHeight() const {
+	return MATRIX_H / (float)std::max(rowsShown(), 1);
+}
+
 rack::math::Rect NoteDisplay::cellRectFor(int col, int row) {
 	// Visual row 0 = top of matrix; pitch row 0 (= root) = bottom of matrix.
 	float w = box.size.x;
 	float s = w / 174.f;
-	int displayRow = (N_ROWS - 1) - row;
+	int n = std::max(rowsShown(), 1);
+	float rh = rowHeight();
+	int displayRow = (n - 1) - row;
 	return rack::math::Rect(
-		rack::math::Vec((7.f + col * 20.f) * s, (35.f + displayRow * 9.f) * s),
-		rack::math::Vec(18.f * s, 9.f * s));
+		rack::math::Vec((7.f + col * 20.f) * s, (MATRIX_Y + displayRow * rh) * s),
+		rack::math::Vec(18.f * s, rh * s));
 }
 
 int NoteDisplay::hitTestMatrixCol(rack::math::Vec p) {
@@ -645,9 +679,10 @@ int NoteDisplay::hitTestMatrixCol(rack::math::Vec p) {
 int NoteDisplay::hitTestMatrixRow(rack::math::Vec p) {
 	if (!matrixRect.contains(p)) return -1;
 	float relY = p.y - matrixRect.pos.y;
-	int displayRow = (int)(relY / (matrixRect.size.y / (float)N_ROWS));
-	displayRow = clamp(displayRow, 0, N_ROWS - 1);
-	return (N_ROWS - 1) - displayRow;  // flip back to pitch row
+	int n = std::max(rowsShown(), 1);
+	int displayRow = (int)(relY / (matrixRect.size.y / (float)n));
+	displayRow = clamp(displayRow, 0, n - 1);
+	return (n - 1) - displayRow;       // flip back to pitch row
 }
 
 int NoteDisplay::hitTestPattern(rack::math::Vec p) {
@@ -1100,11 +1135,15 @@ void NoteDisplay::drawLayer(const DrawArgs& args, int layer) {
 		}
 		else if (stepsOrAcc) {
 			// --- Pitch matrix view ---
-			for (int row = 0; row < N_ROWS; row++) {
+			for (int row = 0; row < rowsShown(); row++) {
 				rack::math::Rect cr = cellRectFor(col, row);
 				bool isOctaveRow = (row == scaleSize);
 				bool inScale = (row < scaleSize);
-				bool isLit = (litRow == row);
+				// A pitch stored above the scale -- left behind by a bigger
+				// scale, or by a momentary CV -- has no row of its own to sit
+				// in now. Light the top one so the step does not simply vanish.
+				bool isLit = (litRow == row)
+				          || (litRow >= rowsShown() && row == rowsShown() - 1);
 
 				NVGcolor cellBg;
 				if (!inLen)         cellBg = COL_PURPLE_DK;
@@ -1369,7 +1408,7 @@ void NoteDisplay::drawPreview(const DrawArgs& args) {
 		// live path's conditional was copied in here and then overwritten on the
 		// next line, which is dead code that reads like a rule.
 		int litRow = pitches[col];
-		for (int row = 0; row < N_ROWS; row++) {
+		for (int row = 0; row < rowsShown(); row++) {
 			rack::math::Rect cr = cellRectFor(col, row);
 			bool isOctaveRow = (row == scaleSize);
 			bool inScale = (row < scaleSize);

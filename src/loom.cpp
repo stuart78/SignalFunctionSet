@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "scale-bus.hpp"
 #include "panel-style.hpp"
 #include "scales.hpp"
 #include "waveguide.hpp"
@@ -275,6 +276,7 @@ struct Loom : Module {
 	// ── UI / options ───────────────────────────────────────────────────────────
 	int   tab = 0;                  // 0 = PLAY, then TUNE DECAY STIFF POS EXCITE LEVEL
 	int   quantScale = -1;          // -1 = free tuning; else index into sfs::SCALES
+	sfs::BusScale scale;            // the whole scale, if one is on the wire
 	float stereoWidth = 0.6f;
 	// Off by default: hover events arrive whether or not Rack is the front
 	// application, so without this the instrument plays while you are in a
@@ -372,6 +374,7 @@ struct Loom : Module {
 		int sc = (int)std::round(params[SCALE_PARAM].getValue()
 		                        + inputs[SCALE_CV_INPUT].getVoltage());
 		quantScale = clamp(sc, 0, sfs::NUM_SCALES) - 1;      // 0 -> -1 (off)
+		scale = sfs::busResolve(inputs[SCALE_CV_INPUT], std::max(quantScale, 0));
 	}
 
 	void applyTuning(int t) {
@@ -396,11 +399,12 @@ struct Loom : Module {
 	// A string is TUNED, not quantized — but the menu can snap it to a scale.
 	float tuneOf(int i) const {
 		if (quantScale < 0 || quantScale >= sfs::NUM_SCALES) return tune[i];
-		const sfs::Scale& sc = sfs::SCALES[quantScale];
+		const sfs::BusScale& sc = scale;
 		float best = tune[i], bestD = 1e9f;
 		for (int oct = -3; oct <= 4; oct++) {
 			for (int d = 0; d < sc.size; d++) {
-				float cand = sc.intervals[d] + 12.f * oct;
+				// the scale's own PERIOD, which is only twelve by coincidence
+				float cand = sc.intervals[d] + sc.period * oct;
 				float dist = std::fabs(cand - tune[i]);
 				if (dist < bestD) { bestD = dist; best = cand; }
 			}

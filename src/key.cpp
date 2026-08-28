@@ -1,4 +1,5 @@
 #include "plugin.hpp"
+#include "scale-bus.hpp"
 #include "panel-style.hpp"
 #include "scales.hpp"
 #include <osdialog.h>
@@ -106,7 +107,10 @@ static float keySnap(float semis, const KeyScale& s, int mode) {
 // and the real scale rides right behind it for whoever can use it. Patch this
 // into another Key's SCALE input and the whole key crosses intact — Scala,
 // non-octave period and all.
-static const int KEY_BUS_MAXDEG = 14;    // 16 channels − index − period
+// The wire format lives in scale-bus.hpp now, so Key and every consumer read
+// and write ONE definition of it. Key keeps its own richer KeyScale internally
+// (Scala files run well past fourteen degrees, where the bus stops at
+// sfs::BUS_MAXDEG), and the bus is the lossy but shared window onto it.
 
 static bool keySameScale(const KeyScale& a, const KeyScale& b) {
 	if (a.n != b.n || std::fabs(a.period - b.period) > 1e-4f) return false;
@@ -327,23 +331,11 @@ struct Key : Module {
 	// read as a scale and produce nonsense, so anything that does not look like
 	// a scale falls back to plain 1V-per-scale index behaviour.
 	bool readScaleBus(KeyScale& out) {
-		Input& in = inputs[SCALE_INPUT];
-		int ch = in.getChannels();
-		if (ch < 3) return false;
-		float per = in.getVoltage(1) * 12.f;
-		if (per < 1.f || per > 48.f) return false;
-		int n = std::min(ch - 2, KEY_MAXDEG);
-		float prev = -1e9f;
-		for (int k = 0; k < n; k++) {
-			float d = in.getVoltage(2 + k) * 12.f;
-			if (d <= prev + 1e-4f) return false;          // must ascend strictly
-			if (d < -0.01f || d >= per + 0.01f) return false;
-			out.iv[k] = d;
-			prev = d;
-		}
-		if (std::fabs(out.iv[0]) > 0.01f) return false;   // degree 0 is the root
-		out.n = n;
-		out.period = per;
+		sfs::BusScale b;
+		if (!sfs::busScaleFromInput(inputs[SCALE_INPUT], b)) return false;
+		out.n = std::min(b.size, KEY_MAXDEG);
+		for (int k = 0; k < out.n; k++) out.iv[k] = b.intervals[k];
+		out.period = b.period;
 		return true;
 	}
 
@@ -548,12 +540,12 @@ struct Key : Module {
 		// trip through another module is lossless where it can be.
 		int idx = (busActive || customMask || scaleIsScala())
 		        ? nearestCanonicalIndex() : clamp(scaleIndex, 0, sfs::NUM_SCALES - 1);
-		int n = std::min(parent.n, KEY_BUS_MAXDEG);
-		outputs[SCALE_OUTPUT].setChannels(n + 2);
-		outputs[SCALE_OUTPUT].setVoltage((float)idx, 0);
-		outputs[SCALE_OUTPUT].setVoltage(parent.period / 12.f, 1);
-		for (int k = 0; k < n; k++)
-			outputs[SCALE_OUTPUT].setVoltage(parent.iv[k] / 12.f, 2 + k);
+		sfs::BusScale b;
+		b.size = std::min(parent.n, sfs::BUS_MAXDEG);
+		for (int k = 0; k < b.size; k++) b.intervals[k] = parent.iv[k];
+		b.period = parent.period;
+		b.index = idx;
+		sfs::busScaleToOutput(outputs[SCALE_OUTPUT], b);
 	}
 
 	json_t* dataToJson() override {
