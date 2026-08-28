@@ -15,11 +15,11 @@ Where the build departs from what is specified below:
 - **Phase lock counts bars** and places the paper at that bar's boundary. It
   began as a snap to the nearest boundary, which turned out to be the wrong
   shape of answer -- see Transport.
-- Jacks landed at **21 in, 13 out**, and every lane row carries three of each:
-  its draw CV, head-offset CV and thickness CV on the left, its value, ink and
-  trigger on the right. The three globals that modulate a knob (SPEED, SLEW,
-  INK) sit under those knobs instead, which is the plugin's ordinary
-  pot-over-jack pairing. The screen is 96mm.
+- Jacks landed at **22 in, 9 out**: a lane row carries its draw CV, thickness CV
+  and head-offset CV on the left, and its value and ink on the right. The
+  globals that modulate a knob (SPEED, SLEW, INK, SPREAD) sit under those knobs,
+  which is the plugin's ordinary pot-over-jack pairing. The screen is 105mm.
+- **Orientation is gone.** See below.
 - **The brush buttons light in their lane's colour**, which is also what
   retired the numbers printed under them.
 
@@ -60,6 +60,18 @@ same result for four trimpots' worth of panel, and are truer to the chart
 recorder. It makes **copy lane to lane** load-bearing rather than a convenience,
 since copying a shape across lanes and then offsetting their heads is how you
 get the phase trick at all.
+
+**One head offset instead of four.** The four per-lane offsets were briefly
+replaced by a single global SPREAD, on the argument that for four lanes holding
+four different drawings a static offset is exactly equivalent to having drawn
+that lane earlier, so it mostly restates the drawing. That reasoning still
+stands, and SPREAD stayed -- fanning all four heads from lane 1 is one gesture
+where four drags were four. But it is not a substitute for reaching one head,
+so the per-lane offsets came back and paid for themselves out of the trigger
+outputs.
+
+Worth keeping in mind either way: crossings are scanned in PAPER space, so
+moving a head changes what plays together but not where ink pools.
 
 **Polyphonic outputs.** Rejected: poly is confusing in Rack for a module whose
 whole point is that you can see what each line is doing.
@@ -112,7 +124,7 @@ Four, colour coded. Each lane holds:
 |---|---|
 | value ring | volts |
 | ink ring | 0 to 1 |
-| read offset | 0 to 100% of the paper. On-screen drag, plus a CV input per lane at 10V to the loop. It **wraps** rather than clamping, because the paper is a loop and a head swept past the end should come round the front. |
+| read offset | 0 to 100% of the paper, dragged on screen. Fanned by the global SPREAD. It **wraps** rather than clamping, because the paper is a loop and a head swept past the end should come round the front. |
 | range | unipolar 0 to 10V, or bipolar +/-5V |
 | read | smooth (interpolate between cells) or stepped |
 | quantize | off, N equal steps, or the patch key (see `docs/conventions/scales.md`) |
@@ -360,44 +372,30 @@ There is one **NOW** line on screen, the drawing reference. The four read
 offsets are drawn as additional markers in each lane's colour, so you can see
 the four read points without them competing to be the origin.
 
-## Orientation
+## Orientation: built, then removed
 
-Each lane watches the slope of the line at its head and classifies it as **up**,
-**down** or **flat**. That is the third output per lane, and it is a better
-event source than anything derived from the value, because it comes from the
-*shape*: a scribble produces notes where it turns around, and it needs no
-quantization to do it.
+The spec's second headline idea was that events should come from the line's
+SHAPE rather than its value -- each lane classifying its slope as up, down or
+flat and firing on the transitions, so a scribble makes notes where it turns
+around with no quantization involved. It was built and it worked: a centred
+difference (the future is already drawn on the paper, so the lookahead that puts
+the event on the turn rather than a window late is free), hysteresis on the flat
+threshold (no hand-drawn line is ever exactly flat, and a bare threshold chatters
+and emits hundreds of triggers a second on recorded CV), and one TRIG jack per
+lane with the condition chosen per lane.
 
-**Slope is a centred difference**, `value(head + w) - value(head - w)`. A causal
-difference is the obvious implementation and the worse one; here the future is
-already drawn on the paper, so lookahead is free, and a centred difference puts
-the event on the turn rather than a window late. This is a real advantage of the
-paper model over a live CV input, and it should be used.
+It came out to pay for the per-lane head offsets, and then the rest went with it
+rather than being left as an orphan: the FLAT knob, the "Trigger on" menu, the
+per-strip orientation glyph and activity dot. What survives is the retired
+`FLAT_PARAM` and `TRIG_OUTPUT` enum slots, kept because params and outputs
+serialise by index.
 
-**Flat needs a threshold, and the threshold needs hysteresis.** No hand-drawn
-line is ever exactly flat, and a slope classifier without hysteresis will chatter
-at the boundary and emit hundreds of triggers a second on recorded CV. Enter
-flat below the threshold, leave it only above the threshold times some margin.
-The threshold is also the control that decides whether a scribble makes six
-events or six hundred, so it belongs on the panel or at least in easy reach, not
-buried.
-
-`w`, the slope window, should scale with the flat threshold rather than being an
-independent control. A wide window and a low threshold are the same idea stated
-twice.
-
-One **TRIG** jack per lane, with the condition selected per lane on screen:
-
-| Condition | Kind |
-|---|---|
-| Any orientation change | trigger |
-| Turns up / turns down | trigger |
-| Goes flat / leaves flat | trigger |
-| Step change (quantized lanes only) | trigger |
-| Rising / falling / flat | gate, high while true |
-
-One jack covers all of it, and it absorbs what would otherwise have been a
-separate gate output for quantized lanes.
+The honest reading is that **ink turned out to be the better second dimension**.
+Both ideas answer "what else can a drawn line give you", ink answers it
+continuously where orientation answers it in events, and a module carrying both
+was carrying one too many. Worth remembering that this was decided by running out
+of jacks rather than by listening, so if events ever want to come back, the
+argument for them was never actually tested.
 
 ## Transport
 

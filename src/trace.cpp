@@ -69,27 +69,6 @@ static const float TR_SLEWBARS[] = {0.f, 1/16.f, 1/8.f, 1/4.f, 1/3.f, 1/2.f,
                                     1.f, 2.f, 4.f, 8.f};
 static const int   TR_NSLEWBARS  = 10;
 
-// What a lane's TRIG jack fires on. One jack per lane with the condition
-// selected per lane, which absorbs what would otherwise have been a separate
-// gate output for quantized lanes.
-enum TrCond {
-	TC_ANY,        // any orientation change
-	TC_UP,         // turns up
-	TC_DOWN,       // turns down
-	TC_FLAT,       // goes flat
-	TC_UNFLAT,     // leaves flat
-	TC_STEP,       // the quantized value changed
-	TC_GATE_UP,    // gate, high while rising
-	TC_GATE_DOWN,  // gate, high while falling
-	TC_GATE_FLAT,  // gate, high while flat
-	TC_NCOND
-};
-static const char* TR_CONDNAME[TC_NCOND] = {
-	"Any change", "Turns up", "Turns down", "Goes flat", "Leaves flat",
-	"Step change", "Gate: rising", "Gate: falling", "Gate: flat"
-};
-static inline bool trCondIsGate(int c) { return c >= TC_GATE_UP; }
-
 static const char* TR_QUANTNAME[] = {"Off", "Semitones", "2 steps", "3 steps",
 	"4 steps", "5 steps", "6 steps", "8 steps", "12 steps", "16 steps"};
 static const int   TR_QUANTSTEPS[] = {0, -1, 2, 3, 4, 5, 6, 8, 12, 16};
@@ -147,10 +126,12 @@ static std::vector<uint8_t> trDecode(const std::string& s) {
 struct Trace : Module {
 	enum ParamId {
 		SPEED_PARAM, LENGTH_PARAM, SLEW_PARAM,
-		INK_PARAM, LEAK_PARAM, FLAT_PARAM,
+		INK_PARAM, LEAK_PARAM,
+		FLAT_PARAM,                           // RETIRED, kept so indices hold
 		RUN_PARAM, DIR_PARAM, RESET_PARAM,
 		BRUSH_PARAM,                          // 4 lane selects, then erase
-		PARAMS_LEN = BRUSH_PARAM + 5
+		SPREAD_PARAM = BRUSH_PARAM + 5,
+		PARAMS_LEN
 	};
 	enum InputId {
 		LANE_INPUT,                           // 4
@@ -160,13 +141,15 @@ struct Trace : Module {
 		RUN_INPUT, DIR_INPUT, RESET_INPUT,
 		OFFSET_INPUT,                         // 4, one per lane
 		THICK_INPUT = OFFSET_INPUT + TR_LANES,// 4, one per lane
-		INPUTS_LEN = THICK_INPUT + TR_LANES
+		SPREAD_INPUT = THICK_INPUT + TR_LANES,
+		INPUTS_LEN
 	};
 	enum OutputId {
 		VALUE_OUTPUT,                                  // 4
 		INK_OUTPUT  = VALUE_OUTPUT + TR_LANES,         // 4
-		TRIG_OUTPUT = INK_OUTPUT + TR_LANES,           // 4
-		LOOP_OUTPUT = TRIG_OUTPUT + TR_LANES,
+		// Reuses the retired TRIG slots, which are the right count and unused.
+		OFS_OUTPUT = INK_OUTPUT + TR_LANES,            // 4, the movable head
+		LOOP_OUTPUT = OFS_OUTPUT + TR_LANES,
 		OUTPUTS_LEN
 	};
 	enum LightId {
@@ -200,13 +183,8 @@ struct Trace : Module {
 		int   range = 0;                   // 0 bipolar +/-5V, 1 unipolar 0..10V
 		int   readMode = 0;                // 0 smooth (interpolate), 1 stepped
 		int   quant = 0;                   // index into TR_QUANTSTEPS
-		int   cond  = TC_ANY;
 		// state
-		int   orient = 0;
-		int   lastQ = -100000;
 		float outVal = 0.f, outInk = 0.f;
-		float trigLight = 0.f;
-		dsp::PulseGenerator trig;
 	};
 	Lane lane[TR_LANES];
 
@@ -282,9 +260,10 @@ struct Trace : Module {
 
 	// ── display mirrors ─────────────────────────────────────────────────────
 	// Read by the widget, so the screen reflects CV as well as the knobs.
-	float dispSpeed = 1.f, dispSlew = 0.f, dispFlat = 0.05f, dispInk = 0.5f;
+	float dispSpeed = 1.f, dispSlew = 0.f, dispInk = 0.5f;
 	bool  dispClocked = false;
 	bool  dispRev = false;
+	float dispSpread = 0.f;
 	int   dispBars = 4;
 	float dispLenSec = 4.f;
 
@@ -330,17 +309,6 @@ struct Trace : Module {
 			return s < 1.f ? string::f("%.0f ms", s * 1000.f) : string::f("%.2f s", s);
 		}
 	};
-	// The threshold that decides whether a drawn line is a handful of events or
-	// a swarm of them, so it is on the panel rather than in a menu.
-	struct FlatQuantity : ParamQuantity {
-		std::string getDisplayValueString() override {
-			float mv = getValue() * getValue() * 2000.f;
-			return mv < 1.f ? "any motion" : string::f("%.0f mV", mv);
-		}
-	};
-	// How much ink a READ head lifts each time it passes a cell. Stated as the
-	// number of passes it takes to clear a full cell, which is what you are
-	// actually choosing.
 	struct LeakQuantity : ParamQuantity {
 		std::string getDisplayValueString() override {
 			float v = getValue();
@@ -358,7 +326,14 @@ struct Trace : Module {
 		configParam<SlewQuantity>(SLEW_PARAM, 0.f, 1.f, 0.f, "Slew");
 		configParam(INK_PARAM, 0.f, 1.f, 0.5f, "Ink laid per pass", "%", 0.f, 100.f);
 		configParam<LeakQuantity>(LEAK_PARAM, 0.f, 1.f, 0.2f, "Ink lifted per pass");
-		configParam<FlatQuantity>(FLAT_PARAM, 0.f, 1.f, 0.16f, "Flat threshold");
+		// ONE control fans all four heads out from lane 1, instead of four
+		// separate offsets. A static offset on an independently drawn lane is
+		// exactly equivalent to having drawn that lane earlier, so four of
+		// them mostly restated where a line already was. What a head offset is
+		// actually for is reading ONE gesture at several phases, and being
+		// swept -- and both of those are one control, not four.
+		configParam(SPREAD_PARAM, -1.f, 1.f, 0.f, "Head spread", "%", 0.f, 100.f);
+		configInput(SPREAD_INPUT, "Head spread CV");
 
 		configSwitch(RUN_PARAM, 0.f, 1.f, 1.f, "Run", {"Stopped", "Running"});
 		configButton(DIR_PARAM, "Reverse");
@@ -369,11 +344,11 @@ struct Trace : Module {
 
 		for (int i = 0; i < TR_LANES; i++) {
 			configInput(LANE_INPUT + i, string::f("Lane %d draw CV", i + 1));
-			configInput(OFFSET_INPUT + i, string::f("Lane %d head offset CV", i + 1));
 			configInput(THICK_INPUT + i, string::f("Lane %d thickness / velocity", i + 1));
 			configOutput(VALUE_OUTPUT + i, string::f("Lane %d value", i + 1));
+			configOutput(OFS_OUTPUT + i,   string::f("Lane %d value at the offset head", i + 1));
 			configOutput(INK_OUTPUT + i,   string::f("Lane %d ink", i + 1));
-			configOutput(TRIG_OUTPUT + i,  string::f("Lane %d trigger", i + 1));
+			configInput(OFFSET_INPUT + i, string::f("Lane %d head offset CV", i + 1));
 		}
 		configInput(WRITE_INPUT, "Write gate");
 		configInput(CLOCK_INPUT, "Clock");
@@ -406,15 +381,6 @@ struct Trace : Module {
 		haveBar = haveClock = false;
 		barSeen = clockSeen = false;
 		barCount = 0;
-	}
-
-	// Read a value off the paper with wrap and linear interpolation.
-	float paperAt(int L, double c) {
-		double f = std::floor(c);
-		int i0 = trWrap((int)f, cells);
-		int i1 = trWrap(i0 + 1, cells);
-		float t = (float)(c - f);
-		return pv[L][i0] + (pv[L][i1] - pv[L][i0]) * t;
 	}
 
 	float quantize(const Lane& L, float v) const {
@@ -593,9 +559,11 @@ struct Trace : Module {
 			inkAmt = clamp(inkAmt + inputs[INK_INPUT].getVoltage() * 0.1f, 0.f, 1.f);
 		dispInk = inkAmt;
 
-		float flatV = params[FLAT_PARAM].getValue();
-		flatV = flatV * flatV * 2.f;
-		dispFlat = flatV;
+		float spread = params[SPREAD_PARAM].getValue();
+		if (inputs[SPREAD_INPUT].isConnected())
+			spread += inputs[SPREAD_INPUT].getVoltage() * 0.2f;   // 5V = fully fanned
+		spread = clamp(spread, -1.f, 1.f);
+		dispSpread = spread;
 
 		float leakKnob = params[LEAK_PARAM].getValue();
 		float inkWear = leakKnob * leakKnob * 0.5f;     // lifted per read pass
@@ -655,12 +623,6 @@ struct Trace : Module {
 		float t = (float)std::min(uiRampPos / std::max(uiRampLen, 1.0), 1.0);
 		float mouseVal = uiValFrom + (uiValTo - uiValFrom) * t;
 		double mouseOff = uiOffFrom + (uiOffTo - uiOffFrom) * t;
-
-		// The slope window scales with the flat threshold rather than being an
-		// independent control: a wide window and a low threshold are the same
-		// idea stated twice.
-		double slopeW = (double)cells * (0.002 + 0.02 * std::sqrt(flatV / 2.f));
-		slopeW = std::max(2.0, std::min(slopeW, cells * 0.2));
 
 		for (int i = 0; i < TR_LANES; i++) {
 			Lane& L = lane[i];
@@ -808,109 +770,58 @@ struct Trace : Module {
 			}
 
 			// ── read ───────────────────────────────────────────────────────
-			// INTERPOLATE BACKWARDS, from the cell the head has just left to
-			// the one it is on. Reading FORWARD reads a cell the brush has not
-			// reached yet, and when the head and the brush are on the same
-			// cell -- which is the default, and is always the case while a CV
-			// is being recorded -- that cell still holds the PREVIOUS
-			// revolution. The output then ramps from the value just written
-			// toward a stale one and snaps back, once per cell: a 1kHz
-			// sawtooth riding on the signal, which reads as a thick fuzzy
-			// band on a scope. Backwards, both cells are always written.
-			// The offset WRAPS rather than clamping, because the paper is a
-			// loop: a head driven past the end comes round the front, which is
-			// the whole point of being able to sweep one.
-			float off = L.offset;
+			// TWO HEADS per lane: one fixed at NOW, one at the lane's offset.
+			// A single movable head only ever restated where the line had been
+			// drawn; having both at once is a phase-shifted copy of one
+			// gesture, which is the thing a chart recorder's second pen is for.
+			//
+			// INTERPOLATE BACKWARDS, from the cell a head has just left to the
+			// one it is on. Reading FORWARD reads a cell the brush has not
+			// reached yet, and when a head and the brush sit on the same cell
+			// -- which the fixed head always does -- that cell still holds the
+			// PREVIOUS revolution. The output then ramps from the value just
+			// written toward a stale one and snaps back, once per cell: a 1kHz
+			// sawtooth on the signal, a thick fuzzy band on a scope.
+			float off = L.offset + spread * ((float)i / (float)TR_LANES);
 			if (inputs[OFFSET_INPUT + i].isConnected())
 				off += inputs[OFFSET_INPUT + i].getVoltage() * 0.1f;   // 10V = one loop
 			off -= std::floor(off);
 			L.offsetEff = off;
 
-			double rc = paperPos + (double)off * cells;
-			double rf = std::floor(rc);
-			int r1 = trWrap((int)rf, cells);         // the cell the head is on
-			int r0 = trWrap(r1 - 1, cells);          // the one it just left
-			float rt = (float)(rc - rf);
+			float raw0, raw1, ink;
+			{
+				double rf = std::floor(paperPos);
+				int r1 = trWrap((int)rf, cells);
+				int r0 = trWrap(r1 - 1, cells);
+				float rt = (float)(paperPos - rf);
+				// Ink and wear both belong to the FIXED head, so LEAK stays one
+				// pass per revolution however the other head is being swept.
+				if (inkWear > 0.f && r1 != L.lastReadIdx) {
+					pk[i][r1] = std::max(0.f, pk[i][r1] - inkWear);
+					L.lastReadIdx = r1;
+				}
+				if (L.readMode) { raw0 = pv[i][r1]; ink = pk[i][r1]; }
+				else {
+					raw0 = pv[i][r0] + (pv[i][r1] - pv[i][r0]) * rt;
+					ink  = pk[i][r0] + (pk[i][r1] - pk[i][r0]) * rt;
+				}
 
-			// Leak is applied as the head crosses a cell, which is exactly
-			// once per revolution per cell and costs nothing, where sweeping
-			// the whole ring on the wrap would spike one sample's work.
-			if (inkWear > 0.f && r1 != L.lastReadIdx) {
-				pk[i][r1] = std::max(0.f, pk[i][r1] - inkWear);
-				L.lastReadIdx = r1;
+				double rc = paperPos + (double)off * cells;
+				double rf1 = std::floor(rc);
+				int s1 = trWrap((int)rf1, cells);
+				int s0 = trWrap(s1 - 1, cells);
+				float st = (float)(rc - rf1);
+				raw1 = L.readMode ? pv[i][s1]
+				                  : pv[i][s0] + (pv[i][s1] - pv[i][s0]) * st;
 			}
-
-			// The paper has grain: cells are a millisecond apart at 1x.
-			// Interpolating between them is right for a drawn curve and wrong
-			// for a gate, which comes out as a 0.8ms ramp rather than an edge
-			// -- measured, and nothing to do with SLEW, which really is
-			// instant at zero. So it is a per-lane choice rather than a
-			// constant.
-			float raw, ink;
-			if (L.readMode) {
-				raw = pv[i][r1];
-				ink = pk[i][r1];
-			} else {
-				raw = pv[i][r0] + (pv[i][r1] - pv[i][r0]) * rt;
-				ink = pk[i][r0] + (pk[i][r1] - pk[i][r0]) * rt;
-			}
-			float val = clamp(quantize(L, raw), lo, hi);
-
-			// ── orientation ────────────────────────────────────────────────
-			// A CENTRED difference, because the future is already drawn on the
-			// paper so lookahead is free, and it puts the event on the turn
-			// rather than a window late. A causal difference is the obvious
-			// implementation and the worse one.
-			float slope = paperAt(i, rc + slopeW) - paperAt(i, rc - slopeW);
-			if (reversed) slope = -slope;
-
-			int o = L.orient, no = o;
-			// Hysteresis is not optional: no hand-drawn line is ever exactly
-			// flat, and a bare threshold chatters at the boundary and emits
-			// hundreds of triggers a second on recorded CV.
-			if (o == 0) {
-				if (slope >  flatV * 1.6f) no =  1;
-				else if (slope < -flatV * 1.6f) no = -1;
-			} else {
-				if (std::fabs(slope) < flatV) no = 0;
-				else no = (slope > 0.f) ? 1 : -1;
-			}
-
-			int qi = (int)std::round(val * 1000.f);
-			bool stepped = (TR_QUANTSTEPS[clamp(L.quant, 0, TR_NQUANT - 1)] != 0)
-			            && (qi != L.lastQ) && (L.lastQ != -100000);
-			L.lastQ = qi;
-
-			bool fire = false;
-			switch (L.cond) {
-				case TC_ANY:    fire = (no != o); break;
-				case TC_UP:     fire = (no ==  1 && o !=  1); break;
-				case TC_DOWN:   fire = (no == -1 && o != -1); break;
-				case TC_FLAT:   fire = (no ==  0 && o !=  0); break;
-				case TC_UNFLAT: fire = (no !=  0 && o ==  0); break;
-				case TC_STEP:   fire = stepped; break;
-				default: break;
-			}
-			L.orient = no;
-			if (fire) L.trig.trigger(1e-3f);
-
-			float trigOut;
-			if (trCondIsGate(L.cond)) {
-				bool high = (L.cond == TC_GATE_UP   && no ==  1)
-				         || (L.cond == TC_GATE_DOWN && no == -1)
-				         || (L.cond == TC_GATE_FLAT && no ==  0);
-				trigOut = high ? 10.f : 0.f;
-			} else {
-				trigOut = L.trig.process(args.sampleTime) ? 10.f : 0.f;
-			}
-			L.trigLight = std::max(L.trigLight - args.sampleTime * 6.f,
-			                       trigOut > 1.f ? 1.f : 0.f);
+			float val  = clamp(quantize(L, raw0), lo, hi);
+			float valO = clamp(quantize(L, raw1), lo, hi);
 
 			L.outVal = val;
 			L.outInk = ink * 10.f;
 			outputs[VALUE_OUTPUT + i].setVoltage(val);
+			outputs[OFS_OUTPUT + i].setVoltage(valO);
 			outputs[INK_OUTPUT + i].setVoltage(L.outInk);
-			outputs[TRIG_OUTPUT + i].setVoltage(trigOut);
 		}
 
 		// ── ink pools where the lines cross ─────────────────────────────────
@@ -986,7 +897,6 @@ struct Trace : Module {
 			json_object_set_new(o, "readMode", json_integer(lane[i].readMode));
 			json_object_set_new(o, "drawn", json_boolean(lane[i].drawn));
 			json_object_set_new(o, "quant", json_integer(lane[i].quant));
-			json_object_set_new(o, "cond", json_integer(lane[i].cond));
 			json_array_append_new(ls, o);
 		}
 		json_object_set_new(root, "lanes", ls);
@@ -1035,8 +945,6 @@ struct Trace : Module {
 					lane[i].drawn = json_boolean_value(j);
 				if (json_t* j = json_object_get(o, "quant"))
 					lane[i].quant = clamp((int)json_integer_value(j), 0, TR_NQUANT - 1);
-				if (json_t* j = json_object_get(o, "cond"))
-					lane[i].cond = clamp((int)json_integer_value(j), 0, TC_NCOND - 1);
 			}
 		}
 
@@ -1070,14 +978,15 @@ struct Trace : Module {
 // Display
 // =============================================================================
 
-static const float TR_DESIGN_W = 363.f;      // 96mm * 3.783, per screen-style
+static const float TR_DESIGN_W = 397.f;      // 105mm * 3.783, per screen-style
 // ONE x axis, shared by the pane and the lane strips, so a strip's handle sits
-// directly beneath its own triangle on the pane. They used to have separate
+// directly beneath its own head line on the pane. They used to have separate
 // mappings -- offset 0 was the far left on a strip and dead centre on the pane
-// -- so the two drawings of the same number never lined up. Gutters either side
-// carry the lane number and the trigger/orientation indicators.
+// -- so the two drawings of the same number never lined up. The left gutter
+// carries the lane number; the right one used to carry the trigger and
+// orientation indicators and is now only a margin.
 static const float TR_GX0 = 10.f;
-static const float TR_GW  = TR_DESIGN_W - 26.f;
+static const float TR_GW  = TR_DESIGN_W - 16.f;
 static const NVGcolor TR_LANECOL[TR_LANES] = {
 	nvgRGB(0x00, 0x97, 0xDE),   // blue
 	nvgRGB(0x3F, 0xBF, 0x6F),   // green
@@ -1173,7 +1082,10 @@ void TraceDisplay::apply(Vec p) {
 		// Same mapping as the pane, so the handle lands under the pointer AND
 		// under its triangle. NOW is the centre, and it wraps.
 		float fx = clamp((ux - TR_GX0) / TR_GW, 0.f, 1.f) - 0.5f;
-		if (fx < 0.f) fx += 1.f;
+		// the handle is drawn at base + spread, so the drag has to take the
+		// spread back out again or grabbing one makes it jump
+		fx -= module->dispSpread * ((float)dragLane / (float)TR_LANES);
+		fx -= std::floor(fx);
 		module->lane[dragLane].offset = fx;
 		return;
 	}
@@ -1472,19 +1384,6 @@ void TraceDisplay::drawLayer(const DrawArgs& args, int layer) {
 			nvgText(vg, 1.f * s, (y + h * 0.5f) * s, string::f("%d", i + 1).c_str(), NULL);
 		}
 
-		float tl = clamp(L.trigLight, 0.f, 1.f);
-		nvgBeginPath(vg);
-		nvgCircle(vg, (TR_DESIGN_W - 11.f) * s, (y + h * 0.5f) * s, 2.6f * s);
-		nvgFillColor(vg, nvgTransRGBA(TR_LANECOL[i], (int)(40 + tl * 215)));
-		nvgFill(vg);
-
-		if (font && font->handle >= 0) {
-			const char* g = L.orient > 0 ? "/" : L.orient < 0 ? "\\" : "-";
-			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
-			nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-			nvgFillColor(vg, sfs::SCREEN_DIM);
-			nvgText(vg, (TR_DESIGN_W - 4.f) * s, (y + h * 0.5f) * s, g, NULL);
-		}
 	}
 
 	nvgRestore(vg);
@@ -1597,14 +1496,14 @@ void TraceDisplay::drawPreview(const DrawArgs& args, float s) {
 // module actually has.
 // Three input columns mirroring the three output columns: the lane rows carry
 // that lane's draw CV and its head-offset CV, and the globals take column C.
-static const float TR_INX1 =   8.40f, TR_INX2 =  20.40f, TR_INX3 = 32.40f;
-static const float TR_OUTX1 = 140.60f, TR_OUTX2 = 152.60f, TR_OUTX3 = 164.60f;
-static const float TR_ROW[5] = {20.00f, 34.00f, 48.00f, 62.00f, 76.00f};
+static const float TR_INX1 = 8.40f, TR_INX2 = 20.40f, TR_INX3 = 32.40f;
+static const float TR_OUTX1 = 152.60f, TR_OUTX2 = 164.60f;
+static const float TR_ROW[5] = {16.00f, 28.00f, 40.00f, 52.00f, 64.00f};
 static const float TR_KY = 100.00f;     // control row
 static const float TR_JY = 116.00f;     // the jacks under it
-static const float TR_KX[6] = {50.00f, 63.00f, 76.00f, 89.00f, 102.00f, 115.00f};
-static const float TR_BRX = 128.00f;    // first brush button
-static const float TR_BRP = 8.60f;      // brush button pitch
+static const float TR_KX[6] = {52.00f, 66.00f, 80.00f, 94.00f, 108.00f, 122.00f};
+static const float TR_BRX = 133.00f;    // first brush button
+static const float TR_BRP = 8.00f;      // brush button pitch
 
 struct TraceWidget : ModuleWidget {
 	TraceWidget(Trace* module) {
@@ -1614,7 +1513,7 @@ struct TraceWidget : ModuleWidget {
 		TraceDisplay* disp = new TraceDisplay;
 		disp->module = module;
 		disp->box.pos = mm2px(Vec(38.50f, 7.50f));
-		disp->box.size = mm2px(Vec(96.00f, 77.00f));
+		disp->box.size = mm2px(Vec(105.00f, 77.00f));
 		addChild(disp);
 
 		// inputs, left
@@ -1623,9 +1522,9 @@ struct TraceWidget : ModuleWidget {
 			                                         module, Trace::LANE_INPUT + i));
 		for (int i = 0; i < TR_LANES; i++) {
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_INX2, TR_ROW[i])),
-			                                         module, Trace::OFFSET_INPUT + i));
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_INX3, TR_ROW[i])),
 			                                         module, Trace::THICK_INPUT + i));
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_INX3, TR_ROW[i])),
+			                                         module, Trace::OFFSET_INPUT + i));
 		}
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_INX1, TR_ROW[4])), module, Trace::WRITE_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_INX2, TR_ROW[4])), module, Trace::CLOCK_INPUT));
@@ -1633,6 +1532,8 @@ struct TraceWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_KX[0], TR_JY)), module, Trace::SPEED_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_KX[2], TR_JY)), module, Trace::SLEW_INPUT));
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_KX[3], TR_JY)), module, Trace::INK_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_KX[5], TR_JY)), module, Trace::SPREAD_INPUT));
+		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(TR_KX[5], TR_KY)), module, Trace::SPREAD_PARAM));
 
 		// outputs, right: one row per lane, value / ink / trigger
 		for (int i = 0; i < TR_LANES; i++) {
@@ -1640,10 +1541,8 @@ struct TraceWidget : ModuleWidget {
 			                                           module, Trace::VALUE_OUTPUT + i));
 			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(TR_OUTX2, TR_ROW[i])),
 			                                           module, Trace::INK_OUTPUT + i));
-			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(TR_OUTX3, TR_ROW[i])),
-			                                           module, Trace::TRIG_OUTPUT + i));
 		}
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(TR_OUTX3, TR_ROW[4])),
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(TR_OUTX2, TR_ROW[4])),
 		                                           module, Trace::LOOP_OUTPUT));
 
 		// transport
@@ -1662,7 +1561,6 @@ struct TraceWidget : ModuleWidget {
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(TR_KX[2], TR_KY)), module, Trace::SLEW_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(TR_KX[3], TR_KY)), module, Trace::INK_PARAM));
 		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(TR_KX[4], TR_KY)), module, Trace::LEAK_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(TR_KX[5], TR_KY)), module, Trace::FLAT_PARAM));
 
 		// Brush selector. ERASE is RED, not another white one: it latches, and
 		// a latched erase looks exactly like drawing that does not work.
@@ -1686,8 +1584,8 @@ struct TraceWidget : ModuleWidget {
 		lab->title(6.f, 122.f, "TRACE");
 		for (int i = 0; i < TR_LANES; i++) {
 			lab->jack(TR_INX1, TR_ROW[i], string::f("L%d", i + 1));
-			lab->jack(TR_INX2, TR_ROW[i], string::f("OF%d", i + 1));
-			lab->jack(TR_INX3, TR_ROW[i], string::f("TH%d", i + 1));
+			lab->jack(TR_INX2, TR_ROW[i], string::f("TH%d", i + 1));
+			lab->jack(TR_INX3, TR_ROW[i], string::f("OF%d", i + 1));
 		}
 		// The output rows are the lanes, top to bottom, in the same order as
 		// the screen's numbered strips — so the columns get the labels and the
@@ -1700,13 +1598,13 @@ struct TraceWidget : ModuleWidget {
 		lab->link(TR_KX[0], TR_KY, TR_KX[0], TR_JY);
 		lab->link(TR_KX[2], TR_KY, TR_KX[2], TR_JY);
 		lab->link(TR_KX[3], TR_KY, TR_KX[3], TR_JY);
+		lab->link(TR_KX[5], TR_KY, TR_KX[5], TR_JY);
 		lab->jackOnPlate(TR_OUTX2, TR_ROW[0], "INK");
-		lab->jackOnPlate(TR_OUTX3, TR_ROW[0], "TRG");
-		lab->jackOnPlate(TR_OUTX3, TR_ROW[4], "LOOP");
+		lab->jackOnPlate(TR_OUTX2, TR_ROW[4], "LOOP");
 		lab->jack(10.00f, TR_KY, "RUN");
 		lab->jack(22.00f, TR_KY, "DIR");
 		lab->jack(34.00f, TR_KY, "RST");
-		static const char* KN[6] = {"SPEED", "LENGTH", "SLEW", "INK", "LEAK", "FLAT"};
+		static const char* KN[6] = {"SPEED", "LENGTH", "SLEW", "INK", "LEAK", "SPREAD"};
 		for (int i = 0; i < 6; i++) lab->knob(TR_KX[i], TR_KY, KN[i]);
 		lab->add(TR_BRX + 2.f * TR_BRP, TR_KY - 6.6f, "BRUSH");
 		lab->note(TR_BRX + 4.f * TR_BRP, TR_KY + 7.0f, "ERA");
@@ -1728,9 +1626,6 @@ struct TraceWidget : ModuleWidget {
 					std::vector<std::string> qs;
 					for (int q = 0; q < TR_NQUANT; q++) qs.push_back(TR_QUANTNAME[q]);
 					sub->addChild(createIndexPtrSubmenuItem("Quantize", qs, &m->lane[i].quant));
-					std::vector<std::string> cs;
-					for (int c = 0; c < TC_NCOND; c++) cs.push_back(TR_CONDNAME[c]);
-					sub->addChild(createIndexPtrSubmenuItem("Trigger on", cs, &m->lane[i].cond));
 					sub->addChild(new MenuSeparator);
 					sub->addChild(createMenuItem("Clear lane", "", [=]() {
 						std::fill(m->pv[i].begin(), m->pv[i].end(), 0.f);
