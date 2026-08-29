@@ -504,7 +504,7 @@ def labels(body, ev, env=None, defs=None):
                 expr = re.sub(pat, rep, expr)
         return expr
 
-    # The variable is whatever the widget called it. Trace and Prism name it
+    # The variable is whatever the widget called it. Trace and Sigma name it
     # `lab`, and a hardcoded `lbl->` dropped every one of their labels in
     # silence -- the exact failure this function exists to report.
     names = set(re.findall(r"sfs::PanelLabels\s*\*?\s*(\w+)\s*[=;]", body)) or {"lbl"}

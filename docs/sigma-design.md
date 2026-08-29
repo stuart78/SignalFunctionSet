@@ -1,12 +1,17 @@
-# Prism: design
+# Sigma: design
 
-**Status: specification only. Nothing is built.**
+**Status: v1 built, hidden.**
 
-Working name `Prism` — a tone split into its components, each of which you can
-move independently. `Alles` is the sentimental alternative, after Hal Alles,
-whose Bell Labs machine this descends from; it is also German for "everything",
-which is what additive synthesis is. Plain nouns are the house convention
-(Drift, Phase, Tine, Loom, Slice), so either fits.
+Named `Sigma`, for the summation sign — the whole operation is a sum of sines,
+with no waveform generated and nothing filtered away. It was called `Prism`
+until 2026-08, which was the wrong metaphor twice over: a prism *splits* a beam
+into a spectrum, where this *assembles* one, and there is already a plugin brand
+called Prism in the VCV Library (Rainbow, Droplet), so the browser would have
+shown a Signal Function Set module sitting beside a vendor of the same name.
+
+`Alles` was the sentimental alternative, after Hal Alles, whose Bell Labs
+machine this descends from; it is also German for "everything", which is what
+additive synthesis is.
 
 Working width 30HP. Sixteen partials, polyphonic.
 
@@ -187,7 +192,7 @@ sixteen partials, always.
 
 - **Kit**, for the fact that high partials must die faster, and for the 1/omega
   amplitude law taken from eigendrum — a force impulse gives a mode initial
-  velocity, so amplitude goes as 1/omega. Prism's default TILT should probably
+  velocity, so amplitude goes as 1/omega. Sigma's default TILT should probably
   start there rather than flat.
 - **Loom**, for the tabbed display over eight strings × six attributes. This is
   sixteen × six and the pattern scales.
@@ -195,5 +200,5 @@ sixteen partials, always.
   control.
 - **Overtone stays as it is** — eight togglable harmonics with an even/odd
   filter and a binary-mask CV. It is the quick additive VCO you patch without
-  thinking. Prism is the one you sit down with. If Prism ever grows a "simple"
+  thinking. Sigma is the one you sit down with. If Sigma ever grows a "simple"
   mode it has taken a wrong turn.

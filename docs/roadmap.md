@@ -26,7 +26,7 @@ you. Known gap: the browser preview and the live display now draw the ribbon the
 same way, but the preview's content is still a synthetic sine rather than
 anything the module would produce.
 
-### Prism — v1 built, hidden
+### Sigma — v1 built, hidden
 A deep additive voice, sixteen partials, after the Crumar GDS. The GDS gave each
 oscillator a sixteen-stage amplitude AND frequency envelope, plus two complete
 envelope sets interpolated by velocity; that needed a $30,000 computer bolted to
@@ -48,7 +48,7 @@ it. The three LFOs use the same idea in phase rather than per-partial routing.
 Sixteen voices by sixteen partials, settled by measurement: 256 oscillators is
 1.6% of one core, so the GDS's spend-your-oscillators budget would be an
 artificial scarcity here rather than a homage. Specified in
-`docs/prism-design.md`. Distinct from Overtone, which stays the quick
+`docs/sigma-design.md`. Distinct from Overtone, which stays the quick
 eight-harmonic additive VCO.
 
 Built, with the partial count now selectable at 16/32/64. What the v1 taught:

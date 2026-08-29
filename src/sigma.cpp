@@ -6,7 +6,12 @@
 #include <vector>
 
 // =============================================================================
-// Prism — a tone split into sixteen partials you can move independently.
+// Sigma — a tone SUMMED from sixteen partials you can move independently.
+//
+// Named for the summation sign, because that is the whole operation: there is
+// no oscillator here making a waveform and no filter taking anything away. The
+// output is nothing but a sum of sines, and every control is a statement about
+// what goes into that sum.
 //
 // After the Crumar GDS (1980), which commercialised Hal Alles' Bell Labs
 // machine. The GDS gave every oscillator a sixteen-stage amplitude envelope AND
@@ -35,52 +40,52 @@
 // soft and loud, crossfaded. A quiet note is a different timbre, not a quieter
 // one. It is the least-copied idea in the GDS and the cheapest to steal.
 //
-// See docs/prism-design.md.
+// See docs/sigma-design.md.
 // =============================================================================
 
 // The ARRAY size; the count actually sounding is a menu choice. 64 x 16 voices
 // is 1024 oscillators, which the benchmark puts near 5% of one core -- so the
 // ceiling is editability and Nyquist, not CPU.
-static const int PR_MAXP   = 64;
-static const int PR_VOICES = 16;
-static const int PR_NCOUNT = 3;
-static const int PR_COUNTS[PR_NCOUNT] = {16, 32, 64};
+static const int SG_MAXP   = 64;
+static const int SG_VOICES = 16;
+static const int SG_NCOUNT = 3;
+static const int SG_COUNTS[SG_NCOUNT] = {16, 32, 64};
 
 // A table sine, because 16 partials x 16 voices is 256 oscillators and
 // std::sin() 256 times a sample is not the same proposition as a lookup.
 // Measured at 1.6% of one core for the full 256 with linear interpolation.
-static const int PR_TBL = 4096;
-static float prSinTbl[PR_TBL + 1];
+static const int SG_TBL = 4096;
+static float sgSinTbl[SG_TBL + 1];
 static bool  prTblReady = false;
 static void prInitTable() {
 	if (prTblReady) return;
-	for (int i = 0; i <= PR_TBL; i++)
-		prSinTbl[i] = std::sin(2.0 * M_PI * (double)i / (double)PR_TBL);
+	for (int i = 0; i <= SG_TBL; i++)
+		sgSinTbl[i] = std::sin(2.0 * M_PI * (double)i / (double)SG_TBL);
 	prTblReady = true;
 }
-static inline float prSin(float ph) {              // ph in [0,1)
-	float f = ph * PR_TBL;
+static inline float sgSin(float ph) {              // ph in [0,1)
+	float f = ph * SG_TBL;
 	int k = (int)f;
 	float fr = f - (float)k;
-	return prSinTbl[k] + (prSinTbl[k + 1] - prSinTbl[k]) * fr;
+	return sgSinTbl[k] + (sgSinTbl[k + 1] - sgSinTbl[k]) * fr;
 }
 
 // A MOD MATRIX rather than one target per LFO. Three sources by five
 // destinations is fifteen numbers, which is small enough to draw and edit on
 // screen and large enough that an LFO can do two things at once -- which is
 // most of what makes three of them feel like more than three.
-enum PrModDest { PR_MOD_LEVEL, PR_MOD_PITCH, PR_MOD_PAN, PR_MOD_TILT,
-                 PR_MOD_STRETCH, PR_MOD_CUT, PR_MOD_N };
-static const char* PR_MODNAME[PR_MOD_N] = {"LVL", "PIT", "PAN", "TLT", "STR", "CUT"};
+enum SgModDest { SG_MOD_LEVEL, SG_MOD_PITCH, SG_MOD_PAN, SG_MOD_TILT,
+                 SG_MOD_STRETCH, SG_MOD_CUT, SG_MOD_N };
+static const char* SG_MODNAME[SG_MOD_N] = {"LVL", "PIT", "PAN", "TLT", "STR", "CUT"};
 // Four sources: the three LFOs, and the envelope. An envelope that can only
 // drive amplitude is half an envelope -- the reason it is worth a row is that
 // it is the one source that knows where it is in the NOTE.
-static const int PR_MODSRC = 4;
-static const char* PR_SRCNAME[PR_MODSRC] = {"LFO1", "LFO2", "LFO3", "ENV"};
-static const int PR_SCOPE = 512;
-static const int PR_NPRESET = 14;
+static const int SG_MODSRC = 4;
+static const char* SG_SRCNAME[SG_MODSRC] = {"LFO1", "LFO2", "LFO3", "ENV"};
+static const int SG_SCOPE = 512;
+static const int SG_NPRESET = 14;
 
-struct Prism : Module {
+struct Sigma : Module {
 	enum ParamId {
 		TILT_PARAM, ODDEVEN_PARAM, STRETCH_PARAM, WIDTH_PARAM, MORPH_PARAM,
 		ENVRATE_PARAM, ENVSPREAD_PARAM,
@@ -105,31 +110,31 @@ struct Prism : Module {
 	enum LightId  { LIGHTS_LEN };
 
 	// ── per-partial state, the screen's six tabs ────────────────────────────
-	float pLevel[PR_MAXP]  = {};   // the loud spectrum
-	float pSoft[PR_MAXP]   = {};   // the quiet spectrum; velocity morphs
-	float pPitch[PR_MAXP]  = {};   // cents, a trim on top of STRETCH
-	float pPan[PR_MAXP]    = {};   // -1..1
-	float pDepth[PR_MAXP]  = {};   // how much envelope this partial takes
-	float pRate[PR_MAXP]   = {};   // 0..1 -> 0.25x .. 4x
+	float pLevel[SG_MAXP]  = {};   // the loud spectrum
+	float pSoft[SG_MAXP]   = {};   // the quiet spectrum; velocity morphs
+	float pPitch[SG_MAXP]  = {};   // cents, a trim on top of STRETCH
+	float pPan[SG_MAXP]    = {};   // -1..1
+	float pDepth[SG_MAXP]  = {};   // how much envelope this partial takes
+	float pRate[SG_MAXP]   = {};   // 0..1 -> 0.25x .. 4x
 
 	// ── voices ──────────────────────────────────────────────────────────────
 	enum Stage { ST_IDLE, ST_ATT, ST_DEC, ST_SUS, ST_REL };
 	struct Voice {
 		bool  on = false;
 		float vel = 1.f, pitch = 0.f;
-		float phase[PR_MAXP] = {};
+		float phase[SG_MAXP] = {};
 		// A partial's envelope is its own, because rate and start time differ.
-		float env[PR_MAXP] = {};
-		int   stage[PR_MAXP] = {};
-		float wait[PR_MAXP] = {};      // ENV SPREAD's start delay
-		float relFrom[PR_MAXP] = {};
+		float env[SG_MAXP] = {};
+		int   stage[SG_MAXP] = {};
+		float wait[SG_MAXP] = {};      // ENV SPREAD's start delay
+		float relFrom[SG_MAXP] = {};
 		float mEnv = 0.f; int mStage = ST_IDLE; float mRelFrom = 0.f;
 	};
-	Voice voice[PR_VOICES];
+	Voice voice[SG_VOICES];
 
 	float lfoPhase[3] = {};
 	dsp::SchmittTrigger lfoSyncTrig[3];
-	float mod[PR_MODSRC][PR_MOD_N] = {};   // the matrix, bipolar
+	float mod[SG_MODSRC][SG_MOD_N] = {};   // the matrix, bipolar
 
 	// ── what the screen shows ───────────────────────────────────────────────
 	// The stored per-partial arrays are what you drew; these are what the
@@ -140,12 +145,12 @@ struct Prism : Module {
 	int   dispTab = 0;
 	float dispMorph = 1.f;
 	float dispF0 = 261.6f;             // for a scope that shows ONE cycle
-	float liveAmp[PR_MAXP] = {};   // amplitude in force, per partial
-	float liveEnv[PR_MAXP] = {};
-	float livePan[PR_MAXP] = {};
-	float liveCents[PR_MAXP] = {};
+	float liveAmp[SG_MAXP] = {};   // amplitude in force, per partial
+	float liveEnv[SG_MAXP] = {};
+	float livePan[SG_MAXP] = {};
+	float liveCents[SG_MAXP] = {};
 	bool  liveOn = false;
-	float scope[PR_SCOPE] = {};
+	float scope[SG_SCOPE] = {};
 	int   scopeIdx = 0; bool scopeFill = false; float scopePrev = 0.f;
 
 	// The knob is exponential over 0.02..30Hz; showing 0.30 told you nothing.
@@ -157,7 +162,7 @@ struct Prism : Module {
 		}
 	};
 
-	Prism() {
+	Sigma() {
 		prInitTable();
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
@@ -239,10 +244,10 @@ struct Prism : Module {
 	void resetTab(int tab) {
 		float* a[5] = {pLevel, pSoft, pPitch, pDepth, pRate};
 		if (tab < 0 || tab > 4) return;
-		for (int p = 0; p < PR_MAXP; p++) a[tab][p] = defaultFor(tab, p);
+		for (int p = 0; p < SG_MAXP; p++) a[tab][p] = defaultFor(tab, p);
 	}
 	void initSpectrum() {
-		for (int p = 0; p < PR_MAXP; p++) {
+		for (int p = 0; p < SG_MAXP; p++) {
 			// The soft spectrum starts DARKER than the loud one, which is what
 			// velocity does on any real instrument: play quietly and you lose
 			// the top of the spectrum, not just level.
@@ -257,10 +262,10 @@ struct Prism : Module {
 	void onReset(const ResetEvent& e) override {
 		Module::onReset(e);
 		initSpectrum();
-		for (int v = 0; v < PR_VOICES; v++) voice[v] = Voice();
+		for (int v = 0; v < SG_VOICES; v++) voice[v] = Voice();
 		for (int i = 0; i < 3; i++) lfoPhase[i] = 0.f;
-		for (int r = 0; r < PR_MODSRC; r++)
-			for (int d = 0; d < PR_MOD_N; d++) mod[r][d] = 0.f;
+		for (int r = 0; r < SG_MODSRC; r++)
+			for (int d = 0; d < SG_MOD_N; d++) mod[r][d] = 0.f;
 	}
 
 	static float knobTime(float k, float lo, float hi) {   // exponential seconds
@@ -281,8 +286,8 @@ struct Prism : Module {
 	// additive is good at rather than four variations on one.
 	void loadPreset(int which) {
 		initSpectrum();
-		for (int r = 0; r < PR_MODSRC; r++)
-			for (int d = 0; d < PR_MOD_N; d++) mod[r][d] = 0.f;
+		for (int r = 0; r < SG_MODSRC; r++)
+			for (int d = 0; d < SG_MOD_N; d++) mod[r][d] = 0.f;
 		params[STRETCH_PARAM].setValue(0.f);
 		params[MORPH_PARAM].setValue(0.f);
 		params[CUTOFF_PARAM].setValue(1.f);
@@ -297,7 +302,7 @@ struct Prism : Module {
 
 		switch (which) {
 			case 0:   // RAMP -- every harmonic at 1/n, which is a sawtooth
-				for (int p = 0; p < PR_MAXP; p++) pLevel[p] = 1.f / (float)(p + 1);
+				for (int p = 0; p < SG_MAXP; p++) pLevel[p] = 1.f / (float)(p + 1);
 				params[ODDEVEN_PARAM].setValue(0.f);
 				params[ENVRATE_PARAM].setValue(0.f);
 				params[ATTACK_PARAM].setValue(timeKnob(0.005f, 0.001f, 8.f));
@@ -307,7 +312,7 @@ struct Prism : Module {
 				break;
 
 			case 1:   // SQUARE -- the same 1/n, odd harmonics only
-				for (int p = 0; p < PR_MAXP; p++) pLevel[p] = 1.f / (float)(p + 1);
+				for (int p = 0; p < SG_MAXP; p++) pLevel[p] = 1.f / (float)(p + 1);
 				params[ODDEVEN_PARAM].setValue(-1.f);
 				params[ENVRATE_PARAM].setValue(0.f);
 				params[ATTACK_PARAM].setValue(timeKnob(0.004f, 0.001f, 8.f));
@@ -319,7 +324,7 @@ struct Prism : Module {
 			case 2: {  // CS-80 -- lush brass. Slow swell, wide, and drifting:
 				// the CS-80's signature is not a waveform, it is that nothing
 				// in it sits still, so the two LFOs matter more than the levels.
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					pLevel[p] = 1.f / (float)(p + 1);
 					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.9f);   // far darker quiet
 					pRate[p]  = 0.5f;
@@ -333,9 +338,9 @@ struct Prism : Module {
 				params[SUSTAIN_PARAM].setValue(0.75f);
 				params[RELEASE_PARAM].setValue(timeKnob(0.9f, 0.005f, 16.f));
 				params[MORPH_PARAM].setValue(-0.35f);       // so SOFT is audible
-				mod[0][PR_MOD_PITCH] = 0.10f;               // vibrato
-				mod[1][PR_MOD_LEVEL] = 0.22f;               // spread shimmer
-				mod[3][PR_MOD_CUT]   = 0.35f;               // envelope opens it
+				mod[0][SG_MOD_PITCH] = 0.10f;               // vibrato
+				mod[1][SG_MOD_LEVEL] = 0.22f;               // spread shimmer
+				mod[3][SG_MOD_CUT]   = 0.35f;               // envelope opens it
 				params[CUTOFF_PARAM].setValue(0.52f);
 				params[LFORATE_PARAM + 0].setValue(0.42f);
 				params[LFOSPREAD_PARAM + 0].setValue(0.f);  // vibrato moves as one
@@ -349,7 +354,7 @@ struct Prism : Module {
 				// harmonic series would give, and the next near 10x. That is
 				// the whole sound, and it is why this preset is really a use of
 				// the PITCH tab rather than of the LEVEL tab.
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					pLevel[p] = 0.f; pPitch[p] = 0.f;
 					pRate[p] = 0.5f; pDepth[p] = 1.f;
 				}
@@ -357,7 +362,7 @@ struct Prism : Module {
 				pLevel[1] = 0.45f; pPitch[1] = 0.5f;                    // 2x -> 4x
 				pLevel[2] = 0.16f; pPitch[2] = std::log2(10.f / 3.f) / 2.f;  // 3x -> 10x
 				pLevel[5] = 0.05f;                                 // a little air
-				for (int p = 0; p < PR_MAXP; p++)
+				for (int p = 0; p < SG_MAXP; p++)
 					pRate[p] = clamp(0.5f + 0.03f * (float)p, 0.f, 1.f);
 				params[ODDEVEN_PARAM].setValue(0.f);
 				params[ENVRATE_PARAM].setValue(0.55f);
@@ -376,7 +381,7 @@ struct Prism : Module {
 				// while the low ones still nearly do, which is the difference
 				// between a struck bar and a struck bell -- and between this and
 				// the Gong preset, where they stop agreeing altogether.
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					pLevel[p] = 1.f / std::pow((float)(p + 1), 0.8f);
 					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.6f);
 					pRate[p]  = clamp(0.5f + 0.02f * (float)p, 0.f, 1.f);
@@ -398,7 +403,7 @@ struct Prism : Module {
 				// partials speak first and the fundamental arrives underneath
 				// them. At -0.5 the fundamental is 125 ms late, which is a
 				// bowed onset rather than a delay.
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					pLevel[p] = 1.f / (float)(p + 1);
 					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.5f);
 					pRate[p]  = 0.5f;
@@ -410,7 +415,7 @@ struct Prism : Module {
 				params[DECAY_PARAM].setValue(timeKnob(0.5f, 0.005f, 12.f));
 				params[SUSTAIN_PARAM].setValue(0.9f);
 				params[RELEASE_PARAM].setValue(timeKnob(0.25f, 0.005f, 16.f));
-				mod[0][PR_MOD_PITCH] = 0.07f;
+				mod[0][SG_MOD_PITCH] = 0.07f;
 				params[LFORATE_PARAM + 0].setValue(lfoKnob(5.2f));
 				params[LFOSPREAD_PARAM + 0].setValue(0.f);   // one vibrato, not sixteen
 				params[WIDTH_PARAM].setValue(0.35f);
@@ -423,7 +428,7 @@ struct Prism : Module {
 				// envelope BACKWARDS, so those partials arrive as the lower ones
 				// are leaving. That crossing is the thing additive can do that a
 				// filter sweep only imitates.
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					pLevel[p] = 1.f / std::pow((float)(p + 1), 0.9f);
 					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.4f);
 					pRate[p]  = 0.35f;                       // slow, all of them
@@ -444,7 +449,7 @@ struct Prism : Module {
 				// is very nearly a sine; played hard the tine bark at partials
 				// 4-6 comes in. That is a different spectrum, not a louder one,
 				// which is the argument for storing two.
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					pLevel[p] = 1.f / std::pow((float)(p + 1), 1.3f);
 					pSoft[p]  = (p == 0) ? 1.f : ((p == 2) ? 0.10f : 0.f);
 					pRate[p]  = clamp(0.5f + 0.035f * (float)p, 0.f, 1.f);
@@ -466,7 +471,7 @@ struct Prism : Module {
 				// same circle and the spectrum turns rather than the sound
 				// sliding side to side. LFO1 works level in the opposite
 				// direction to keep whatever is arriving in front.
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					pLevel[p] = 1.f / std::pow((float)(p + 1), 1.1f);
 					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.6f);
 					pRate[p]  = 0.5f;
@@ -478,8 +483,8 @@ struct Prism : Module {
 				params[SUSTAIN_PARAM].setValue(0.85f);
 				params[RELEASE_PARAM].setValue(timeKnob(0.6f, 0.005f, 16.f));
 				params[WIDTH_PARAM].setValue(1.f);
-				mod[1][PR_MOD_PAN]   =  0.85f;
-				mod[0][PR_MOD_LEVEL] = -0.30f;
+				mod[1][SG_MOD_PAN]   =  0.85f;
+				mod[0][SG_MOD_LEVEL] = -0.30f;
 				params[LFORATE_PARAM + 1].setValue(lfoKnob(0.8f));
 				params[LFOSPREAD_PARAM + 1].setValue(1.f);   // the whole circle
 				params[LFORATE_PARAM + 0].setValue(lfoKnob(0.8f));
@@ -492,7 +497,7 @@ struct Prism : Module {
 				// strong, the 7th is nearly as loud as the 5th, and everything
 				// above about the 11th falls off a cliff. ODD/EVEN alone gives
 				// a hollow square; the drawn curve is what makes it reedy.
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					pLevel[p] = 0.f; pSoft[p] = 0.f;
 					pRate[p]  = 0.5f; pDepth[p] = 1.f;
 				}
@@ -524,7 +529,7 @@ struct Prism : Module {
 				// this preset wants to be played low, and it is the reason the
 				// fade at the top of the range had to be a fade.
 				nPartials = 64;
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					pLevel[p] = 1.f / std::pow((float)(p + 1), 0.6f);
 					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.2f);
 					pRate[p]  = clamp(0.45f + 0.012f * (float)p, 0.f, 1.f);
@@ -539,7 +544,7 @@ struct Prism : Module {
 				params[RELEASE_PARAM].setValue(timeKnob(8.f, 0.005f, 16.f));
 				params[WIDTH_PARAM].setValue(0.9f);
 				params[TILT_PARAM].setValue(0.15f);
-				mod[2][PR_MOD_STRETCH] = 0.20f;
+				mod[2][SG_MOD_STRETCH] = 0.20f;
 				params[LFORATE_PARAM + 2].setValue(lfoKnob(0.09f));
 				params[LFOSPREAD_PARAM + 2].setValue(0.4f);
 				break;
@@ -558,7 +563,7 @@ struct Prism : Module {
 				static const float FRQ[3] = {730.f, 1090.f, 2440.f};
 				static const float AMP[3] = {1.f, 0.5f, 0.18f};
 				static const float BW[3]  = {0.9f, 1.1f, 1.8f};   // in partials
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					float n = (float)(p + 1);
 					float v = 0.02f / n;                  // a little glottal floor
 					for (int k = 0; k < 3; k++) {
@@ -585,7 +590,7 @@ struct Prism : Module {
 				// partial rather than run as a difference equation, so it cannot
 				// self-oscillate and it cannot distort -- what it can do is be
 				// exactly the shape it claims to be.
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					pLevel[p] = 1.f / (float)(p + 1);
 					pSoft[p]  = 1.f / (float)(p + 1);
 					pRate[p]  = 0.5f; pDepth[p] = 1.f;
@@ -593,7 +598,7 @@ struct Prism : Module {
 				params[ENVRATE_PARAM].setValue(0.f);
 				params[CUTOFF_PARAM].setValue(cutKnob(320.f));
 				params[RESO_PARAM].setValue(0.8f);
-				mod[3][PR_MOD_CUT] = 0.55f;
+				mod[3][SG_MOD_CUT] = 0.55f;
 				params[ATTACK_PARAM].setValue(timeKnob(0.002f, 0.001f, 8.f));
 				params[DECAY_PARAM].setValue(timeKnob(0.28f, 0.005f, 12.f));
 				params[SUSTAIN_PARAM].setValue(0.05f);
@@ -608,7 +613,7 @@ struct Prism : Module {
 				// random(), so the preset is the same every time it is loaded.
 				// LFO1 works pitch with its spread wide, which is what keeps the
 				// detuning from settling into one steady chorus.
-				for (int p = 0; p < PR_MAXP; p++) {
+				for (int p = 0; p < SG_MAXP; p++) {
 					pLevel[p] = 1.f / (float)(p + 1);
 					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.4f);
 					pRate[p]  = 0.5f; pDepth[p] = 1.f;
@@ -624,7 +629,7 @@ struct Prism : Module {
 				params[SUSTAIN_PARAM].setValue(0.8f);
 				params[RELEASE_PARAM].setValue(timeKnob(1.2f, 0.005f, 16.f));
 				params[WIDTH_PARAM].setValue(0.6f);
-				mod[0][PR_MOD_PITCH] = 0.05f;
+				mod[0][SG_MOD_PITCH] = 0.05f;
 				params[LFORATE_PARAM + 0].setValue(lfoKnob(0.35f));
 				params[LFOSPREAD_PARAM + 0].setValue(1.f);
 				break;
@@ -666,7 +671,7 @@ struct Prism : Module {
 			// TILT, STRETCH and CUT are whole-spectrum controls, so they take
 			// the LFO flat. Spread only means something for a destination that
 			// exists once per partial.
-			lfoFlat[i]   = prSin(lfoPhase[i]);
+			lfoFlat[i]   = sgSin(lfoPhase[i]);
 		}
 		float cutK = params[CUTOFF_PARAM].getValue();
 		if (inputs[CUTOFF_INPUT].isConnected()) cutK += inputs[CUTOFF_INPUT].getVoltage() * 0.1f;
@@ -679,7 +684,7 @@ struct Prism : Module {
 		// voice, below.
 
 		int nch = std::max(inputs[GATE_INPUT].getChannels(), 1);
-		nch = std::min(nch, PR_VOICES);
+		nch = std::min(nch, SG_VOICES);
 
 		// The screen follows the LOWEST sounding voice rather than the newest:
 		// a display that jumps to whichever note was struck last is unreadable
@@ -744,12 +749,12 @@ struct Prism : Module {
 			// The whole-spectrum controls are resolved PER VOICE, because the
 			// envelope is per voice: a held chord whose tilt followed whichever
 			// note was struck last would be one voice modulating the others.
-			float mSrc[PR_MODSRC] = {lfoFlat[0], lfoFlat[1], lfoFlat[2], V.mEnv};
+			float mSrc[SG_MODSRC] = {lfoFlat[0], lfoFlat[1], lfoFlat[2], V.mEnv};
 			float tilt = baseTilt, stretch = baseStretch, cutM = 0.f;
-			for (int i = 0; i < PR_MODSRC; i++) {
-				tilt    += mSrc[i] * mod[i][PR_MOD_TILT];
-				stretch += mSrc[i] * mod[i][PR_MOD_STRETCH];
-				cutM    += mSrc[i] * mod[i][PR_MOD_CUT];
+			for (int i = 0; i < SG_MODSRC; i++) {
+				tilt    += mSrc[i] * mod[i][SG_MOD_TILT];
+				stretch += mSrc[i] * mod[i][SG_MOD_STRETCH];
+				cutM    += mSrc[i] * mod[i][SG_MOD_CUT];
 			}
 			tilt = clamp(tilt, -1.f, 1.f);
 			stretch = clamp(stretch, 0.f, 1.f);
@@ -814,7 +819,7 @@ struct Prism : Module {
 				float pan = clamp(fan * width + pPan[p], -1.f, 1.f);
 
 				// ── LFOs, spread across the partial index ───────────────────
-				for (int i = 0; i < PR_MODSRC; i++) {
+				for (int i = 0; i < SG_MODSRC; i++) {
 					// The three LFOs are spread across the partial index; the
 					// envelope is not, because a note does not start at a
 					// different time for each partial -- ENV SPREAD already
@@ -823,11 +828,11 @@ struct Prism : Module {
 					if (i < 3) {
 						float ph = lfoPhase[i] + lfoSpread[i] * (float)p / (float)nPartials;
 						ph -= std::floor(ph);
-						m = prSin(ph);
+						m = sgSin(ph);
 					} else m = V.mEnv;
-					lv    *= clamp(1.f + m * mod[i][PR_MOD_LEVEL], 0.f, 2.f);
-					cents += m * mod[i][PR_MOD_PITCH] * 50.f;
-					pan    = clamp(pan + m * mod[i][PR_MOD_PAN], -1.f, 1.f);
+					lv    *= clamp(1.f + m * mod[i][SG_MOD_LEVEL], 0.f, 2.f);
+					cents += m * mod[i][SG_MOD_PITCH] * 50.f;
+					pan    = clamp(pan + m * mod[i][SG_MOD_PAN], -1.f, 1.f);
 				}
 
 				float f = f0 * ratio * std::pow(2.f, cents / 1200.f);
@@ -860,7 +865,7 @@ struct Prism : Module {
 				if (over) continue;
 				V.phase[p] += f * dt;
 				V.phase[p] -= std::floor(V.phase[p]);
-				float s = prSin(V.phase[p]) * lv;
+				float s = sgSin(V.phase[p]) * lv;
 
 				float pl = std::sqrt(0.5f * (1.f - pan));   // equal power
 				float pr = std::sqrt(0.5f * (1.f + pan));
@@ -887,7 +892,7 @@ struct Prism : Module {
 		}
 		if (scopeFill) {
 			scope[scopeIdx++] = fl;
-			if (scopeIdx >= PR_SCOPE) { scopeIdx = 0; scopeFill = false; }
+			if (scopeIdx >= SG_SCOPE) { scopeIdx = 0; scopeFill = false; }
 		}
 		scopePrev = fl;
 		outputs[L_OUTPUT].setVoltage(fl);
@@ -938,8 +943,8 @@ struct Prism : Module {
 			json_object_set_new(root, keys[k], a);
 		}
 		json_t* mm = json_array();
-		for (int r = 0; r < PR_MODSRC; r++)
-			for (int d = 0; d < PR_MOD_N; d++) json_array_append_new(mm, json_real(mod[r][d]));
+		for (int r = 0; r < SG_MODSRC; r++)
+			for (int d = 0; d < SG_MOD_N; d++) json_array_append_new(mm, json_real(mod[r][d]));
 		json_object_set_new(root, "mod", mm);
 		json_object_set_new(root, "tab", json_integer(dispTab));
 		json_object_set_new(root, "nPartials", json_integer(nPartials));
@@ -955,16 +960,16 @@ struct Prism : Module {
 				arrs[k][p] = (float)json_real_value(json_array_get(a, p));
 		}
 		if (json_t* mm = json_object_get(root, "mod"))
-			for (int i = 0; i < PR_MODSRC; i++)
-				for (int d = 0; d < PR_MOD_N; d++) {
-					int k = i * PR_MOD_N + d;
+			for (int i = 0; i < SG_MODSRC; i++)
+				for (int d = 0; d < SG_MOD_N; d++) {
+					int k = i * SG_MOD_N + d;
 					if (k < (int)json_array_size(mm))
 						mod[i][d] = (float)json_real_value(json_array_get(mm, k));
 				}
 		if (json_t* j = json_object_get(root, "tab"))
 			dispTab = clamp((int)json_integer_value(j), 0, 4);
 		if (json_t* j = json_object_get(root, "nPartials"))
-			nPartials = clamp((int)json_integer_value(j), 1, PR_MAXP);
+			nPartials = clamp((int)json_integer_value(j), 1, SG_MAXP);
 	}
 };
 
@@ -984,11 +989,11 @@ struct Prism : Module {
 // tells you nothing a picture of the stereo field would not tell you better.
 // =============================================================================
 
-static const float PR_DESIGN_W = 605.f;      // 160mm * 3.783, per screen-style
-static const int   PR_NTAB = 5;
-static const char* PR_TABNAME[PR_NTAB] = {"LEVEL", "SOFT", "PITCH", "DEPTH", "RATE"};
-static const bool  PR_TABBIP[PR_NTAB]  = {false, false, true, true, false};
-static const NVGcolor PR_TABCOL[PR_NTAB] = {
+static const float SG_DESIGN_W = 605.f;      // 160mm * 3.783, per screen-style
+static const int   SG_NTAB = 5;
+static const char* SG_TABNAME[SG_NTAB] = {"LEVEL", "SOFT", "PITCH", "DEPTH", "RATE"};
+static const bool  SG_TABBIP[SG_NTAB]  = {false, false, true, true, false};
+static const NVGcolor SG_TABCOL[SG_NTAB] = {
 	nvgRGB(0x00, 0x97, 0xDE),   // LEVEL  blue
 	nvgRGB(0x9B, 0x6B, 0xD6),   // SOFT   purple
 	nvgRGB(0x3F, 0xBF, 0x6F),   // PITCH  green
@@ -996,8 +1001,8 @@ static const NVGcolor PR_TABCOL[PR_NTAB] = {
 	nvgRGB(0xD8, 0xB4, 0x3A),   // RATE   yellow
 };
 
-struct PrismDisplay : OpaqueWidget {
-	Prism* module = nullptr;
+struct SigmaDisplay : OpaqueWidget {
+	Sigma* module = nullptr;
 	std::shared_ptr<Font> font;
 	int np() const { return module ? module->nPartials : 16; }
 	enum Drag { DRAG_NONE, DRAG_BARS, DRAG_MATRIX, DRAG_PAN };
@@ -1008,13 +1013,13 @@ struct PrismDisplay : OpaqueWidget {
 	bool dragHas = false;
 
 	// ── layout, in design units ─────────────────────────────────────────────
-	float uH() const { return box.size.y / (box.size.x / PR_DESIGN_W); }
-	float splitX() const { return PR_DESIGN_W * 0.655f; }
+	float uH() const { return box.size.y / (box.size.x / SG_DESIGN_W); }
+	float splitX() const { return SG_DESIGN_W * 0.655f; }
 	float tabsH() const { return 20.f; }
 	float specY() const { return tabsH() + 5.f; }
 	float specH() const { return uH() - specY() - 14.f; }
 	float rx() const { return splitX() + 6.f; }
-	float rw() const { return PR_DESIGN_W - rx() - 4.f; }
+	float rw() const { return SG_DESIGN_W - rx() - 4.f; }
 	// Not equal thirds. One cycle of a waveform needs almost no height, and the
 	// matrix is the block you actually edit, so it takes what the scope gives up.
 	float blkFrac(int i) const { return (i == 0) ? 0.22f : (i == 1) ? 0.33f : 0.45f; }
@@ -1051,16 +1056,16 @@ struct PrismDisplay : OpaqueWidget {
 	void step() override;
 };
 
-void PrismDisplay::onButton(const ButtonEvent& e) {
+void SigmaDisplay::onButton(const ButtonEvent& e) {
 	if (!module || e.action != GLFW_PRESS || e.button != GLFW_MOUSE_BUTTON_LEFT) {
 		OpaqueWidget::onButton(e); return;
 	}
 	lastPress = e.pos;
-	float s = box.size.x / PR_DESIGN_W;
+	float s = box.size.x / SG_DESIGN_W;
 	float ux = e.pos.x / s, uy = e.pos.y / s;
 	if (ux < splitX()) {
 		if (uy < tabsH()) {
-			module->dispTab = clamp((int)(ux / (splitX() / PR_NTAB)), 0, PR_NTAB - 1);
+			module->dispTab = clamp((int)(ux / (splitX() / SG_NTAB)), 0, SG_NTAB - 1);
 			e.consume(this); return;
 		}
 		dragKind = DRAG_BARS;
@@ -1077,36 +1082,36 @@ void PrismDisplay::onButton(const ButtonEvent& e) {
 }
 // A header is the obvious place to ask for "put this back". DoubleClickEvent
 // carries no position, so the last press is remembered instead.
-void PrismDisplay::onDoubleClick(const DoubleClickEvent& e) {
+void SigmaDisplay::onDoubleClick(const DoubleClickEvent& e) {
 	if (!module) return;
-	float s = box.size.x / PR_DESIGN_W;
+	float s = box.size.x / SG_DESIGN_W;
 	float ux = lastPress.x / s, uy = lastPress.y / s;
 	if (ux < splitX()) {
-		if (uy < tabsH()) module->resetTab(clamp((int)(ux / (splitX() / PR_NTAB)), 0, PR_NTAB - 1));
+		if (uy < tabsH()) module->resetTab(clamp((int)(ux / (splitX() / SG_NTAB)), 0, SG_NTAB - 1));
 	} else if (uy < blkY(1)) {
 		return;                                     // the scope heads nothing
 	} else if (uy < blkY(2)) {
-		for (int p = 0; p < PR_MAXP; p++) module->pPan[p] = 0.f;
+		for (int p = 0; p < SG_MAXP; p++) module->pPan[p] = 0.f;
 	} else {
-		for (int r = 0; r < PR_MODSRC; r++)
-			for (int c = 0; c < PR_MOD_N; c++) module->mod[r][c] = 0.f;
+		for (int r = 0; r < SG_MODSRC; r++)
+			for (int c = 0; c < SG_MOD_N; c++) module->mod[r][c] = 0.f;
 	}
 	e.consume(this);
 }
 
-void PrismDisplay::onDragMove(const DragMoveEvent& e) {
+void SigmaDisplay::onDragMove(const DragMoveEvent& e) {
 	if (dragKind == DRAG_NONE) { OpaqueWidget::onDragMove(e); return; }
 	float z = getAbsoluteZoom();
 	if (z > 0.f) dragPos = dragPos.plus(e.mouseDelta.div(z));
 	apply(dragPos);
 }
-void PrismDisplay::apply(Vec p) {
+void SigmaDisplay::apply(Vec p) {
 	// Walk from wherever the last apply landed to here, one step per column, so
 	// nothing between them is skipped. Mouse events arrive per FRAME, so a fast
 	// drag jumps several partials at once and every one it flew over was left
 	// untouched -- the same hole Trace's brush had, one control surface up.
 	if (dragHas && dragKind == DRAG_BARS) {
-		float s0 = box.size.x / PR_DESIGN_W;
+		float s0 = box.size.x / SG_DESIGN_W;
 		float colPx = (splitX() / (float)np()) * s0;
 		float dx = p.x - dragPrev.x;
 		int steps = (int)std::min(std::fabs(dx) / std::max(colPx, 1.f), 128.f);
@@ -1119,8 +1124,8 @@ void PrismDisplay::apply(Vec p) {
 	applyAt(p);
 }
 
-void PrismDisplay::applyAt(Vec p) {
-	float s = box.size.x / PR_DESIGN_W;
+void SigmaDisplay::applyAt(Vec p) {
+	float s = box.size.x / SG_DESIGN_W;
 	float ux = p.x / s, uy = p.y / s;
 	if (dragKind == DRAG_BARS) {
 		float* arr = tabArray(module->dispTab);
@@ -1128,7 +1133,7 @@ void PrismDisplay::applyAt(Vec p) {
 		float colW = splitX() / (float)np();
 		int i = clamp((int)(ux / colW), 0, np() - 1);
 		float t = clamp(1.f - (uy - specY()) / std::max(specH(), 1.f), 0.f, 1.f);
-		arr[i] = PR_TABBIP[module->dispTab] ? (t * 2.f - 1.f) : t;
+		arr[i] = SG_TABBIP[module->dispTab] ? (t * 2.f - 1.f) : t;
 	} else if (dragKind == DRAG_PAN) {
 		float h = blkH(1) - 12.f, y0 = blkY(1) + 9.f;
 		int i = clamp((int)((uy - y0) / std::max(h / np(), 0.5f)), 0, np() - 1);
@@ -1136,9 +1141,9 @@ void PrismDisplay::applyAt(Vec p) {
 	} else if (dragKind == DRAG_MATRIX) {
 		float h = blkH(2) - 12.f, y0 = blkY(2) + 9.f;
 		float lw = 14.f;
-		float cw = (rw() - lw) / (float)PR_MOD_N, ch = h / (float)PR_MODSRC;
-		int r = clamp((int)((uy - y0) / std::max(ch, 0.5f)), 0, PR_MODSRC - 1);
-		int c = clamp((int)((ux - rx() - lw) / std::max(cw, 0.5f)), 0, PR_MOD_N - 1);
+		float cw = (rw() - lw) / (float)SG_MOD_N, ch = h / (float)SG_MODSRC;
+		int r = clamp((int)((uy - y0) / std::max(ch, 0.5f)), 0, SG_MODSRC - 1);
+		int c = clamp((int)((ux - rx() - lw) / std::max(cw, 0.5f)), 0, SG_MOD_N - 1);
 		// vertical drag from the cell's own centre, so a click lands where you
 		// clicked rather than snapping to whatever the pointer's row implies
 		float t = clamp(1.f - (uy - (y0 + r * ch)) / std::max(ch, 0.5f), 0.f, 1.f);
@@ -1146,7 +1151,7 @@ void PrismDisplay::applyAt(Vec p) {
 	}
 }
 
-static const char* PR_TABHELP[PR_NTAB] = {
+static const char* SG_TABHELP[SG_NTAB] = {
 	"LEVEL - the loud spectrum. Velocity morphs toward it.",
 	"SOFT - the quiet spectrum. A quiet note is a different timbre, not a smaller one.",
 	"PITCH - cents per partial, a trim on top of STRETCH.",
@@ -1154,33 +1159,33 @@ static const char* PR_TABHELP[PR_NTAB] = {
 	"RATE - envelope speed per partial. Faster highs is what makes a struck tone sound struck.",
 };
 
-void PrismDisplay::onHover(const HoverEvent& e) {
-	float s = box.size.x / PR_DESIGN_W;
+void SigmaDisplay::onHover(const HoverEvent& e) {
+	float s = box.size.x / SG_DESIGN_W;
 	float ux = e.pos.x / s, uy = e.pos.y / s;
 	hoverTab = (uy < tabsH() && ux < splitX())
-	         ? clamp((int)(ux / (splitX() / PR_NTAB)), 0, PR_NTAB - 1) : -1;
+	         ? clamp((int)(ux / (splitX() / SG_NTAB)), 0, SG_NTAB - 1) : -1;
 	OpaqueWidget::onHover(e);
 }
-void PrismDisplay::onLeave(const LeaveEvent& e) {
+void SigmaDisplay::onLeave(const LeaveEvent& e) {
 	hoverTab = -1;
 	OpaqueWidget::onLeave(e);
 }
-void PrismDisplay::step() {
+void SigmaDisplay::step() {
 	if (hoverTab >= 0 && !tip) { tip = new ui::Tooltip; APP->scene->addChild(tip); }
 	else if (hoverTab < 0 && tip) {
 		APP->scene->removeChild(tip); delete tip; tip = nullptr;
 	}
 	if (tip) {
-		tip->text = PR_TABHELP[clamp(hoverTab, 0, PR_NTAB - 1)];
+		tip->text = SG_TABHELP[clamp(hoverTab, 0, SG_NTAB - 1)];
 		tip->box.pos = APP->scene->mousePos.plus(Vec(15, 15));
 	}
 	OpaqueWidget::step();
 }
 
-void PrismDisplay::drawLayer(const DrawArgs& args, int layer) {
+void SigmaDisplay::drawLayer(const DrawArgs& args, int layer) {
 	if (layer != 1) { OpaqueWidget::drawLayer(args, layer); return; }
 	NVGcontext* vg = args.vg;
-	float s = box.size.x / PR_DESIGN_W;
+	float s = box.size.x / SG_DESIGN_W;
 	if (!font || font->handle < 0) font = sfs::screenFontFace();
 
 	nvgBeginPath(vg);
@@ -1193,18 +1198,18 @@ void PrismDisplay::drawLayer(const DrawArgs& args, int layer) {
 	nvgScissor(vg, 0, 0, box.size.x, box.size.y);
 
 	// ── tabs ────────────────────────────────────────────────────────────────
-	float tw = splitX() / (float)PR_NTAB;
-	for (int t = 0; t < PR_NTAB; t++) {
+	float tw = splitX() / (float)SG_NTAB;
+	for (int t = 0; t < SG_NTAB; t++) {
 		bool sel = (module->dispTab == t);
 		nvgBeginPath(vg);
 		nvgRect(vg, (t * tw + 1.f) * s, 1.f * s, (tw - 2.f) * s, (tabsH() - 3.f) * s);
-		nvgFillColor(vg, sel ? nvgTransRGBA(PR_TABCOL[t], 110) : sfs::SCREEN_PURP);
+		nvgFillColor(vg, sel ? nvgTransRGBA(SG_TABCOL[t], 110) : sfs::SCREEN_PURP);
 		nvgFill(vg);
 		if (font && font->handle >= 0) {
 			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 			nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-			nvgFillColor(vg, sel ? PR_TABCOL[t] : sfs::SCREEN_DIM);
-			nvgText(vg, (t * tw + tw * 0.5f) * s, (tabsH() * 0.5f) * s, PR_TABNAME[t], NULL);
+			nvgFillColor(vg, sel ? SG_TABCOL[t] : sfs::SCREEN_DIM);
+			nvgText(vg, (t * tw + tw * 0.5f) * s, (tabsH() * 0.5f) * s, SG_TABNAME[t], NULL);
 		}
 	}
 
@@ -1222,7 +1227,7 @@ void PrismDisplay::drawLayer(const DrawArgs& args, int layer) {
 		float t = clamp(module->dispMorph, 0.f, 1.f);
 		nvgBeginPath(vg);
 		nvgRect(vg, (mx + (mw - 3.f) * t) * s, (my - 2.f) * s, 3.f * s, 5.5f * s);
-		nvgFillColor(vg, t < 0.5f ? PR_TABCOL[1] : PR_TABCOL[0]);
+		nvgFillColor(vg, t < 0.5f ? SG_TABCOL[1] : SG_TABCOL[0]);
 		nvgFill(vg);
 		if (font && font->handle >= 0) {
 			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
@@ -1251,10 +1256,10 @@ void PrismDisplay::drawLayer(const DrawArgs& args, int layer) {
 	}
 
 	// ── the stored curves, over the top ─────────────────────────────────────
-	for (int t = 0; t < PR_NTAB; t++) {
+	for (int t = 0; t < SG_NTAB; t++) {
 		const float* arr = tabArray(t);
 		bool sel = (module->dispTab == t);
-		bool bip = PR_TABBIP[t];
+		bool bip = SG_TABBIP[t];
 		nvgBeginPath(vg);
 		for (int i = 0; i < np(); i++) {
 			float v = arr[i];
@@ -1264,7 +1269,7 @@ void PrismDisplay::drawLayer(const DrawArgs& args, int layer) {
 			if (i == 0) nvgMoveTo(vg, xx * s, yy * s);
 			else        nvgLineTo(vg, xx * s, yy * s);
 		}
-		nvgStrokeColor(vg, nvgTransRGBA(PR_TABCOL[t], sel ? 255 : 70));
+		nvgStrokeColor(vg, nvgTransRGBA(SG_TABCOL[t], sel ? 255 : 70));
 		nvgStrokeWidth(vg, sel ? 2.0f : 1.0f);
 		nvgStroke(vg);
 		if (!sel) continue;
@@ -1274,7 +1279,7 @@ void PrismDisplay::drawLayer(const DrawArgs& args, int layer) {
 			               : (y0 + h - clamp(v, 0.f, 1.f) * h);
 			nvgBeginPath(vg);
 			nvgCircle(vg, (i * colW + colW * 0.5f) * s, yy * s, 2.2f * s);
-			nvgFillColor(vg, PR_TABCOL[t]);
+			nvgFillColor(vg, SG_TABCOL[t]);
 			nvgFill(vg);
 		}
 	}
@@ -1310,7 +1315,7 @@ void PrismDisplay::drawLayer(const DrawArgs& args, int layer) {
 		// window of fixed length shows a different number of cycles at every
 		// note, so the shape you are trying to read changes with what you play.
 		float per = APP->engine->getSampleRate() / std::max(module->dispF0, 20.f);
-		int n = clamp((int)per, 8, PR_SCOPE);
+		int n = clamp((int)per, 8, SG_SCOPE);
 		nvgBeginPath(vg);
 		for (int i = 0; i < n; i++) {
 			float xx = rx() + rw() * (float)i / (float)(n - 1);
@@ -1338,7 +1343,7 @@ void PrismDisplay::drawLayer(const DrawArgs& args, int layer) {
 			float a = clamp(module->liveAmp[i], 0.f, 1.f);
 			nvgBeginPath(vg);
 			nvgCircle(vg, xx * s, yy * s, (1.2f + 2.2f * std::sqrt(a)) * s);
-			nvgFillColor(vg, nvgTransRGBA(PR_TABCOL[0], (int)(70 + 185 * std::sqrt(a))));
+			nvgFillColor(vg, nvgTransRGBA(SG_TABCOL[0], (int)(70 + 185 * std::sqrt(a))));
 			nvgFill(vg);
 		}
 	}
@@ -1348,9 +1353,9 @@ void PrismDisplay::drawLayer(const DrawArgs& args, int layer) {
 	{
 		float by = blkY(2) + 9.f, bh = blkH(2) - 12.f;
 		float lw = 14.f;                                   // the LFO name gutter
-		float cw = (rw() - lw) / (float)PR_MOD_N, ch = bh / (float)PR_MODSRC;
-		for (int r = 0; r < PR_MODSRC; r++)
-			for (int c = 0; c < PR_MOD_N; c++) {
+		float cw = (rw() - lw) / (float)SG_MOD_N, ch = bh / (float)SG_MODSRC;
+		for (int r = 0; r < SG_MODSRC; r++)
+			for (int c = 0; c < SG_MOD_N; c++) {
 				float x = rx() + lw + c * cw, y = by + r * ch;
 				nvgBeginPath(vg);
 				nvgRect(vg, (x + 0.5f) * s, (y + 0.5f) * s, (cw - 1.f) * s, (ch - 1.f) * s);
@@ -1379,13 +1384,13 @@ void PrismDisplay::drawLayer(const DrawArgs& args, int layer) {
 			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 			nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 			nvgFillColor(vg, sfs::SCREEN_DIM);
-			for (int c = 0; c < PR_MOD_N; c++)
+			for (int c = 0; c < SG_MOD_N; c++)
 				nvgText(vg, (rx() + lw + c * cw + cw * 0.5f) * s, (by - 4.f) * s,
-				        PR_MODNAME[c], NULL);
+				        SG_MODNAME[c], NULL);
 			nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-			for (int r = 0; r < PR_MODSRC; r++)
+			for (int r = 0; r < SG_MODSRC; r++)
 				nvgText(vg, (rx() + 1.f) * s, (by + r * ch + ch * 0.5f) * s,
-				        PR_SRCNAME[r], NULL);
+				        SG_SRCNAME[r], NULL);
 		}
 	}
 
@@ -1393,20 +1398,20 @@ void PrismDisplay::drawLayer(const DrawArgs& args, int layer) {
 	OpaqueWidget::drawLayer(args, layer);
 }
 
-void PrismDisplay::drawPreview(const DrawArgs& args, float s) {
+void SigmaDisplay::drawPreview(const DrawArgs& args, float s) {
 	NVGcontext* vg = args.vg;
 	if (!font || font->handle < 0) font = sfs::screenFontFace();
-	float tw = splitX() / (float)PR_NTAB;
-	for (int t = 0; t < PR_NTAB; t++) {
+	float tw = splitX() / (float)SG_NTAB;
+	for (int t = 0; t < SG_NTAB; t++) {
 		nvgBeginPath(vg);
 		nvgRect(vg, (t * tw + 1.f) * s, 1.f * s, (tw - 2.f) * s, (tabsH() - 3.f) * s);
-		nvgFillColor(vg, t == 0 ? nvgTransRGBA(PR_TABCOL[0], 110) : sfs::SCREEN_PURP);
+		nvgFillColor(vg, t == 0 ? nvgTransRGBA(SG_TABCOL[0], 110) : sfs::SCREEN_PURP);
 		nvgFill(vg);
 		if (font && font->handle >= 0) {
 			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 			nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-			nvgFillColor(vg, t == 0 ? PR_TABCOL[0] : sfs::SCREEN_DIM);
-			nvgText(vg, (t * tw + tw * 0.5f) * s, (tabsH() * 0.5f) * s, PR_TABNAME[t], NULL);
+			nvgFillColor(vg, t == 0 ? SG_TABCOL[0] : sfs::SCREEN_DIM);
+			nvgText(vg, (t * tw + tw * 0.5f) * s, (tabsH() * 0.5f) * s, SG_TABNAME[t], NULL);
 		}
 	}
 	float y0 = specY(), h = specH(), colW = splitX() / (float)np();
@@ -1418,17 +1423,17 @@ void PrismDisplay::drawPreview(const DrawArgs& args, float s) {
 		nvgFillColor(vg, nvgRGBA(0x0D, 0x59, 0x86, 0xCC));
 		nvgFill(vg);
 	}
-	for (int t = 0; t < PR_NTAB; t++) {
+	for (int t = 0; t < SG_NTAB; t++) {
 		nvgBeginPath(vg);
 		for (int i = 0; i < np(); i++) {
 			float v = (t == 2) ? 0.15f * std::sin(i * 0.8f)
 			                   : 1.f / (1.f + (0.15f + 0.1f * t) * i);
-			bool bip = PR_TABBIP[t];
+			bool bip = SG_TABBIP[t];
 			float yy = bip ? (y0 + h * 0.5f - v * h * 0.5f) : (y0 + h - v * h);
 			float xx = i * colW + colW * 0.5f;
 			if (i == 0) nvgMoveTo(vg, xx * s, yy * s); else nvgLineTo(vg, xx * s, yy * s);
 		}
-		nvgStrokeColor(vg, nvgTransRGBA(PR_TABCOL[t], t == 0 ? 255 : 70));
+		nvgStrokeColor(vg, nvgTransRGBA(SG_TABCOL[t], t == 0 ? 255 : 70));
 		nvgStrokeWidth(vg, t == 0 ? 2.f : 1.f);
 		nvgStroke(vg);
 	}
@@ -1469,15 +1474,15 @@ void PrismDisplay::drawPreview(const DrawArgs& args, float s) {
 			nvgBeginPath(vg);
 			nvgCircle(vg, (rx() + rw() * (0.5f + pan * 0.5f)) * s,
 			          (by + (i + 0.5f) * rowH) * s, 2.f * s);
-			nvgFillColor(vg, nvgTransRGBA(PR_TABCOL[0], 190));
+			nvgFillColor(vg, nvgTransRGBA(SG_TABCOL[0], 190));
 			nvgFill(vg);
 		}
 	}
 	{
 		float by = blkY(2) + 9.f, bh = blkH(2) - 12.f;
-		float cw = rw() / (float)PR_MOD_N, ch = bh / (float)PR_MODSRC;
-		for (int r = 0; r < PR_MODSRC; r++)
-			for (int c = 0; c < PR_MOD_N; c++) {
+		float cw = rw() / (float)SG_MOD_N, ch = bh / (float)SG_MODSRC;
+		for (int r = 0; r < SG_MODSRC; r++)
+			for (int c = 0; c < SG_MOD_N; c++) {
 				nvgBeginPath(vg);
 				nvgRect(vg, (rx() + c * cw + 0.5f) * s, (by + r * ch + 0.5f) * s,
 				        (cw - 1.f) * s, (ch - 1.f) * s);
@@ -1494,115 +1499,115 @@ void PrismDisplay::drawPreview(const DrawArgs& args, float s) {
 // The macros sit to the right of the envelope, which keeps the two things you
 // reach for while playing -- the spectrum's shape and its shape in time --
 // side by side rather than on separate rows.
-static const float PR_MX[8] = {54.f, 68.f, 82.f, 96.f, 110.f, 124.f, 138.f, 152.f};
-static const float PR_MKY = 88.f, PR_MJY = 102.f;
-static const float PR_SX[4] = {10.f, 20.f, 30.f, 40.f};   // A D S R sliders
-static const float PR_SY = 95.f;
-static const float PR_JY = 119.f;                          // the one jack row
-static const float PR_JX[4] = {10.f, 21.f, 32.f, 43.f};    // V/OCT GATE VEL VCA
+static const float SG_MX[8] = {54.f, 68.f, 82.f, 96.f, 110.f, 124.f, 138.f, 152.f};
+static const float SG_MKY = 88.f, SG_MJY = 102.f;
+static const float SG_SX[4] = {10.f, 20.f, 30.f, 40.f};   // A D S R sliders
+static const float SG_SY = 95.f;
+static const float SG_JY = 119.f;                          // the one jack row
+static const float SG_JX[4] = {10.f, 21.f, 32.f, 43.f};    // V/OCT GATE VEL VCA
 // Six now, not nine: RATE and SPREAD per LFO. Depth left with the matrix.
 // SYNC, RATE, SPREAD per LFO.
-static const float PR_LSY[3] = {66.f, 96.f, 126.f};
-static const float PR_LX[6]  = {76.f, 85.f, 106.f, 115.f, 136.f, 145.f};
-static const float PR_RESOX  = 54.f;
+static const float SG_LSY[3] = {66.f, 96.f, 126.f};
+static const float SG_LX[6]  = {76.f, 85.f, 106.f, 115.f, 136.f, 145.f};
+static const float SG_RESOX  = 54.f;
 
-struct PrismWidget : ModuleWidget {
-	PrismWidget(Prism* module) {
+struct SigmaWidget : ModuleWidget {
+	SigmaWidget(Sigma* module) {
 		setModule(module);
-		setPanel(createPanel(asset::plugin(pluginInstance, "res/prism.svg")));
+		setPanel(createPanel(asset::plugin(pluginInstance, "res/sigma.svg")));
 
-		PrismDisplay* disp = new PrismDisplay;
+		SigmaDisplay* disp = new SigmaDisplay;
 		disp->module = module;
 		disp->box.pos = mm2px(Vec(6.f, 6.f));
 		disp->box.size = mm2px(Vec(160.f, 70.f));
 		addChild(disp);
 
-		static const int MP[8] = {Prism::TILT_PARAM, Prism::ODDEVEN_PARAM,
-			Prism::STRETCH_PARAM, Prism::WIDTH_PARAM, Prism::MORPH_PARAM,
-			Prism::ENVRATE_PARAM, Prism::ENVSPREAD_PARAM, Prism::CUTOFF_PARAM};
-		static const int MI[8] = {Prism::TILT_INPUT, Prism::ODDEVEN_INPUT,
-			Prism::STRETCH_INPUT, Prism::WIDTH_INPUT, Prism::MORPH_INPUT,
-			Prism::ENVRATE_INPUT, Prism::ENVSPREAD_INPUT, Prism::CUTOFF_INPUT};
+		static const int MP[8] = {Sigma::TILT_PARAM, Sigma::ODDEVEN_PARAM,
+			Sigma::STRETCH_PARAM, Sigma::WIDTH_PARAM, Sigma::MORPH_PARAM,
+			Sigma::ENVRATE_PARAM, Sigma::ENVSPREAD_PARAM, Sigma::CUTOFF_PARAM};
+		static const int MI[8] = {Sigma::TILT_INPUT, Sigma::ODDEVEN_INPUT,
+			Sigma::STRETCH_INPUT, Sigma::WIDTH_INPUT, Sigma::MORPH_INPUT,
+			Sigma::ENVRATE_INPUT, Sigma::ENVSPREAD_INPUT, Sigma::CUTOFF_INPUT};
 		for (int i = 0; i < 8; i++) {
-			addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(PR_MX[i], PR_MKY)), module, MP[i]));
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(PR_MX[i], PR_MJY)), module, MI[i]));
+			addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(SG_MX[i], SG_MKY)), module, MP[i]));
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_MX[i], SG_MJY)), module, MI[i]));
 		}
 
 		// ADSR as real sliders rather than trimpots: an envelope is a SHAPE and
 		// four sliders draw it, where four knobs make you read four numbers.
 		for (int i = 0; i < 4; i++)
-			addParam(createParamCentered<VCVSlider>(mm2px(Vec(PR_SX[i], PR_SY)), module,
-			                                        Prism::ATTACK_PARAM + i));
+			addParam(createParamCentered<VCVSlider>(mm2px(Vec(SG_SX[i], SG_SY)), module,
+			                                        Sigma::ATTACK_PARAM + i));
 		for (int i = 0; i < 3; i++) {
-			addParam(createParamCentered<Trimpot>(mm2px(Vec(PR_LX[i * 2 + 0], PR_JY)), module,
-			                                      Prism::LFORATE_PARAM + i));
-			addParam(createParamCentered<Trimpot>(mm2px(Vec(PR_LX[i * 2 + 1], PR_JY)), module,
-			                                      Prism::LFOSPREAD_PARAM + i));
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_LX[i * 2 + 0], SG_JY)), module,
+			                                      Sigma::LFORATE_PARAM + i));
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_LX[i * 2 + 1], SG_JY)), module,
+			                                      Sigma::LFOSPREAD_PARAM + i));
 		}
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(PR_RESOX, PR_JY)), module, Prism::RESO_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_RESOX, SG_JY)), module, Sigma::RESO_PARAM));
 		for (int i = 0; i < 3; i++)
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(PR_LSY[i], PR_JY)), module,
-			                                         Prism::LFOSYNC_INPUT + i));
-		static const int JI[4] = {Prism::VOCT_INPUT, Prism::GATE_INPUT,
-		                          Prism::VEL_INPUT, Prism::VCA_INPUT};
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_LSY[i], SG_JY)), module,
+			                                         Sigma::LFOSYNC_INPUT + i));
+		static const int JI[4] = {Sigma::VOCT_INPUT, Sigma::GATE_INPUT,
+		                          Sigma::VEL_INPUT, Sigma::VCA_INPUT};
 		for (int i = 0; i < 4; i++)
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(PR_JX[i], PR_JY)), module, JI[i]));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(157.f, PR_JY)), module, Prism::L_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(167.f, PR_JY)), module, Prism::R_OUTPUT));
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_JX[i], SG_JY)), module, JI[i]));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(157.f, SG_JY)), module, Sigma::L_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(167.f, SG_JY)), module, Sigma::R_OUTPUT));
 
 		sfs::PanelLabels* lab = new sfs::PanelLabels;
-		lab->title(6.f, 124.f, "PRISM");
+		lab->title(6.f, 124.f, "SIGMA");
 		// abbreviated because at 15mm pitch "ENV SPREAD" is wider than its knob
 		static const char* MN[8] = {"TILT", "ODD/EVN", "STRETCH", "WIDTH",
 		                            "MORPH", "E.RATE", "E.SPRD", "CUTOFF"};
-		for (int i = 0; i < 8; i++) lab->knob(PR_MX[i], PR_MKY, MN[i]);
+		for (int i = 0; i < 8; i++) lab->knob(SG_MX[i], SG_MKY, MN[i]);
 		static const char* EN[4] = {"A", "D", "S", "R"};
-		for (int i = 0; i < 4; i++) lab->add(PR_SX[i], PR_SY - 16.f, EN[i]);
+		for (int i = 0; i < 4; i++) lab->add(SG_SX[i], SG_SY - 16.f, EN[i]);
 		static const char* JN[4] = {"V/OCT", "GATE", "VEL", "VCA"};
-		for (int i = 0; i < 4; i++) lab->jack(PR_JX[i], PR_JY, JN[i]);
+		for (int i = 0; i < 4; i++) lab->jack(SG_JX[i], SG_JY, JN[i]);
 		// R is rate, S is spread across the partials -- low partial to high.
 		static const char* LN[2] = {"R", "S"};
-		for (int i = 0; i < 6; i++) lab->note(PR_LX[i], PR_JY - 5.f, LN[i % 2]);
+		for (int i = 0; i < 6; i++) lab->note(SG_LX[i], SG_JY - 5.f, LN[i % 2]);
 		for (int i = 0; i < 3; i++) {
-			lab->note(PR_LSY[i], PR_JY - 5.f, "SYN");
-			lab->add((PR_LSY[i] + PR_LX[i * 2 + 1]) * 0.5f, PR_JY - 10.f,
+			lab->note(SG_LSY[i], SG_JY - 5.f, "SYN");
+			lab->add((SG_LSY[i] + SG_LX[i * 2 + 1]) * 0.5f, SG_JY - 10.f,
 			         string::f("LFO %d", i + 1));
 		}
-		lab->trim(PR_RESOX, PR_JY, "RES");
-		lab->jack(157.f, PR_JY, "L");
-		lab->jack(167.f, PR_JY, "R");
+		lab->trim(SG_RESOX, SG_JY, "RES");
+		lab->jack(157.f, SG_JY, "L");
+		lab->jack(167.f, SG_JY, "R");
 		addChild(lab);
 	}
 
 	void appendContextMenu(Menu* menu) override {
-		Prism* m = dynamic_cast<Prism*>(module);
+		Sigma* m = dynamic_cast<Sigma*>(module);
 		if (!m) return;
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createSubmenuItem("Preset", "", [=](Menu* sub) {
 			// Grouped by WHAT EACH ONE EXERCISES rather than by timbre: the
 			// second group is here to make a mechanism audible, which is also
 			// how the pitch-range and Nyquist bugs were found.
-			static const char* PN[PR_NPRESET] = {
+			static const char* PN[SG_NPRESET] = {
 				"Ramp (default)", "Square", "CS-80", "Marimba",
 				"Bell", "Bowed", "Bloom", "E-piano", "Rotor",
 				"Clarinet", "Gong", "Vowel", "Acid", "Ensemble"};
-			for (int i = 0; i < PR_NPRESET; i++) {
+			for (int i = 0; i < SG_NPRESET; i++) {
 				if (i == 4) sub->addChild(new MenuSeparator);
 				sub->addChild(createMenuItem(PN[i], "", [=]() { m->loadPreset(i); }));
 			}
 		}));
 		menu->addChild(createIndexSubmenuItem("Partials", {"16", "32", "64"},
 			[=]() {
-				for (int i = 0; i < PR_NCOUNT; i++) if (PR_COUNTS[i] == m->nPartials) return i;
+				for (int i = 0; i < SG_NCOUNT; i++) if (SG_COUNTS[i] == m->nPartials) return i;
 				return 0;
 			},
-			[=](int i) { m->nPartials = PR_COUNTS[clamp(i, 0, PR_NCOUNT - 1)]; }));
+			[=](int i) { m->nPartials = SG_COUNTS[clamp(i, 0, SG_NCOUNT - 1)]; }));
 		menu->addChild(createMenuItem("Reset spectrum", "", [=]() { m->initSpectrum(); }));
 		menu->addChild(createMenuItem("Reset modulation", "", [=]() {
-			for (int r = 0; r < PR_MODSRC; r++)
-				for (int c = 0; c < PR_MOD_N; c++) m->mod[r][c] = 0.f;
+			for (int r = 0; r < SG_MODSRC; r++)
+				for (int c = 0; c < SG_MOD_N; c++) m->mod[r][c] = 0.f;
 		}));
 	}
 };
 
-Model* modelPrism = createModel<Prism, PrismWidget>("Prism");
+Model* modelSigma = createModel<Sigma, SigmaWidget>("Sigma");
