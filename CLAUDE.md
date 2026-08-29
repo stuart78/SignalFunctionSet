@@ -173,6 +173,12 @@ Panels are **code**, not Illustrator files. Rack ignores `<text>` in a panel SVG
 
 Remember that Rack draws each component over its own footprint: anything in the SVG the size of a knob or jack is invisible. The visible design is the faceplate, the dark **plates** grouping sections, the screens, and the labels.
 
+A panel redrawn or re-exported from **Figma** needs three fixed translations
+(px artboard to mm, runtime labels off because the art outlines its own text,
+guide circles read as the layout). Use the **`figma-panel` skill** —
+`.claude/skills/figma-panel/scripts/figma_panel.py normalize|grid|check` —
+rather than re-deriving them; each fault is silent until you render.
+
 See **`docs/conventions/panel-design.md`**.
 
 ### Panel Reticule Conventions
