@@ -154,6 +154,7 @@ struct Kit : Module {
 	// patched cable -- which is exactly how it behaved.
 	float dispSize = 0.45f, dispTens = 0.5f, dispAir = 0.f;
 	float dispExcite = 0.7f, dispWires = 0.f, dispMuffle = 0.f, dispCouple = 0.4f;
+	float dispStiff = 0.3f;
 	float modeVis[sfs::Drum::NM] = {0.f};
 	int   headView = 1;                  // 0 = flat rings, 1 = 3D surface
 
@@ -250,6 +251,7 @@ struct Kit : Module {
 			dispR = r; dispA = drum.strikeAng;
 			dispSize = size; dispTens = tens; dispAir = drum.air;
 			dispMuffle = drum.muffle; dispCouple = drum.couple;
+			dispStiff = drum.stiff;
 			dispExcite = pv(EXCITE_PARAM, EXCITE_INPUT);
 			dispWires  = clamp(params[SNARE_PARAM].getValue(), 0.f, 1.f);
 			// modes first: updateStrike()'s excitation tilt reads ratio[], which
@@ -358,11 +360,38 @@ struct KitDisplay : OpaqueWidget {
 		nvgResetScissor(args.vg);
 	}
 
+	// MATERIAL, drawn. Every other macro had a picture and this one did not,
+	// which made it the knob you turned without knowing whether anything had
+	// happened. A head's material shows in its SURFACE: skin and mylar are matte
+	// and warm, and the stiffer the material gets the more it behaves like
+	// metal -- colder, and with a tight specular highlight instead of a soft
+	// sheen. So stiffness moves the fill from warm to blue-steel and pulls the
+	// highlight in. It is a tint and one gradient, deliberately: the mode rings
+	// are drawn on top of this and are the thing you are meant to be reading.
+	float stiffAmt() const { return module ? clamp(module->dispStiff, 0.f, 1.f) : 0.3f; }
+
 	void head(const DrawArgs& args, float cx, float cy, float rad) {
+		float st = stiffAmt();
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, cx, cy, rad);
-		nvgFillColor(args.vg, nvgRGB(0x22, 0x22, 0x3E));
+		nvgFillColor(args.vg, nvgRGBf(0.20f - 0.07f * st,
+		                              0.16f - 0.02f * st,
+		                              0.17f + 0.09f * st));
 		nvgFill(args.vg);
+		// the sheen: broad and faint on skin, tight and bright on metal
+		{
+			float hx = cx - rad * 0.34f, hy = cy - rad * 0.34f;
+			NVGpaint g = nvgRadialGradient(args.vg, hx, hy,
+			                               rad * (0.02f + 0.30f * (1.f - st)),
+			                               rad * (0.55f + 0.45f * (1.f - st)),
+			                               nvgRGBAf(0.62f, 0.72f, 0.95f,
+			                                        0.05f + 0.20f * st),
+			                               nvgRGBAf(0.62f, 0.72f, 0.95f, 0.f));
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, cx, cy, rad);
+			nvgFillPaint(args.vg, g);
+			nvgFill(args.vg);
+		}
 		nvgStrokeColor(args.vg, sfs::SCREEN_LINE);
 		nvgStrokeWidth(args.vg, 1.2f);
 		nvgStroke(args.vg);
@@ -381,7 +410,11 @@ struct KitDisplay : OpaqueWidget {
 	// Where the head sits in a wide screen: centred vertically, tucked left, so
 	// the remaining width is a usable panel rather than padding.
 	float headRad() const { return box.size.y * 0.5f - mm2px(1.2f); }
-	float headCx()  const { return mm2px(1.2f) + headRad(); }
+	// CENTRED. It used to be tucked against the left edge to leave a column for
+	// the spectrum; with the scope moved into a corner there is nothing to make
+	// room for, and a drum head off to one side of a wide screen reads as a
+	// mistake rather than as a layout.
+	float headCx()  const { return box.size.x * 0.5f; }
 
 	// The head as a surface rather than a plan. The 2D view can only show the
 	// RADIAL part of a mode, because a flat ring has one value; the whole point
@@ -417,11 +450,21 @@ struct KitDisplay : OpaqueWidget {
 		// Centred on the WHOLE screen, so the room either side has to clear the
 		// spectrum on the right -- otherwise "centred" and "does not overlap"
 		// cannot both be true.
-		float wAvail = box.size.x - 2.f * (specW() + mm2px(2.f));
+		float wAvail = box.size.x - 2.f * mm2px(3.f);
 		float byH = (box.size.y - mm2px(5.f)) / (2.f * TILT + 0.34f + 0.34f);
 		return std::min(wAvail * 0.5f, byH) * sizeScale();
 	}
-	float specW() const { return mm2px(18.f); }
+	// The scope is a CORNER READOUT now, not a column. As a full-height column
+	// it took a fifth of the screen to say what the head already says, and it
+	// pushed the head off centre to do it. Small and out of the way it still
+	// answers the one question the head cannot: which partials are sounding.
+	float scopeW() const { return std::min(mm2px(24.f), box.size.x * 0.28f); }
+	float scopeH() const { return std::min(mm2px(9.f), box.size.y * 0.24f); }
+	void drawScope(const DrawArgs& args) {
+		float x1 = box.size.x - mm2px(2.f), x0 = x1 - scopeW();
+		float y1 = box.size.y - mm2px(2.f), y0 = y1 - scopeH();
+		drawSpectrum(args, x0, y0, x1, y1);
+	}
 	// The object is rise + tilted disc + shell, so its centre is not the box's.
 	// Both the surface and the strike mark must agree about this or the mark
 	// floats off the head.
@@ -576,13 +619,13 @@ struct KitDisplay : OpaqueWidget {
 		float rad = headRad(), cx = headCx();
 		if (module && module->headView == 1) {
 			drawHead3D(args);
-			drawSpectrum(args, box.size.x - specW(), box.size.x - mm2px(2.f));
+			drawScope(args);
 			drawStrikeMark(args, head3Cx(), head3Cy(), head3Rad());
 			drawReadout(args, head3Cx());
 			return;
 		}
 		head(args, cx, cy, rad);
-		drawSpectrum(args, cx + rad + mm2px(4.f), box.size.x - mm2px(2.f));
+		drawScope(args);
 
 		const sfs::MembraneShapes& sh = sfs::membraneShapes();
 		const int RINGS = 22;
@@ -658,45 +701,83 @@ struct KitDisplay : OpaqueWidget {
 	// butt plate on the other, so nearly all of them are close to full length
 	// and they sit together rather than dividing the head up.
 	void drawWires(const DrawArgs& args, float cx, float cy, float rad, float shell) {
-		// The thumbnail stands in a value, the same way the head stands in a mode
-		// mix, so the browser shows what the module has rather than what a fresh
-		// instance happens to be set to.
+		// THREE SPRINGS, NOT A BAND OF STRANDS. Sixteen straight lines under the
+		// shell merged into a grey slab at this size and read as shading rather
+		// than as hardware. A snare wire IS a coiled spring, and three of them
+		// drawn as springs say "snare" at a glance where sixteen lines said
+		// "smudge".
+		//
+		// They arrive one at a time so the knob's whole travel does something:
+		// the centre wire fades in over the first third and is solid at 33%,
+		// the top over the second and solid at 66%, the bottom over the last.
+		// A single opacity ramp on all three would have made 0-100% one gesture
+		// with nothing to see in the middle of it.
 		float w = module ? clamp(module->dispWires, 0.f, 1.f) : 0.85f;
-		if (w < 0.02f) return;
-		// Sixteen rather than twenty, over a slightly wider band: at the size
-		// this screen actually is, twenty strands at full opacity merge into a
-		// grey slab and stop reading as wires at all.
-		const int N = 16;
+		if (w < 0.005f) return;
+		const float A[3] = {clamp(w / 0.33f, 0.f, 1.f),               // centre
+		                    clamp((w - 0.33f) / 0.33f, 0.f, 1.f),     // top
+		                    clamp((w - 0.66f) / 0.34f, 0.f, 1.f)};    // bottom
+		const float O[3] = {0.f, -1.f, 1.f};                          // across the band
+
+		// TIGHT is the coil pitch. The parameter already means how tightly the
+		// wires are strained, and a strained spring has its coils closer
+		// together -- so the control gets a picture for free and an honest one.
+		float tight = module ? clamp(module->params[Kit::SNARETHR_PARAM].getValue(),
+		                             0.f, 1.f) : 0.5f;
+		// Tight enough to read as ONE snare unit strung under the bottom head.
+		// Spread wide, the three springs stopped being a set of wires and
+		// became three separate objects draped across the shell.
+		float band = rad * 0.13f;
 		float yb = cy + shell;
-		float band = rad * 0.24f;              // how wide the strip of wires is
-		float a0 = 0.07f + 0.48f * w * w;      // squared, like the sound
 		float halfEnd = 0.f;
-		for (int i = 0; i < N; i++) {
-			float o = ((float)i / (N - 1) - 0.5f) * 2.f;      // -1..1 across the band
+		for (int i = 0; i < 3; i++) {
+			if (A[i] < 0.01f) continue;
+			float o = O[i];
 			float rr = o * band / std::max(rad, 1.f);
 			float half = std::sqrt(std::max(0.f, 1.f - rr * rr)) * rad;
 			halfEnd = std::max(halfEnd, half);
 			float yy = yb + o * band * TILT;
-			// the strands at the edge of the band catch less light
-			float e = 1.f - 0.35f * std::fabs(o);
+			// The coil: a sine across the wire's own axis. Its wavelength is set
+			// in millimetres rather than as a fixed number of turns, so a big
+			// drum shows more coils than a small one instead of the same spring
+			// stretched to fit.
+			float lam = mm2px(4.4f - 2.2f * tight);
+			float amp = mm2px(1.05f);
+			int steps = clamp((int)(2.f * half / (lam / 8.f)), 24, 420);
+			nvgBeginPath(args.vg);
+			for (int k = 0; k <= steps; k++) {
+				float t = (float)k / steps;
+				float x = cx - half + t * 2.f * half;
+				float ph = (x - (cx - half)) / std::max(lam, 1.f) * 2.f * (float)M_PI;
+				float y = yy + std::sin(ph) * amp;
+				if (k == 0) nvgMoveTo(args.vg, x, y);
+				else        nvgLineTo(args.vg, x, y);
+			}
+			nvgStrokeColor(args.vg, nvgRGBAf(0.86f, 0.87f, 0.92f, 0.10f + 0.42f * A[i]));
+			nvgStrokeWidth(args.vg, 0.7f);
+			nvgStroke(args.vg);
+			// the straight core the coil is wound on, which is what keeps a
+			// sine from reading as a squiggle
 			nvgBeginPath(args.vg);
 			nvgMoveTo(args.vg, cx - half, yy);
 			nvgLineTo(args.vg, cx + half, yy);
-			nvgStrokeColor(args.vg, nvgRGBAf(0.86f, 0.87f, 0.92f, a0 * e));
-			nvgStrokeWidth(args.vg, 0.55f);
+			nvgStrokeColor(args.vg, nvgRGBAf(0.72f, 0.74f, 0.82f, 0.18f * A[i]));
+			nvgStrokeWidth(args.vg, 0.5f);
 			nvgStroke(args.vg);
 		}
+		if (halfEnd <= 0.f) return;
 		// strainer and butt plate: the wires are held at both ends, and without
-		// them the band just stops in mid air.
+		// them the springs just stop in mid air.
+		float aMax = std::max(A[0], std::max(A[1], A[2]));
 		for (int sgn = -1; sgn <= 1; sgn += 2) {
 			nvgBeginPath(args.vg);
 			nvgRect(args.vg, cx + sgn * halfEnd - (sgn < 0 ? 0.f : mm2px(1.2f)),
-			        yb - band * TILT, mm2px(1.2f), 2.f * band * TILT);
-			nvgFillColor(args.vg, nvgRGBAf(0.72f, 0.74f, 0.80f, 0.25f + 0.45f * w));
+			        yb - band * TILT - mm2px(0.6f), mm2px(1.2f),
+			        2.f * band * TILT + mm2px(1.2f));
+			nvgFillColor(args.vg, nvgRGBAf(0.72f, 0.74f, 0.80f, 0.20f + 0.40f * aMax));
 			nvgFill(args.vg);
 		}
 	}
-
 	void drawReadout(const DrawArgs& args, float cx) {
 		if (!module) return;
 		if (!font || font->handle < 0) return;
@@ -718,16 +799,16 @@ struct KitDisplay : OpaqueWidget {
 	// library and says nothing about what it is.
 	// One bar per mode, tallest at the fundamental: the 1/omega excitation tilt
 	// and the frequency-dependent damping are both visible here and nowhere else.
-	void drawSpectrum(const DrawArgs& args, float x0, float x1) {
+	void drawSpectrum(const DrawArgs& args, float x0, float y0, float x1, float y1) {
 		if (x1 - x0 < mm2px(8.f)) return;
-		float y1 = box.size.y - mm2px(4.f), h = box.size.y - mm2px(9.f);
+		float h = y1 - y0;
 		float w = (x1 - x0) / (float)sfs::Drum::NM;
 		for (int k = 0; k < sfs::Drum::NM; k++) {
 			float a = module ? clamp(module->modeVis[k] * 2.2f, 0.f, 1.f)
 			                 : 0.9f * std::exp(-k * 0.12f);
-			float bh = 1.5f + a * h;
+			float bh = 1.f + a * h;
 			nvgBeginPath(args.vg);
-			nvgRect(args.vg, x0 + k * w, y1 - bh, std::max(w - 1.2f, 1.f), bh);
+			nvgRect(args.vg, x0 + k * w, y1 - bh, std::max(w - 0.8f, 0.8f), bh);
 			nvgFillColor(args.vg, a > 0.02f
 			             ? nvgRGBAf(0.0f, 0.59f, 0.87f, 0.35f + a * 0.65f)
 			             : sfs::SCREEN_PURP);
@@ -740,7 +821,7 @@ struct KitDisplay : OpaqueWidget {
 	// the preview is the same code rather than a second drawing to keep in step.
 	void drawPreview(const DrawArgs& args) {
 		drawHead3D(args);
-		drawSpectrum(args, box.size.x - specW(), box.size.x - mm2px(2.f));
+		drawScope(args);
 		nvgBeginPath(args.vg);
 		nvgCircle(args.vg, head3Cx() + head3Rad() * 0.42f,
 		          head3Cy() - head3Rad() * 0.30f * TILT, mm2px(1.6f));
