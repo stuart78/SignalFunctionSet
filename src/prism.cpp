@@ -702,7 +702,20 @@ struct Prism : Module {
 				V.vel = inputs[VEL_INPUT].isConnected()
 				      ? clamp(inputs[VEL_INPUT].getVoltage(c) * 0.1f, 0.f, 1.f) : 1.f;
 				for (int p = 0; p < nPartials; p++) {
-					V.stage[p] = ST_ATT; V.env[p] = 0.f;
+					// ATTACK FROM WHERE THE ENVELOPE ALREADY IS, not from zero.
+					// `g = V.mEnv` IS the VCA, so zeroing it on a note-on threw
+					// the output to silence in a single sample whenever the
+					// voice was still sounding -- which is every note played
+					// closer together than the release time. Measured across
+					// the presets, the step was 0.55 to 0.94 of full scale on
+					// thirteen of fourteen. That was the clicking.
+					//
+					// Re-attacking from the current level is also the musically
+					// right answer: a retriggered note that is still ringing
+					// swells rather than restarting, and a note struck after
+					// silence still begins at zero because an idle voice is
+					// already there.
+					V.stage[p] = ST_ATT;
 					// ENV SPREAD: positive delays the HIGH partials so the tone
 					// blooms upward; negative delays the LOW ones so the highs
 					// speak first and the fundamental builds underneath, which
@@ -713,7 +726,7 @@ struct Prism : Module {
 					// half a second the note simply appeared not to start.
 					V.wait[p] = std::fabs(envSpr) * 0.25f * (envSpr >= 0.f ? f : 1.f - f);
 				}
-				V.mStage = ST_ATT; V.mEnv = 0.f;
+				V.mStage = ST_ATT;
 			} else if (!gate && V.on) {
 				V.on = false;
 				for (int p = 0; p < nPartials; p++) {
@@ -747,7 +760,7 @@ struct Prism : Module {
 			float Q  = 0.5f + reso * 8.f;
 
 			// the master envelope: unscaled, drives the VCA and frees the voice
-			advance(V.mEnv, V.mStage, V.mRelFrom, 1.f, dt, A, D, S, R);
+			advance(V.mEnv, V.mStage, V.mRelFrom, 1.f, 1.f, dt, A, D, S, R);
 			if (V.mStage == ST_IDLE) { V.mEnv = 0.f; continue; }
 
 			float vL = 0.f, vR = 0.f;
@@ -755,10 +768,11 @@ struct Prism : Module {
 				int n = p + 1;
 
 				// per-partial envelope, at its own rate and after its own wait
-				float rate = 0.25f * std::pow(16.f, pRate[p]);      // 0.25x..4x
-				rate *= 1.f + envRate * (float)p * 0.35f;            // the spread
+				float rateOwn = 0.25f * std::pow(16.f, pRate[p]);   // 0.25x..4x
+				float rateDie = rateOwn * (1.f + envRate * (float)p * 0.35f);
 				if (V.wait[p] > 0.f) { V.wait[p] -= dt; }
-				else advance(V.env[p], V.stage[p], V.relFrom[p], rate, dt, A, D, S, R);
+				else advance(V.env[p], V.stage[p], V.relFrom[p],
+				             rateOwn, rateDie, dt, A, D, S, R);
 
 				// ── level ───────────────────────────────────────────────────
 				float lv = pSoft[p] + (pLevel[p] - pSoft[p]) * morph;
@@ -883,20 +897,31 @@ struct Prism : Module {
 	// One linear ADSR segment. Linear rather than exponential for v1: with the
 	// per-partial rate spread doing the perceptual work, curve shape is a
 	// second-order question -- see the design doc.
-	static void advance(float& e, int& st, float& relFrom, float rate, float dt,
+	// TWO RATES, because the ENV RATE spread is a claim about DYING. Its whole
+	// description is "highs die sooner", and running it on the attack as well
+	// meant the top of a 64-partial Gong opened in 92 microseconds -- 43x faster
+	// than the master envelope, and far below one cycle of anything it was
+	// playing. An envelope segment shorter than a cycle is a step no matter how
+	// smooth the maths is, and a step is a click.
+	//
+	// A partial's OWN rate (the RATE tab) still scales everything, because that
+	// is a per-partial envelope speed and a user who sets it fast means all of
+	// it. Only the macro spread is confined to decay and release.
+	static void advance(float& e, int& st, float& relFrom,
+	                    float rateAtt, float rateDie, float dt,
 	                    float A, float D, float S, float R) {
 		switch (st) {
 			case ST_ATT:
-				e += dt * rate / std::max(A, 1e-4f);
+				e += dt * rateAtt / std::max(A, 1e-4f);
 				if (e >= 1.f) { e = 1.f; st = ST_DEC; }
 				break;
 			case ST_DEC:
-				e -= dt * rate * (1.f - S) / std::max(D, 1e-4f);
+				e -= dt * rateDie * (1.f - S) / std::max(D, 1e-4f);
 				if (e <= S) { e = S; st = ST_SUS; }
 				break;
 			case ST_SUS: e = S; break;
 			case ST_REL:
-				e -= dt * rate * relFrom / std::max(R, 1e-4f);
+				e -= dt * rateDie * relFrom / std::max(R, 1e-4f);
 				if (e <= 0.f) { e = 0.f; st = ST_IDLE; }
 				break;
 			default: e = 0.f; break;
