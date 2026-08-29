@@ -39,6 +39,9 @@ SIZES = {
     "RoundHugeBlackKnob": (53.859, 53.859), "RoundLargeBlackKnob": (36.0, 36.0),
     "RoundBlackKnob": (28.348, 28.348), "RoundSmallBlackKnob": (22.676, 22.676),
     "Trimpot": (17.856, 17.859), "PJ301MPort": (23.7, 23.7),
+    "Rogan1PBlue": (31.398, 31.398), "Rogan1PSBlue": (39.684, 39.684),
+    "Rogan2PBlue": (34.293, 34.293), "Rogan3PBlue": (41.762, 41.762),
+    "Rogan3PSBlue": (51.844, 51.844), "Rogan5PSGray": (59.527, 59.527),
     "CKSS": (14.0, 20.641), "CKSSThree": (13.457, 28.348),
     "VCVButton": (18.0, 18.0), "VCVLightBezel": (21.26, 21.26),
     "VCVLightLatch": (18.0, 18.0), "VCVSlider": (19.843, 76.535),
@@ -46,7 +49,7 @@ SIZES = {
     "TinyLight": (1.0 * MM, 1.0 * MM), "SmallLight": (2.0 * MM, 2.0 * MM),
     "MediumLight": (3.0 * MM, 3.0 * MM), "LargeLight": (5.0 * MM, 5.0 * MM),
 }
-ROUND = ("Knob", "Trimpot", "PJ301MPort", "VCVButton", "VCVLightBezel",
+ROUND = ("Knob", "Rogan", "Trimpot", "PJ301MPort", "VCVButton", "VCVLightBezel",
          "VCVLightLatch", "Light")
 
 

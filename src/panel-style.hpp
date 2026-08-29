@@ -107,6 +107,13 @@ static const float LABEL_GAP_KNOB = 5.6f;    // mm from control centre to label 
 // so its own body reaches past the standard gap and the label lands on top of
 // it. Measured off a rendered panel, not guessed.
 static const float LABEL_GAP_KNOB_LARGE = 8.6f;
+// Rogan knobs are BIGGER than the Round Black ones they stand in for, so they
+// need their own gaps -- Rogan1P is 10.63mm against RoundBlackKnob's 9.60, and
+// Rogan3P is 14.14 against RoundLargeBlackKnob's 12.19. At the Round gaps the
+// label baseline lands inside the knob. Measured clearances: 1.68mm on the
+// small, 2.53mm on the large.
+static const float LABEL_GAP_ROGAN = 7.0f;
+static const float LABEL_GAP_ROGAN_LARGE = 9.6f;
 static const float LABEL_GAP_JACK = 5.4f;
 static const float LABEL_GAP_TRIM = 4.4f;
 static const float PLATE_PAD      = 2.6f;    // inset padding around a grouped section
@@ -147,6 +154,8 @@ struct PanelLabels : Widget {
 	// the common cases, so a caller states the control position and nothing else
 	void knob(float x, float y, const std::string& t)  { add(x, y - LABEL_GAP_KNOB, t); }
 	void knobLarge(float x, float y, const std::string& t) { add(x, y - LABEL_GAP_KNOB_LARGE, t); }
+	void rogan(float x, float y, const std::string& t) { add(x, y - LABEL_GAP_ROGAN, t); }
+	void roganLarge(float x, float y, const std::string& t) { add(x, y - LABEL_GAP_ROGAN_LARGE, t); }
 	void trim(float x, float y, const std::string& t)  { add(x, y - LABEL_GAP_TRIM, t); }
 	void jack(float x, float y, const std::string& t)  { add(x, y - LABEL_GAP_JACK, t); }
 	void jackOnPlate(float x, float y, const std::string& t) {

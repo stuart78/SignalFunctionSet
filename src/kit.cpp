@@ -830,20 +830,25 @@ struct KitWidget : ModuleWidget {
 		// Vertical positions are millimetres on a 128.5 mm panel. Only the
 		// horizontal grid is in HP.
 		const float cx[4] = {13.97f, 41.91f, 69.85f, 97.79f};
-		const float KY1 = 71.5f, KY2 = 87.5f, TY = 98.f, JY1 = 110.f, JY2 = 122.f;
+		// Rows are spaced so each label's TEXT clears the control above it, not
+		// merely its baseline -- text rises from the baseline, so a baseline that
+		// clears is not the same as a label that clears. At the old spacing the
+		// trim labels ran 1.08mm into the knobs above them; the Rogan swap made
+		// that 1.59mm, which is what made it visible enough to measure.
+		const float KY1 = 71.5f, KY2 = 88.2f, TY = 100.6f, JY1 = 111.7f, JY2 = 123.8f;
 
 		struct K { int p; const char* t; };
 		const K big[4] = {{Kit::SIZE_PARAM, "SIZE"}, {Kit::TENSION_PARAM, "TENSION"},
 		                  {Kit::STIFF_PARAM, "MATERIAL"}, {Kit::AIR_PARAM, "AIR"}};
 		for (int i = 0; i < 4; i++) {
-			addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(cx[i], KY1)), module, big[i].p));
-			lbl->knobLarge(cx[i], KY1, big[i].t);
+			addParam(createParamCentered<Rogan3PBlue>(mm2px(Vec(cx[i], KY1)), module, big[i].p));
+			lbl->roganLarge(cx[i], KY1, big[i].t);
 		}
 		const K small[4] = {{Kit::DECAY_PARAM, "DECAY"}, {Kit::TONE_PARAM, "TONE"},
 		                    {Kit::EXCITE_PARAM, "EXCITER"}, {Kit::MUFFLE_PARAM, "MUFFLE"}};
 		for (int i = 0; i < 4; i++) {
-			addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(cx[i], KY2)), module, small[i].p));
-			lbl->knob(cx[i], KY2, small[i].t);
+			addParam(createParamCentered<Rogan1PBlue>(mm2px(Vec(cx[i], KY2)), module, small[i].p));
+			lbl->rogan(cx[i], KY2, small[i].t);
 		}
 
 		const float tx[7] = {7.98f, 23.95f, 39.91f, 55.88f, 71.84f, 87.81f, 103.78f};

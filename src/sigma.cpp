@@ -1529,7 +1529,7 @@ struct SigmaWidget : ModuleWidget {
 			Sigma::STRETCH_INPUT, Sigma::WIDTH_INPUT, Sigma::MORPH_INPUT,
 			Sigma::ENVRATE_INPUT, Sigma::ENVSPREAD_INPUT, Sigma::CUTOFF_INPUT};
 		for (int i = 0; i < 8; i++) {
-			addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(SG_MX[i], SG_MKY)), module, MP[i]));
+			addParam(createParamCentered<Rogan1PBlue>(mm2px(Vec(SG_MX[i], SG_MKY)), module, MP[i]));
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_MX[i], SG_MJY)), module, MI[i]));
 		}
 
@@ -1560,7 +1560,7 @@ struct SigmaWidget : ModuleWidget {
 		// abbreviated because at 15mm pitch "ENV SPREAD" is wider than its knob
 		static const char* MN[8] = {"TILT", "ODD/EVN", "STRETCH", "WIDTH",
 		                            "MORPH", "E.RATE", "E.SPRD", "CUTOFF"};
-		for (int i = 0; i < 8; i++) lab->knob(SG_MX[i], SG_MKY, MN[i]);
+		for (int i = 0; i < 8; i++) lab->rogan(SG_MX[i], SG_MKY, MN[i]);
 		static const char* EN[4] = {"A", "D", "S", "R"};
 		for (int i = 0; i < 4; i++) lab->add(SG_SX[i], SG_SY - 16.f, EN[i]);
 		static const char* JN[4] = {"V/OCT", "GATE", "VEL", "VCA"};

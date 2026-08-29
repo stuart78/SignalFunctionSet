@@ -7,14 +7,14 @@
     <rect x="17.72" y="17.72" width="472.44" height="206.69" rx="3.00" fill="#1a1a32"/>
   </g>
   <g id="Reticules" style="display:none">
-    <circle cx="159.45" cy="259.84" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="200.79" cy="259.84" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="242.13" cy="259.84" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="283.46" cy="259.84" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="324.80" cy="259.84" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="366.14" cy="259.84" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="407.48" cy="259.84" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
-    <circle cx="448.82" cy="259.84" r="14.03" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="159.45" cy="259.84" r="15.54" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="200.79" cy="259.84" r="15.54" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="242.13" cy="259.84" r="15.54" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="283.46" cy="259.84" r="15.54" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="324.80" cy="259.84" r="15.54" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="366.14" cy="259.84" r="15.54" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="407.48" cy="259.84" r="15.54" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
+    <circle cx="448.82" cy="259.84" r="15.54" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="159.45" cy="301.18" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="200.79" cy="301.18" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
     <circle cx="242.13" cy="301.18" r="11.73" fill="none" stroke="#b2b2b2" stroke-width="0.50"/>
