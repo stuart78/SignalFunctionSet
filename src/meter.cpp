@@ -146,7 +146,59 @@ struct Meter : Module {
 	int extClockPpqnIndex = 2;
 	float measuredBpm = 120.f;
 	float measuredBpmRaw = 120.f;
+	// The smoothing runs on the PERIOD, not on the tempo. Averaging BPM
+	// biases the result high whenever the tick intervals are uneven — mean(1/T)
+	// is not 1/mean(T) — and host MIDI clock quantized to the audio block is
+	// exactly that: alternating long and short intervals around the true one.
+	// With 512-sample blocks the tempo bias alone walked the clock a whole
+	// eighth note off the host inside eight seconds.
+	float measuredSamplesPerQuarter = 0.f;
+	int measurementCount = 0;
 	bool extClockHasMeasurement = false;
+	// True once a tick has been seen that the NEXT tick can be measured
+	// against. Cleared whenever the clock goes quiet, so the silence across a
+	// stopped transport is never mistaken for one very long tick.
+	bool extPulseValid = false;
+	bool extPulseThisSample = false;
+	// Set by a reset/downbeat: the next tick snaps the phase outright instead
+	// of easing toward it.
+	bool extLockPending = true;
+	// Position of the next incoming tick within the quarter note, counted from
+	// the tick the lock snapped to. MIDI clock is a counted stream and says
+	// nothing on its own about which tick is a beat, so counting is the only
+	// way to know. Aligning to the NEAREST tick instead needs no count, but at
+	// 24 PPQN the ticks are 20 ms apart, so a host whose clock jitters by a
+	// fair share of that can walk the lock onto the neighbouring tick — and
+	// nearest-tick alignment is then perfectly content, one whole tick out.
+	int extTickIdx = 0;
+	// The first tick after the clock has been silent — the tick a host emits
+	// as its transport starts. It is the only tick that says "the master just
+	// came back", which is what separates a Stop from a Start.
+	float samplesSinceGapTick = 1e9f;
+	// Filtered estimate of how far the grid sits from where the count says it
+	// should be, in samples. The correction is a share of this, never of a
+	// single raw reading.
+	float extPhaseOffset = 0.f;
+	// Position within the quarter note, in samples, used only as the lock's
+	// reference. It is kept separately from the quarter grid accumulator
+	// because the bar wrap force-realigns the grid accumulators, and in an odd
+	// meter the bar does not land on a quarter — the reference would jump
+	// mid-quarter and the lock would yank the clock once a bar.
+	float extRefPhase = 0.f;
+
+	// A downbeat is owed. doReset() arms it rather than firing on the spot,
+	// because a reset usually arrives while the transport is stopped (a DAW
+	// sends Stop, then Start) and the downbeat belongs to the sample playback
+	// actually resumes on.
+	bool pendingDownbeat = true;
+	// Running samples since the last downbeat. One MIDI Stop drives both the
+	// Reset cable and whatever holds the RUN gate, so Meter is still running
+	// when the reset lands and would spend beat 1 there — a sample or two
+	// before the transport actually stops, and a whole take before anyone
+	// hears it. If the clock stops before even a sixteenth of that beat has
+	// played, nothing was played, and the downbeat is owed again.
+	float samplesSinceDownbeat = 0.f;
+	bool prevEffectiveRunning = false;
 
 	// --- Display state ---
 	int displayedSixteenth = 0;
@@ -290,6 +342,16 @@ struct Meter : Module {
 		running = true;
 		samplesSinceLastExtPulse = 0;
 		extClockHasMeasurement = false;
+		extPulseValid = false;
+		measuredSamplesPerQuarter = 0.f;
+		measurementCount = 0;
+		extLockPending = true;
+		extPhaseOffset = 0.f;
+		extRefPhase = 0.f;
+		extTickIdx = 0;
+		pendingDownbeat = true;
+		samplesSinceDownbeat = 0.f;
+		prevEffectiveRunning = false;
 		measuredBpm = measuredBpmRaw = 120.f;
 		displayedSixteenth = 0;
 		barsSinceReset = 0;
@@ -334,19 +396,59 @@ struct Meter : Module {
 		for (int i = 0; i < NUM_OUTPUTS; i++) {
 			activeSwing[i] = pendingSwing[i];
 		}
-		// Fire all swung pulses on reset (downbeat). Grid pulses are NOT
-		// fired here — they'll fire naturally one basePeriod after Reset
-		// since their accumulators were just reset to 0. Force-firing grid
-		// here would inject an extra CLOCK into modules clocked from a grid
-		// output without a Reset cable.
-		for (int i = 0; i < NUM_OUTPUTS; i++) {
-			pulses[i].trigger(sfs::pulseWidthSec(pulseWidthIdx,
-			                                     basePeriods[i] * sampleTimeCached));
-		}
+		// Arm the downbeat rather than firing it here. Firing on the spot is
+		// wrong for the transport case, which is the common one under a DAW:
+		// the host sends Stop (-> Reset) and Start (-> Run) seconds apart, and
+		// a pulse fired at Stop is a pulse that does not land on beat 1 of the
+		// take. fireDownbeat() runs on the first sample Meter is actually
+		// running, so the downbeat lands where playback begins.
+		pendingDownbeat = true;
+		extLockPending = true;
 		displayedSixteenth = 0;
 		barsSinceReset = 0;
 		msgBar = true;             // reset is a bar downbeat for the expander
 		samplesSince24 = 0.f;      // re-lock the 24-PPQN clock
+	}
+
+	// Beat 1: every subdivision fires together, swung AND grid. The grid set
+	// used to be left out here on the grounds that it would double-clock a
+	// module patched from a grid output with no reset cable — but BAR fires on
+	// this same sample (Beat and Note collapse that coincidence), the natural
+	// bar wrap below force-fires the grid set in exactly this way, and leaving
+	// it out is why a grid-clocked voice was silent on beat 1 and only spoke
+	// one subdivision later.
+	void fireDownbeat(float sampleTime) {
+		samplesSinceQuarter = samplesSinceEighth = samplesSinceSixteenth = 0.f;
+		samplesSinceQTrip = samplesSinceETrip = 0.f;
+		pulseCountQuarter = pulseCountEighth = pulseCountSixteenth = 0;
+		pulseCountQTrip = pulseCountETrip = 0;
+		sixteenthCount = 0;
+		for (int i = 0; i < 5; i++) samplesSinceGrid[i] = 0.f;
+		for (int i = 0; i < NUM_OUTPUTS; i++) {
+			pulses[i].trigger(sfs::pulseWidthSec(pulseWidthIdx,
+			                                     basePeriods[i] * sampleTime));
+			pulseFlashIdx[i] = 0;
+			pulseInBar[i] = 1;
+			pulseFlash[i] = 1.f;
+		}
+		const float gridBase[5] = {
+			basePeriods[SUB_QUARTER], basePeriods[SUB_EIGHTH],
+			basePeriods[SUB_SIXTEENTH], basePeriods[SUB_QTRIP],
+			basePeriods[SUB_ETRIP]
+		};
+		for (int i = 0; i < 5; i++) {
+			pulses_grid[i].trigger(sfs::pulseWidthSec(pulseWidthIdx,
+			                                          gridBase[i] * sampleTime));
+		}
+		displayedSixteenth = 0;
+		msgBar = true;
+		samplesSince24 = 0.f;
+		samplesSinceDownbeat = 0.f;
+		// A downbeat is the moment the tick count has to be re-anchored: the
+		// next tick is the beat, whatever the previous count believed.
+		extLockPending = true;
+		extPhaseOffset = 0.f;
+		extRefPhase = 0.f;
 	}
 
 	// Returns swing-adjusted target sample count for the next pulse.
@@ -387,6 +489,18 @@ struct Meter : Module {
 		}
 		lights[RUN_LIGHT].setBrightness(effectiveRunning ? 1.f : 0.f);
 
+		// "Reset on play" used to be honoured only by the RUN button, which is
+		// the one place a DAW rig never touches: under a host, Run arrives as
+		// a gate. Apply it to the gate's rising edge as well, and forward the
+		// reset downstream — Meter is the master, so a bar it restarts is a
+		// bar its sequencers have to restart with it.
+		if (effectiveRunning && !prevEffectiveRunning && resetOnPlay
+			&& inputs[RUN_INPUT].isConnected()) {
+			doReset();
+			resetOutPulse.trigger(sfs::pulseWidthSec(pulseWidthIdx));
+		}
+		prevEffectiveRunning = effectiveRunning;
+
 		// --- Reset (button or Reset IN; Reset OUT forwards to downstream
 		//     modules like Beat) ---
 		bool resetBtn = resetButtonTrigger.process(params[RESET_PARAM].getValue());
@@ -424,25 +538,73 @@ struct Meter : Module {
 
 		// --- External clock processing ---
 		extClockConnected = inputs[EXT_CLOCK_INPUT].isConnected();
+		extPulseThisSample = false;
 		if (extClockConnected) {
 			if (extClockTrigger.process(inputs[EXT_CLOCK_INPUT].getVoltage(), 0.1f, 1.f)) {
-				if (samplesSinceLastExtPulse > 0) {
+				bool measured = false;
+				if (extPulseValid && samplesSinceLastExtPulse > 0) {
 					int ppqn = PPQN_OPTIONS[extClockPpqnIndex];
 					float samplesPerQuarter = (float)samplesSinceLastExtPulse * (float)ppqn;
 					float bpm = 60.f * args.sampleRate / samplesPerQuarter;
-					measuredBpmRaw = clamp(bpm, 30.f, 300.f);
-					extClockHasMeasurement = true;
+					// Out of range means this was not a tick interval at all —
+					// it is the gap across a stopped transport, and the first
+					// tick after Start would otherwise be measured against the
+					// last tick before Stop. Clamping it read 30 BPM for one
+					// whole tick, which stretched every accumulator and left
+					// the clock a fixed ~15 ms off the host's grid for the
+					// rest of the session. Throw the interval away instead.
+					if (bpm >= 30.f && bpm <= 300.f) {
+						measuredBpmRaw = bpm;
+						// Smooth per TICK, not per sample. The old per-sample
+						// filter reached the raw value in ~10 samples, so it
+						// passed every bit of host MIDI jitter straight into
+						// the tempo.
+						if (!extClockHasMeasurement) {
+							measuredSamplesPerQuarter = samplesPerQuarter;
+							measurementCount = 1;
+							extClockHasMeasurement = true;
+						} else {
+							// A running mean that settles into a slow EWMA: the
+							// early ticks carry full weight so the tempo is
+							// right within a few ticks of Start, and the gain
+							// then falls to 0.04 so the estimate stops riding
+							// the host's block quantization. A fixed 0.15 left
+							// about 1% of wobble on it, and that wobble goes
+							// out in the gate widths and in Meter X's bar
+							// clock even though the grid itself stays locked.
+							measurementCount++;
+							float g = std::max(0.04f, 1.f / (float)measurementCount);
+							measuredSamplesPerQuarter +=
+								(samplesPerQuarter - measuredSamplesPerQuarter) * g;
+						}
+						measuredBpm = clamp(60.f * args.sampleRate / measuredSamplesPerQuarter,
+						                    30.f, 300.f);
+						measured = true;
+					}
 				}
+				// No usable interval behind it: this tick opens the clock,
+				// rather than continuing it.
+				if (!measured) samplesSinceGapTick = 0.f;
 				samplesSinceLastExtPulse = 0;
+				extPulseValid = true;
+				extPulseThisSample = true;
 				syncFlash = 1.f;  // Light up the sync indicator
 			}
-			samplesSinceLastExtPulse++;
-			if (extClockHasMeasurement) {
-				measuredBpm += (measuredBpmRaw - measuredBpm) * 0.1f;
+			// Four seconds of silence is below the 30 BPM floor by any PPQN:
+			// the clock is gone, so stop counting (the counter would overflow
+			// after a few hours) and require a fresh pair of ticks.
+			if (samplesSinceLastExtPulse > (int)(args.sampleRate * 4.f)) {
+				extPulseValid = false;
+			} else {
+				samplesSinceLastExtPulse++;
 			}
+			if (samplesSinceGapTick < 1e9f) samplesSinceGapTick += 1.f;
 		} else {
 			samplesSinceLastExtPulse = 0;
 			extClockHasMeasurement = false;
+			extPulseValid = false;
+			measuredSamplesPerQuarter = 0.f;
+			measurementCount = 0;
 		}
 
 		float effectiveBpm = (extClockConnected && extClockHasMeasurement) ? measuredBpm : bpmKnob;
@@ -503,6 +665,22 @@ struct Meter : Module {
 			for (int i = 0; i < NUM_OUTPUTS; i++) {
 				outputs[BAR_OUTPUT + i].setVoltage(0.f);
 			}
+			// The grid outputs need clearing too. They were left alone here,
+			// so one stopped mid-pulse stayed high for the whole stop — and a
+			// gate already high has no edge left to give when the downbeat
+			// fires on restart. With the pulse width set as a share of the
+			// step rather than 1 ms, that is not a rare coincidence.
+			const int gridOutIdsStopped[5] = {
+				QUARTER_GRID_OUTPUT, EIGHTH_GRID_OUTPUT, SIXTEENTH_GRID_OUTPUT,
+				QUARTER_TRIPLET_GRID_OUTPUT, EIGHTH_TRIPLET_GRID_OUTPUT
+			};
+			for (int i = 0; i < 5; i++) outputs[gridOutIdsStopped[i]].setVoltage(0.f);
+			// If the clock stopped before a sixteenth of the last downbeat had
+			// played, nothing was played: the downbeat is owed again, and this
+			// time it lands where playback resumes.
+			if (samplesSinceDownbeat < basePeriods[SUB_SIXTEENTH]) {
+				pendingDownbeat = true;
+			}
 			writeExpander(false);   // RUN gate low, no clock (msgBar may still be set by a Reset)
 			return;
 		}
@@ -536,9 +714,10 @@ struct Meter : Module {
 			samplesSinceQTrip     *= ratio;
 			samplesSinceETrip     *= ratio;
 			for (int i = 0; i < 5; i++) samplesSinceGrid[i] *= ratio;
+			extRefPhase *= ratio;
 		}
 		lastSamplesPerQuarter = samplesPerQuarter;
-		// Member, not a local: doReset() fires a downbeat outside process() and a
+		// Member, not a local: fireDownbeat() needs the periods too, and a
 		// duty-cycle gate needs a period to be a fraction of.
 		basePeriods[SUB_BAR] = samplesPerQuarter * (float)sixteenthsPerBar / 4.f;
 		basePeriods[SUB_QUARTER] = samplesPerQuarter;
@@ -548,6 +727,78 @@ struct Meter : Module {
 		basePeriods[SUB_ETRIP] = samplesPerQuarter / 6.f;
 		sampleTimeCached = args.sampleTime;
 
+		// --- Owed downbeat (armed by Reset, or by a fresh module) ---
+		// Fired here, on the first running sample, rather than inside
+		// doReset(): under a DAW the reset arrives with the transport stopped
+		// and beat 1 belongs to where playback starts.
+		//
+		// When slaved to an external clock, beat 1 is where the MASTER says it
+		// is, and a master that has stopped ticking is not saying anything —
+		// so an owed downbeat waits for the clock to come back. That is what
+		// makes this independent of how Run/Stop happen to be wired: the host
+		// sends Stop, Meter takes the reset while the RUN gate is still high
+		// (or never drops at all, if the gate is held by a flipflop cleared by
+		// Continue rather than Stop), and without this the downbeat is spent
+		// there — a whole take before anyone could hear it.
+		//
+		// A clock that IS ticking does not delay anything: a mid-run Reset
+		// fires on the spot, as it always did.
+		float tickPeriod = samplesPerQuarter / (float)PPQN_OPTIONS[extClockPpqnIndex];
+		bool clockLive = !extClockConnected
+			|| (extPulseValid && (float)samplesSinceLastExtPulse <= 2.f * tickPeriod);
+
+		// A master clock that has gone quiet is a stop, whether or not the RUN
+		// gate agrees. The gate cannot be relied on: the host's Stop and its
+		// last tick arrive together, so at the instant of the Reset the clock
+		// still looks alive and the downbeat fires — and if the gate is held by
+		// something Stop does not clear, no stop ever arrives to re-arm it. So
+		// when the ticks dry up, check the same thing the stop check does: if
+		// less than a sixteenth has played since that downbeat, nothing was
+		// played into it and it is owed again.
+		if (extClockConnected && !clockLive
+			&& samplesSinceDownbeat < basePeriods[SUB_SIXTEENTH]) {
+			pendingDownbeat = true;
+		}
+
+		// Fire on a tick, or within one tick of the clock coming back. NOT
+		// merely because the clock is alive: the Reset that a host sends with
+		// its Stop arrives while the clock still looks alive, and firing there
+		// put a stray 1-sample trigger on every output — a drum hit every time
+		// you press stop. Waiting costs at most one tick (20.8 ms at 24 PPQN)
+		// and lands the downbeat exactly on the master's grid.
+		bool clockJustResumed = samplesSinceGapTick <= tickPeriod;
+		if (pendingDownbeat
+			&& (!extClockConnected || extPulseThisSample || clockJustResumed)) {
+			pendingDownbeat = false;
+			fireDownbeat(args.sampleTime);
+			// fireDownbeat() arms the lock so the NEXT tick becomes the beat.
+			// That is right only when no tick has just gone by. Under a DAW the
+			// tick almost always lands a sample or two BEFORE the Run gate
+			// rises, and waiting for the next one then declares the wrong tick
+			// the beat: measured, it dragged everything after beat 1 a full
+			// tick (20.8 ms at 24 PPQN / 120 BPM) off the host, leaving beat 1
+			// alone in the right place. If a tick is closer behind us than the
+			// next one is ahead, anchor to it instead.
+			if (extClockConnected && extPulseValid && !extPulseThisSample
+				&& (float)samplesSinceLastExtPulse < tickPeriod) {
+				// The beat was at that tick, `back` samples ago. Every
+				// accumulator has to be told so, not just the lock's
+				// reference: zeroing them here says "the beat is NOW", the
+				// lock then sees no error to correct, and the whole grid
+				// simply runs `back` samples behind the host for ever.
+				// A tick period is smaller than every subdivision, so `back`
+				// needs no wrapping.
+				float back = (float)samplesSinceLastExtPulse;
+				samplesSinceQuarter = samplesSinceEighth = samplesSinceSixteenth = back;
+				samplesSinceQTrip = samplesSinceETrip = back;
+				for (int i = 0; i < 5; i++) samplesSinceGrid[i] = back;
+				extRefPhase = back;
+				extTickIdx = 1;            // the tick just passed was index 0
+				extPhaseOffset = 0.f;
+				extLockPending = false;
+			}
+		}
+
 		// --- Advance per-subdivision sample counters ---
 		samplesSinceQuarter += 1.f;
 		samplesSinceEighth += 1.f;
@@ -556,6 +807,74 @@ struct Meter : Module {
 		samplesSinceETrip += 1.f;
 		// Grid (un-swung) phase trackers tick the same way
 		for (int i = 0; i < 5; i++) samplesSinceGrid[i] += 1.f;
+		samplesSinceDownbeat += 1.f;
+		// ...and so does the external-clock lock's own reference
+		extRefPhase += 1.f;
+		if (extRefPhase >= samplesPerQuarter) extRefPhase -= samplesPerQuarter;
+
+		// --- Phase-lock to the external clock ---
+		// Measuring the tick interval sets the RATE and nothing else, which
+		// leaves the phase wherever the accumulators happened to be when
+		// playback started. Meter then runs at the host's tempo but a fixed
+		// distance off the host's grid — the flam a DAW user hears between
+		// Rack and the tracks in the timeline. On each tick, pull every
+		// accumulator by the SAME delta, so the subdivisions keep their
+		// alignment with each other and with the bar.
+		if (extPulseThisSample) {
+			float tickPeriod = samplesPerQuarter / (float)PPQN_OPTIONS[extClockPpqnIndex];
+			// The lock-in snap deliberately does NOT wait for a rate
+			// measurement: a measurement takes two ticks, and deferring the
+			// snap to the second one declares the wrong tick to be the beat —
+			// it put every Meter output exactly one tick behind the host.
+			if (tickPeriod > 2.f && (extLockPending || extClockHasMeasurement)) {
+				float err, alpha;
+				if (extLockPending) {
+					// The first tick after a downbeat IS the beat — a host
+					// sends Start and its first clock together — so this tick
+					// says where beat 1 actually falls, and the grid snaps
+					// onto it. Nearest-tick alignment cannot establish this:
+					// at 24 PPQN it will settle just as happily onto any of
+					// the twelve ticks inside an eighth note, leaving Meter
+					// locked to the host's tempo but on the wrong tick.
+					err = -extRefPhase;
+					float q = samplesPerQuarter;
+					while (err < -q * 0.5f) err += q;
+					while (err >  q * 0.5f) err -= q;
+					alpha = 1.f;
+					extPhaseOffset = 0.f;
+					extTickIdx = 0;        // this tick is the beat; count from here
+				} else {
+					// Thereafter the count says where this tick belongs, so
+					// the error wraps against the QUARTER rather than against
+					// one tick: a whole beat of margin, which host jitter of a
+					// few hundred samples cannot cross.
+					float raw = (float)extTickIdx * tickPeriod - extRefPhase;
+					float q = samplesPerQuarter;
+					while (raw < -q * 0.5f) raw += q;
+					while (raw >  q * 0.5f) raw -= q;
+					// Correct a share of a FILTERED estimate, never of a
+					// single raw reading: host MIDI clock arrives quantized to
+					// the audio block, and chasing each tick hands that jitter
+					// straight to the outputs.
+					extPhaseOffset += (raw - extPhaseOffset) * 0.15f;
+					err = extPhaseOffset;
+					alpha = 0.3f;
+				}
+				float delta = err * alpha;
+				samplesSinceQuarter   += delta;
+				samplesSinceEighth    += delta;
+				samplesSinceSixteenth += delta;
+				samplesSinceQTrip     += delta;
+				samplesSinceETrip     += delta;
+				for (int i = 0; i < 5; i++) samplesSinceGrid[i] += delta;
+				extRefPhase += delta;
+				if (extRefPhase < 0.f) extRefPhase += samplesPerQuarter;
+				if (extRefPhase >= samplesPerQuarter) extRefPhase -= samplesPerQuarter;
+				extPhaseOffset -= delta;   // that much of the offset is now taken out
+				extTickIdx = (extTickIdx + 1) % PPQN_OPTIONS[extClockPpqnIndex];
+				extLockPending = false;
+			}
+		}
 
 		// --- Fire grid pulses at exact basePeriod intervals (no swing) ---
 		// Index: 0=Q, 1=E, 2=S, 3=QT, 4=ET. Reset on bar boundary below.

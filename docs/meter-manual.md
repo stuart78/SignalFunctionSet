@@ -52,9 +52,29 @@ BAR has no swing, so its single output is always on the grid.
 
 ### External Clock Sync
 
-Patch an external clock pulse train into the **EXT CLOCK** input and Meter measures the inter-pulse interval to derive BPM. The PPQN (pulses per quarter note) is selectable in the context menu (1, 2, 4, 8, 12, 16, or 24). One-pole smoothing reduces jitter so the measured BPM stays stable.
+Patch an external clock pulse train into the **EXT CLOCK** input and Meter measures the inter-pulse interval to derive BPM. The PPQN (pulses per quarter note) is selectable in the context menu (1, 2, 4, 8, 12, 16, or 24) — **MIDI clock is always 24**, so set it to 24 when the source is a DAW or a hardware sequencer.
 
 When EXT CLOCK is patched and a measurement is available, the BPM knob is overridden and the on-screen BPM readout shows the measured value with a flashing sync indicator next to it.
+
+Meter does not merely follow the external *tempo*; it **phase-locks** to it. The tempo estimate averages the tick period (never the tempo — averaging BPM biases the result high when the ticks are uneven), and on every tick Meter nudges its whole grid toward where the tick count says it should be. The correction is a share of a filtered offset rather than of a single tick reading, because a host's MIDI clock usually arrives quantized to the audio block and chasing each tick would hand that jitter to the outputs.
+
+The lock is re-anchored at every downbeat, because MIDI clock on its own never says which tick is a beat and at 24 PPQN the ticks are only 20 ms apart. If a tick has just gone by — under a DAW it usually lands a sample or two before the Run gate rises — **that** tick is taken as the beat and the whole grid is anchored to it, accumulators included. Anchoring only the lock's reference and leaving the accumulators at the downbeat is not enough: the two then disagree, the lock sees no error to correct, and the grid runs permanently behind the host. Waiting for the *next* tick instead is worse still — it declares the wrong tick the beat and drags everything after beat 1 a full tick (20.8 ms) off the host, leaving beat 1 alone in the right place.
+
+### Running under a DAW
+
+With Rack as a plugin, the usual patch is: host **Start** → a flipflop → Meter's **RUN**, host **Stop** → Meter's **RESET**, host **clock** → **EXT CLOCK** with PPQN 24.
+
+Reset arms the downbeat rather than firing it — under a DAW the Stop that resets Meter arrives seconds before the Start that runs it, and beat 1 belongs where playback actually begins. Every output, swung and grid alike, fires together on that sample.
+
+One MIDI Stop usually drives *both* the Reset cable and whatever holds the RUN gate, so Meter sees the reset a sample or two before the gate drops — still running, and about to spend beat 1 on nobody. If the clock stops before even a sixteenth of that beat has played, nothing was played and the downbeat is owed again, so it lands on the next Start instead.
+
+Meter does not rely on the RUN gate to know this. **A master clock that has gone quiet is a stop**, whatever the gate says — which matters because the gate is often held by a flipflop cleared by Continue rather than by Stop, in which case it never drops at all. When the ticks dry up, an unplayed downbeat is re-armed the same way, and an owed downbeat waits for the master to tick again rather than firing into silence.
+
+An owed downbeat fires **on a tick, or within one tick of the clock coming back** — never merely because the clock still looks alive. A host stops emitting clock slightly *before* it sends Stop (measured at about 18 ms in Live), so at the moment its Reset arrives the clock does still look alive, and firing there put a stray one-sample trigger on every output: a drum hit every time you pressed stop. A Stop has neither a tick nor a recent resumption; a Start has both. The wait costs at most one tick and lands the downbeat exactly on the master's grid.
+
+Resuming with RUN *without* a Reset deliberately does not fire a downbeat: it picks up where it left off. If you want every Start to begin at the top regardless of how Stop is wired, turn on **Reset on play** — it now applies to the RUN gate as well as the RUN button, and forwards a pulse from RESET OUT so downstream sequencers restart with Meter.
+
+Residual timing error against the host is dominated by how precisely the host delivers its MIDI clock. With 128-sample blocks Meter holds to about 1.3 ms of the host's grid; a very large block (512 samples, so a 24-PPQN tick is only about two blocks long) leaves a few milliseconds more, and a low PPQN setting makes that worse rather than better.
 
 ## Display
 
