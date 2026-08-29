@@ -78,6 +78,7 @@ static const char* PR_MODNAME[PR_MOD_N] = {"LVL", "PIT", "PAN", "TLT", "STR", "C
 static const int PR_MODSRC = 4;
 static const char* PR_SRCNAME[PR_MODSRC] = {"LFO1", "LFO2", "LFO3", "ENV"};
 static const int PR_SCOPE = 512;
+static const int PR_NPRESET = 14;
 
 struct Prism : Module {
 	enum ParamId {
@@ -265,9 +266,15 @@ struct Prism : Module {
 	static float knobTime(float k, float lo, float hi) {   // exponential seconds
 		return lo * std::pow(hi / lo, k);
 	}
-	// the inverse, so a preset can ask for "5ms" rather than "0.179"
+	// The inverses, so a preset can ask for "5 ms", "0.3 Hz" or "900 Hz"
+	// rather than for 0.179, 0.373 and 0.491. A preset written in knob
+	// positions cannot be checked against anything.
 	static float timeKnob(float sec, float lo, float hi) {
 		return clamp(std::log(sec / lo) / std::log(hi / lo), 0.f, 1.f);
+	}
+	static float lfoKnob(float hz) { return timeKnob(hz, 0.02f, 30.f); }
+	static float cutKnob(float hz) {                       // fc = 30 * 2^(k*10)
+		return clamp(std::log2(std::max(hz, 30.f) / 30.f) / 10.f, 0.f, 1.f);
 	}
 
 	// Four starting points, each of which is a different ARGUMENT for what
@@ -283,6 +290,10 @@ struct Prism : Module {
 		params[ENVSPREAD_PARAM].setValue(0.f);
 		params[TILT_PARAM].setValue(0.f);
 		params[WIDTH_PARAM].setValue(0.3f);
+		// Two presets raise the partial count. Reset it here so loading one of
+		// them and then loading another does not leave 64 partials behind on a
+		// preset written for 16.
+		nPartials = 16;
 
 		switch (which) {
 			case 0:   // RAMP -- every harmonic at 1/n, which is a sawtooth
@@ -355,6 +366,267 @@ struct Prism : Module {
 				params[SUSTAIN_PARAM].setValue(0.f);               // struck, not held
 				params[RELEASE_PARAM].setValue(timeKnob(0.25f, 0.005f, 16.f));
 				params[WIDTH_PARAM].setValue(0.2f);
+				break;
+			}
+
+			case 4: {  // BELL -- STRETCH as the instrument. B = stretch^2/50 and
+				// f_n = n*f0*sqrt(1 + B*n^2), so at 0.55 the octave partial is
+				// 21 cents sharp, the fourth 80 cents, the eighth 17.8% and the
+				// sixteenth 59.6%. The partials stop agreeing on a fundamental
+				// while the low ones still nearly do, which is the difference
+				// between a struck bar and a struck bell -- and between this and
+				// the Gong preset, where they stop agreeing altogether.
+				for (int p = 0; p < PR_MAXP; p++) {
+					pLevel[p] = 1.f / std::pow((float)(p + 1), 0.8f);
+					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.6f);
+					pRate[p]  = clamp(0.5f + 0.02f * (float)p, 0.f, 1.f);
+					pDepth[p] = 1.f;
+				}
+				params[STRETCH_PARAM].setValue(0.55f);
+				params[ENVRATE_PARAM].setValue(0.6f);   // highs die SOONER
+				params[ATTACK_PARAM].setValue(timeKnob(0.002f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(6.f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.f);
+				params[RELEASE_PARAM].setValue(timeKnob(5.f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.5f);
+				break;
+			}
+
+			case 5: {  // BOWED -- ENV SPREAD's NEGATIVE half, which is the part
+				// that reads as broken when you sweep it with nothing else set
+				// up. A bow does not start a note, it works one up: the upper
+				// partials speak first and the fundamental arrives underneath
+				// them. At -0.5 the fundamental is 125 ms late, which is a
+				// bowed onset rather than a delay.
+				for (int p = 0; p < PR_MAXP; p++) {
+					pLevel[p] = 1.f / (float)(p + 1);
+					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.5f);
+					pRate[p]  = 0.5f;
+					pDepth[p] = 1.f;
+				}
+				params[ENVSPREAD_PARAM].setValue(-0.5f);
+				params[ENVRATE_PARAM].setValue(0.f);    // nothing dies; it is bowed
+				params[ATTACK_PARAM].setValue(timeKnob(0.12f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(0.5f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.9f);
+				params[RELEASE_PARAM].setValue(timeKnob(0.25f, 0.005f, 16.f));
+				mod[0][PR_MOD_PITCH] = 0.07f;
+				params[LFORATE_PARAM + 0].setValue(lfoKnob(5.2f));
+				params[LFOSPREAD_PARAM + 0].setValue(0.f);   // one vibrato, not sixteen
+				params[WIDTH_PARAM].setValue(0.35f);
+				break;
+			}
+
+			case 6: {  // BLOOM -- ENV SPREAD's positive half AND negative DEPTH
+				// together, the only preset that uses the inverse envelope. The
+				// upper half of the spectrum both starts late and follows the
+				// envelope BACKWARDS, so those partials arrive as the lower ones
+				// are leaving. That crossing is the thing additive can do that a
+				// filter sweep only imitates.
+				for (int p = 0; p < PR_MAXP; p++) {
+					pLevel[p] = 1.f / std::pow((float)(p + 1), 0.9f);
+					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.4f);
+					pRate[p]  = 0.35f;                       // slow, all of them
+					pDepth[p] = (p >= 6) ? -0.7f : 1.f;      // upper half inverted
+				}
+				params[ENVSPREAD_PARAM].setValue(0.75f);
+				params[ENVRATE_PARAM].setValue(0.1f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.9f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(3.f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.6f);
+				params[RELEASE_PARAM].setValue(timeKnob(2.5f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.85f);
+				break;
+			}
+
+			case 7: {  // E-PIANO -- the SOFT/LEVEL morph on its own, with MORPH
+				// left at zero so VELOCITY has the whole say. Played softly this
+				// is very nearly a sine; played hard the tine bark at partials
+				// 4-6 comes in. That is a different spectrum, not a louder one,
+				// which is the argument for storing two.
+				for (int p = 0; p < PR_MAXP; p++) {
+					pLevel[p] = 1.f / std::pow((float)(p + 1), 1.3f);
+					pSoft[p]  = (p == 0) ? 1.f : ((p == 2) ? 0.10f : 0.f);
+					pRate[p]  = clamp(0.5f + 0.035f * (float)p, 0.f, 1.f);
+					pDepth[p] = 1.f;
+				}
+				pLevel[3] = 0.55f; pLevel[4] = 0.42f; pLevel[5] = 0.30f;  // the bark
+				params[MORPH_PARAM].setValue(0.f);       // velocity, and only velocity
+				params[ENVRATE_PARAM].setValue(0.5f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.003f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(1.6f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.14f);
+				params[RELEASE_PARAM].setValue(timeKnob(0.5f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.3f);
+				break;
+			}
+
+			case 8: {  // ROTOR -- PAN spread. LFO2 sweeps pan with its spread
+				// wide open, so the partials are at different points of the
+				// same circle and the spectrum turns rather than the sound
+				// sliding side to side. LFO1 works level in the opposite
+				// direction to keep whatever is arriving in front.
+				for (int p = 0; p < PR_MAXP; p++) {
+					pLevel[p] = 1.f / std::pow((float)(p + 1), 1.1f);
+					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.6f);
+					pRate[p]  = 0.5f;
+					pDepth[p] = 1.f;
+				}
+				params[ENVRATE_PARAM].setValue(0.f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.05f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(0.6f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.85f);
+				params[RELEASE_PARAM].setValue(timeKnob(0.6f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(1.f);
+				mod[1][PR_MOD_PAN]   =  0.85f;
+				mod[0][PR_MOD_LEVEL] = -0.30f;
+				params[LFORATE_PARAM + 1].setValue(lfoKnob(0.8f));
+				params[LFOSPREAD_PARAM + 1].setValue(1.f);   // the whole circle
+				params[LFORATE_PARAM + 0].setValue(lfoKnob(0.8f));
+				params[LFOSPREAD_PARAM + 0].setValue(0.55f);
+				break;
+			}
+
+			case 9: {  // CLARINET -- ODD/EVEN against a DRAWN level, because a
+				// clarinet is not simply "odd harmonics". Its 3rd and 5th are
+				// strong, the 7th is nearly as loud as the 5th, and everything
+				// above about the 11th falls off a cliff. ODD/EVEN alone gives
+				// a hollow square; the drawn curve is what makes it reedy.
+				for (int p = 0; p < PR_MAXP; p++) {
+					pLevel[p] = 0.f; pSoft[p] = 0.f;
+					pRate[p]  = 0.5f; pDepth[p] = 1.f;
+				}
+				static const float CL[9] =
+					{1.f, 0.f, 0.82f, 0.f, 0.60f, 0.f, 0.52f, 0.f, 0.22f};
+				for (int p = 0; p < 9; p++) { pLevel[p] = CL[p]; pSoft[p] = CL[p] * 0.55f; }
+				pLevel[10] = 0.08f; pLevel[12] = 0.03f;
+				params[ODDEVEN_PARAM].setValue(-1.f);
+				params[ENVRATE_PARAM].setValue(0.f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.03f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(0.2f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.95f);
+				params[RELEASE_PARAM].setValue(timeKnob(0.12f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.2f);
+				break;
+			}
+
+			case 10: {  // GONG -- 64 partials, and the only preset that
+				// MODULATES inharmonicity rather than setting it. A struck gong
+				// does not hold still: its partials wander as the plate's modes
+				// trade energy, and LFO3 on STRETCH is the cheapest honest
+				// version of that. Also the first thing here to run the big
+				// partial count, where the Nyquist fade, the spectral filter and
+				// the display's column averaging all meet at scale.
+				//
+				// Note that stretch this high spends partials: at C4 only 27 of
+				// the 64 are still under Nyquist, 38 at C3 and 54 at C2. That is
+				// the law being honest rather than a fault -- but it does mean
+				// this preset wants to be played low, and it is the reason the
+				// fade at the top of the range had to be a fade.
+				nPartials = 64;
+				for (int p = 0; p < PR_MAXP; p++) {
+					pLevel[p] = 1.f / std::pow((float)(p + 1), 0.6f);
+					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.2f);
+					pRate[p]  = clamp(0.45f + 0.012f * (float)p, 0.f, 1.f);
+					pDepth[p] = 1.f;
+				}
+				params[STRETCH_PARAM].setValue(0.85f);
+				params[ENVSPREAD_PARAM].setValue(0.4f);
+				params[ENVRATE_PARAM].setValue(0.45f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.004f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(10.f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.f);
+				params[RELEASE_PARAM].setValue(timeKnob(8.f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.9f);
+				params[TILT_PARAM].setValue(0.15f);
+				mod[2][PR_MOD_STRETCH] = 0.20f;
+				params[LFORATE_PARAM + 2].setValue(lfoKnob(0.09f));
+				params[LFOSPREAD_PARAM + 2].setValue(0.4f);
+				break;
+			}
+
+			case 11: {  // VOWEL -- formants drawn straight into the spectrum. An
+				// "ah" sits at roughly 730 / 1090 / 2440 Hz, which against a
+				// 261.6 Hz fundamental is partials 2.8, 4.2 and 9.3. Peaks are
+				// therefore placed by FREQUENCY and not by index, and the
+				// partial count has to be high enough to reach the third one.
+				//
+				// This is deliberately the same job Intone does properly, with
+				// FOF grains. If it sounds close, these two modules are
+				// competing and one of them should stop.
+				nPartials = 32;
+				static const float FRQ[3] = {730.f, 1090.f, 2440.f};
+				static const float AMP[3] = {1.f, 0.5f, 0.18f};
+				static const float BW[3]  = {0.9f, 1.1f, 1.8f};   // in partials
+				for (int p = 0; p < PR_MAXP; p++) {
+					float n = (float)(p + 1);
+					float v = 0.02f / n;                  // a little glottal floor
+					for (int k = 0; k < 3; k++) {
+						float d = (n - FRQ[k] / 261.6f) / BW[k];
+						v += AMP[k] * std::exp(-d * d);
+					}
+					pLevel[p] = clamp(v, 0.f, 1.f);
+					pSoft[p]  = pLevel[p] * (0.4f + 0.6f / n);
+					pRate[p]  = 0.5f; pDepth[p] = 1.f;
+				}
+				params[ENVRATE_PARAM].setValue(0.f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.05f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(0.3f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.9f);
+				params[RELEASE_PARAM].setValue(timeKnob(0.2f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.25f);
+				break;
+			}
+
+			case 12: {  // ACID -- the only preset where the spectral filter IS
+				// the instrument. A saw, the cutoff parked low, resonance up,
+				// and the envelope driving CUT hard from the matrix. Worth
+				// contrasting with a real ladder: this filter is evaluated per
+				// partial rather than run as a difference equation, so it cannot
+				// self-oscillate and it cannot distort -- what it can do is be
+				// exactly the shape it claims to be.
+				for (int p = 0; p < PR_MAXP; p++) {
+					pLevel[p] = 1.f / (float)(p + 1);
+					pSoft[p]  = 1.f / (float)(p + 1);
+					pRate[p]  = 0.5f; pDepth[p] = 1.f;
+				}
+				params[ENVRATE_PARAM].setValue(0.f);
+				params[CUTOFF_PARAM].setValue(cutKnob(320.f));
+				params[RESO_PARAM].setValue(0.8f);
+				mod[3][PR_MOD_CUT] = 0.55f;
+				params[ATTACK_PARAM].setValue(timeKnob(0.002f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(0.28f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.05f);
+				params[RELEASE_PARAM].setValue(timeKnob(0.15f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.f);
+				break;
+			}
+
+			case 13: {  // ENSEMBLE -- PITCH as fine detune, the counterpart to
+				// Marimba's coarse retuning. Each partial is a few cents off its
+				// harmonic, by a fixed irrational-stride pattern rather than by
+				// random(), so the preset is the same every time it is loaded.
+				// LFO1 works pitch with its spread wide, which is what keeps the
+				// detuning from settling into one steady chorus.
+				for (int p = 0; p < PR_MAXP; p++) {
+					pLevel[p] = 1.f / (float)(p + 1);
+					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.4f);
+					pRate[p]  = 0.5f; pDepth[p] = 1.f;
+					// +/- 9 cents. pPitch spans +/- 2400, so this is tiny by
+					// design -- the tab is coarse enough for a marimba bar and
+					// still has to hold this.
+					pPitch[p] = (9.f / 2400.f) * std::sin((float)p * 2.3999632f);
+					pPan[p]   = 0.55f * std::sin((float)p * 1.1f + 0.7f);
+				}
+				params[ENVRATE_PARAM].setValue(0.05f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.25f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(1.f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.8f);
+				params[RELEASE_PARAM].setValue(timeKnob(1.2f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.6f);
+				mod[0][PR_MOD_PITCH] = 0.05f;
+				params[LFORATE_PARAM + 0].setValue(lfoKnob(0.35f));
+				params[LFOSPREAD_PARAM + 0].setValue(1.f);
 				break;
 			}
 		}
@@ -1282,10 +1554,17 @@ struct PrismWidget : ModuleWidget {
 		if (!m) return;
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createSubmenuItem("Preset", "", [=](Menu* sub) {
-			static const char* PN[4] = {"Ramp (default)", "Square",
-			                            "CS-80", "Marimba"};
-			for (int i = 0; i < 4; i++)
+			// Grouped by WHAT EACH ONE EXERCISES rather than by timbre: the
+			// second group is here to make a mechanism audible, which is also
+			// how the pitch-range and Nyquist bugs were found.
+			static const char* PN[PR_NPRESET] = {
+				"Ramp (default)", "Square", "CS-80", "Marimba",
+				"Bell", "Bowed", "Bloom", "E-piano", "Rotor",
+				"Clarinet", "Gong", "Vowel", "Acid", "Ensemble"};
+			for (int i = 0; i < PR_NPRESET; i++) {
+				if (i == 4) sub->addChild(new MenuSeparator);
 				sub->addChild(createMenuItem(PN[i], "", [=]() { m->loadPreset(i); }));
+			}
 		}));
 		menu->addChild(createIndexSubmenuItem("Partials", {"16", "32", "64"},
 			[=]() {
