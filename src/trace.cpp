@@ -48,6 +48,14 @@
 
 static const int TR_LANES = 4;
 
+// How far ink is allowed to swing the stroke width. The default was the only
+// setting and it was timid: a heavy line barely read as heavier than a light
+// one. At the top of this range the width varies a lot along a stroke, which is
+// the point -- a brush that never changes width is a pen.
+static const float TR_INKW[] = {0.4f, 1.f, 2.2f, 4.f, 6.5f};
+static const char* TR_INKWNAME[] = {"Hairline", "Fine", "Normal", "Bold", "Heavy"};
+static const int   TR_NINKW = 5;
+
 // The paper is a physical LENGTH, not a duration: LENGTH sets how many cells go
 // round and SPEED sets how fast they pass the head, so speeding up the
 // transport plays the drawing faster the way tape does rather than resampling
@@ -204,6 +212,7 @@ struct Trace : Module {
 	// ── brush selection ─────────────────────────────────────────────────────
 	int  brushLane = 0;
 	bool eraseMode = false;
+	int  inkWeight = 1;              // index into TR_INKW
 	int  scanCell = -1;              // the crossing scan's last visited cell
 
 	// ── UI handshake ────────────────────────────────────────────────────────
@@ -377,7 +386,7 @@ struct Trace : Module {
 		}
 		paperPos = 0.0;
 		running = true; dirFlip = false;
-		brushLane = 0; eraseMode = false; scanCell = -1;
+		brushLane = 0; eraseMode = false; scanCell = -1; inkWeight = 1;
 		haveBar = haveClock = false;
 		barSeen = clockSeen = false;
 		barCount = 0;
@@ -754,11 +763,25 @@ struct Trace : Module {
 						                  0.f, 1.f);
 						pk[i][idx] = L.edgeInk + (tgt - L.edgeInk) * w;
 					} else if (newCell) {
-						// A flat amount per cell. Dwell weighting used to
-						// shape this -- a brush dragged sideways lays down
-						// less per unit area -- but it only ever tracked how
-						// steady your hand was. Crossings do the shaping now.
-						pk[i][idx] = clamp(pk[i][idx] + inkAmt * 0.35f * w, 0.f, 1.f);
+						// RETRACING THICKENS. Going back over a line at the
+						// value it already holds is a second pass of the same
+						// stroke, and a second pass of a real brush is darker.
+						// Drawing a DIFFERENT value through the same cell is
+						// not a second pass, it is a new line -- the ink there
+						// belonged to the old one, so it starts again rather
+						// than inheriting weight it never earned.
+						//
+						// A blank cell reads 0V, which is indistinguishable
+						// from a line genuinely drawn at 0V unless you ask
+						// whether there was any ink there to begin with.
+						float base = inkAmt * 0.35f * w;
+						bool blank = (L.edgeInk <= 0.0001f);
+						float tol = (hi - lo) * 0.05f;
+						float match = blank ? 0.f
+						            : 1.f - clamp(std::fabs(v - L.edgeTo) / tol, 0.f, 1.f);
+						pk[i][idx] = (match > 0.f)
+						           ? clamp(pk[i][idx] + base * (0.3f + 1.2f * match), 0.f, 1.f)
+						           : clamp(base, 0.f, 1.f);
 					}
 					if (newCell) L.lastIdx = idx;
 				}
@@ -887,6 +910,7 @@ struct Trace : Module {
 		json_object_set_new(root, "dirFlip", json_boolean(dirFlip));
 		json_object_set_new(root, "brushLane", json_integer(brushLane));
 		json_object_set_new(root, "eraseMode", json_boolean(eraseMode));
+		json_object_set_new(root, "inkWeight", json_integer(inkWeight));
 		json_object_set_new(root, "clocksPerBar", json_integer(clocksPerBar));
 
 		json_t* ls = json_array();
@@ -929,6 +953,8 @@ struct Trace : Module {
 		if (json_t* j = json_object_get(root, "brushLane"))
 			brushLane = clamp((int)json_integer_value(j), 0, TR_LANES - 1);
 		if (json_t* j = json_object_get(root, "eraseMode")) eraseMode = json_boolean_value(j);
+		if (json_t* j = json_object_get(root, "inkWeight"))
+			inkWeight = clamp((int)json_integer_value(j), 0, TR_NINKW - 1);
 		if (json_t* j = json_object_get(root, "clocksPerBar"))
 			clocksPerBar = clamp((int)json_integer_value(j), 1, 96);
 
@@ -987,6 +1013,9 @@ static const float TR_DESIGN_W = 397.f;      // 105mm * 3.783, per screen-style
 // orientation indicators and is now only a margin.
 static const float TR_GX0 = 10.f;
 static const float TR_GW  = TR_DESIGN_W - 16.f;
+// Not quite opaque, so a crossing reads as a crossing rather than as whichever
+// lane happens to be drawn last -- which matters more the heavier the stroke.
+static const int TR_LANE_ALPHA = 230;    // 90%
 static const NVGcolor TR_LANECOL[TR_LANES] = {
 	nvgRGB(0x00, 0x97, 0xDE),   // blue
 	nvgRGB(0x3F, 0xBF, 0x6F),   // green
@@ -1246,7 +1275,8 @@ void TraceDisplay::drawLayer(const DrawArgs& args, int layer) {
 			float mid = vSum / nSamp;
 			cxA[k] = px0 + (float)k / cols * pxW;
 			cyA[k] = py + ph * (1.f - clamp((mid - lo) / (hi - lo), 0.f, 1.f));
-			hwA[k] = 0.6f + (inkSum / nSamp) * 3.4f;
+			hwA[k] = 0.6f + (inkSum / nSamp) * 3.4f
+			       * TR_INKW[clamp(module->inkWeight, 0, TR_NINKW - 1)];
 		}
 		// Smooth the width and the path across a few columns, and take the
 		// tangent over a wider span. A brush is a round tip dragged along a
@@ -1287,7 +1317,7 @@ void TraceDisplay::drawLayer(const DrawArgs& args, int layer) {
 		for (int k = cols; k >= 0; k--)
 			nvgLineTo(vg, bxA[k] * s, byA[k] * s);
 		nvgClosePath(vg);
-		nvgFillColor(vg, nvgTransRGBA(TR_LANECOL[i], 220));
+		nvgFillColor(vg, nvgTransRGBA(TR_LANECOL[i], TR_LANE_ALPHA));
 		nvgFill(vg);
 	}
 
@@ -1426,7 +1456,7 @@ void TraceDisplay::drawPreview(const DrawArgs& args, float s) {
 			float ink = 0.25f + 0.35f * (0.5f + 0.5f * std::sin(a * 2.f + i));
 			cx[k] = px0 + fx * pxW;
 			cy[k] = py + ph * (0.5f - v);
-			hw[k] = 0.6f + ink * 3.4f;
+			hw[k] = 0.6f + ink * 3.4f * TR_INKW[2];   // preview: Normal
 		}
 		nvgBeginPath(vg);
 		for (int pass = 0; pass < 2; pass++) {
@@ -1445,7 +1475,7 @@ void TraceDisplay::drawPreview(const DrawArgs& args, float s) {
 			}
 		}
 		nvgClosePath(vg);
-		nvgFillColor(vg, nvgTransRGBA(TR_LANECOL[i], 220));
+		nvgFillColor(vg, nvgTransRGBA(TR_LANECOL[i], TR_LANE_ALPHA));
 		nvgFill(vg);
 	}
 
@@ -1647,6 +1677,11 @@ struct TraceWidget : ModuleWidget {
 		}
 
 		menu->addChild(new MenuSeparator);
+		{
+			std::vector<std::string> ws;
+			for (int i = 0; i < TR_NINKW; i++) ws.push_back(TR_INKWNAME[i]);
+			menu->addChild(createIndexPtrSubmenuItem("Stroke weight", ws, &m->inkWeight));
+		}
 		menu->addChild(createIndexSubmenuItem("Clocks per bar",
 			{"1", "2", "4", "8", "12", "16", "24", "32"},
 			[=]() {
