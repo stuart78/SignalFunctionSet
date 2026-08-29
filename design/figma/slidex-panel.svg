@@ -7,53 +7,49 @@
     <!-- none: see PLATES in tools/panel_reticules.py -->
   </g>
   <g id="Reticules" data-name="Reticules">
-    <circle cx="150" cy="240" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="150" cy="390" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="150" cy="540" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="150" cy="690" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="150" cy="840" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="150" cy="990" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="150" cy="1140" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="150" cy="1290" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="300" cy="240" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="300" cy="390" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="300" cy="540" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="300" cy="690" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="300" cy="840" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="300" cy="990" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="300" cy="1140" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="300" cy="1290" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="435" cy="240" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="435" cy="390" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="435" cy="540" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="435" cy="690" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="435" cy="840" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="435" cy="990" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="435" cy="1140" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="435" cy="1290" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="585" cy="240" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="585" cy="390" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="585" cy="540" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="585" cy="690" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="585" cy="840" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="585" cy="990" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="585" cy="1140" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="585" cy="1290" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="672" cy="240" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="672" cy="390" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="672" cy="540" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="672" cy="690" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="672" cy="840" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="672" cy="990" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="672" cy="1140" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="672" cy="1290" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="119.6457" cy="320.6693" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="119.6457" cy="480.626" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="119.6457" cy="640.5827" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="119.6457" cy="800.5394" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="119.6457" cy="960.4961" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="119.6457" cy="1120.4528" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="119.6457" cy="1280.4095" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="119.6457" cy="1440.3662" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="278.5039" cy="320.6693" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="278.5039" cy="480.626" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="278.5039" cy="640.5827" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="278.5039" cy="800.5394" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="278.5039" cy="960.4961" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="278.5039" cy="1120.4528" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="278.5039" cy="1280.4095" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="278.5039" cy="1440.3662" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="398.5039" cy="320.6693" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="398.5039" cy="480.626" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="398.5039" cy="640.5827" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="398.5039" cy="800.5394" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="398.5039" cy="960.4961" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="398.5039" cy="1120.4528" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="398.5039" cy="1280.4095" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="398.5039" cy="1440.3662" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="558.5433" cy="320.6693" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="558.5433" cy="480.626" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="558.5433" cy="640.5827" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="558.5433" cy="800.5394" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="558.5433" cy="960.4961" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="558.5433" cy="1120.4528" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="558.5433" cy="1280.4095" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="558.5433" cy="1440.3662" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="638.9764" cy="320.6693" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="638.9764" cy="480.626" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="638.9764" cy="640.5827" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="638.9764" cy="800.5394" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="638.9764" cy="960.4961" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="638.9764" cy="1120.4528" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="638.9764" cy="1280.4095" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="638.9764" cy="1440.3662" r="15" fill="none" stroke="#b2b2b2" stroke-width="2"/>
   </g>
   <g id="Labels (mock)" data-name="Labels (mock)">
-    <text x="45" y="96" font-family="Figtree" font-size="66.1417" font-weight="600" letter-spacing="1.1811" fill="#231f20" text-anchor="start" dominant-baseline="middle">STR</text>
-    <text x="150" y="176.2205" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">GATE</text>
-    <text x="300" y="176.2205" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">VEL</text>
-    <text x="435" y="188.0315" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">LVL</text>
-    <text x="585" y="176.2205" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">OUT</text>
+
   </g>
   <g id="GUIDES" data-name="GUIDES">
     <line x1="7.5" y1="0" x2="7.5" y2="1517.7166" stroke="#eeeef2" stroke-width="0.8" stroke-opacity="0.5"/>

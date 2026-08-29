@@ -442,6 +442,58 @@ def labels(body, ev, env=None, defs=None):
     nums = pr.struct_arrays(body)
     strs = pr.struct_strings(body)
 
+    # `static const char* KN[6] = {"SPEED", ...}` -- a row of labels written as
+    # a table and a loop, the same shape struct_arrays already handles for
+    # numbers. Trace writes its six knob labels and its twelve jack labels that
+    # way, and taking only quoted literals dropped all eighteen.
+    char_tables = {}
+    for cm in re.finditer(r"(?:static\s+)?const\s+char\s*\*\s*(\w+)\s*\[[^\]]*\]\s*=\s*\{([^}]*)\}", body):
+        vals = re.findall(r'"((?:[^"\\]|\\.)*)"', cm.group(2))
+        if vals:
+            char_tables[cm.group(1)] = vals
+
+    def text_arg(arg, e):
+        """A label's text: a literal, an entry in a `const char*` table, or a
+        `string::f` format resolved against the loop index."""
+        arg = arg.strip()
+        t = cstring(arg)
+        if t is not None:
+            return t
+        tm = re.match(r"^(\w+)\s*\[([^\]]+)\]$", arg)
+        if tm and tm.group(1) in char_tables:
+            try:
+                idx = int(pr.evaluate(tm.group(2).replace("sfs::", ""), e))
+            except Exception:
+                return None
+            vals = char_tables[tm.group(1)]
+            return cstring('"%s"' % vals[idx]) if 0 <= idx < len(vals) else None
+        fm = re.match(r"^(?:rack::)?string::f\s*\((.*)\)$", arg, re.S)
+        if fm:
+            fargs = split_args(fm.group(1))
+            fmt = cstring(fargs[0].strip())
+            if fmt is None:
+                return None
+            specs = re.findall(r"%[-#0-9.+ ]*([diufgGeEsxX])", fmt)
+            vals = []
+            for spec, raw in zip(specs, fargs[1:]):
+                if spec == "s":
+                    v = text_arg(raw, e)
+                    if v is None:
+                        return None
+                else:
+                    try:
+                        v = pr.evaluate(raw.replace("sfs::", ""), e)
+                    except Exception:
+                        return None
+                    if spec in "diuxX":
+                        v = int(v)
+                vals.append(v)
+            try:
+                return fmt % tuple(vals)
+            except Exception:
+                return None
+        return None
+
     def sub_table(expr, var, i):
         """`ROW[i].py` -> its value in row i, for both number and string tables."""
         for (arr, fld), vals in list(nums.items()) + list(strs.items()):
@@ -452,7 +504,13 @@ def labels(body, ev, env=None, defs=None):
                 expr = re.sub(pat, rep, expr)
         return expr
 
-    for m in re.finditer(r"lbl->(\w+)\(", body):
+    # The variable is whatever the widget called it. Trace and Prism name it
+    # `lab`, and a hardcoded `lbl->` dropped every one of their labels in
+    # silence -- the exact failure this function exists to report.
+    names = set(re.findall(r"sfs::PanelLabels\s*\*?\s*(\w+)\s*[=;]", body)) or {"lbl"}
+    call = re.compile(r"\b(?:%s)->(\w+)\(" % "|".join(re.escape(n) for n in sorted(names)))
+
+    for m in call.finditer(body):
         depth, j = 1, m.end()
         while j < len(body) and depth:
             depth += (body[j] == "(") - (body[j] == ")")
@@ -523,11 +581,11 @@ def labels(body, ev, env=None, defs=None):
                     x, y, y2 = evl(args[0]), evl(args[1]), evl(args[2])
                     onplate = len(args) > 4 and "true" in args[4]
                     links.append((x, y, x, y2, onplate))
-                    made.append((x, y - gap_for(SZ_TRIM, GAP_TRIM), cstring(args[3]),
+                    made.append((x, y - gap_for(SZ_TRIM, GAP_TRIM), text_arg(args[3], e),
                                  "ON_PLATE" if onplate else "LABEL", "middle"))
                     continue
                 x, y = evl(args[0]), evl(args[1])
-                t = cstring(args[2]) if len(args) > 2 else None
+                t = text_arg(args[2], e) if len(args) > 2 else None
                 if t is None:
                     failed = True
                     break

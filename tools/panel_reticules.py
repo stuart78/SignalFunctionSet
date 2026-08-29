@@ -476,6 +476,7 @@ MODULES = {
     "opmorph": ("OpMorph", "src/opmorph.cpp", "res/opmorph.svg", {"OPM_COLS": 4, "OPM_ROWS": 4, "OPM_SLOTS": 16}),
     "kit":     ("Kit",     "src/kit.cpp",     "res/kit.svg",     {}),
     "trace":   ("Trace",   "src/trace.cpp",   "res/trace.svg",   {"TR_LANES": 4}),
+    "prism":   ("Prism",   "src/prism.cpp",   "res/prism.svg",   {"PR_PARTIALS": 16}),
 }
 
 # Panels whose artwork is hand-made and is now the SOURCE of the layout rather

@@ -1,42 +1,74 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1517.7166" viewBox="0 0 1320 1517.7166">
-  <!-- Slice: 22HP at 4x, geometry read from src/slice.cpp. Design layer only. -->
+  <!-- Kit: 22HP at 4x, geometry read from src/kit.cpp. Design layer only. -->
   <g id="Background" data-name="Background">
     <rect x="0" y="0" width="1320" height="1517.7166" fill="#f0f0f0"/>
   </g>
   <g id="Plates" data-name="Plates">
-    <rect x="720" y="1298.9764" width="561.0236" height="201.9685" rx="24" fill="#1a1a1a"/>
+    <!-- none: see PLATES in tools/panel_reticules.py -->
   </g>
   <g id="Reticules" data-name="Reticules">
-    <rect x="60" y="120" width="1200" height="664.0158" rx="12" fill="#1a1a32"/>
-    <circle cx="100.0394" cy="960" r="75" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="280.0394" cy="960" r="75" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="460.0394" cy="960" r="75" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="649.4882" cy="949.4882" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="789.4488" cy="949.4882" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="929.5276" cy="949.4882" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1069.4882" cy="949.4882" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1208.504" cy="949.4882" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="89.5276" cy="1209.4489" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="229.4882" cy="1209.4489" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="369.4488" cy="1209.4489" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="509.5276" cy="1209.4489" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="649.4882" cy="1209.4489" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="789.4488" cy="1209.4489" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="929.5276" cy="1209.4489" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1069.4882" cy="1209.4489" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1209.4489" cy="1209.4489" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="89.5276" cy="1429.4882" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="229.4882" cy="1429.4882" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="369.4488" cy="1429.4882" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="508.4646" cy="1429.4882" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="648.5433" cy="1429.4882" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="789.4488" cy="1429.4882" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="929.5276" cy="1429.4882" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1068.5433" cy="1429.4882" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
-    <circle cx="1209.4489" cy="1429.4882" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <rect x="35.4331" y="129.9213" width="1249.1339" height="566.9292" rx="12" fill="#1a1a32"/>
+    <circle cx="165" cy="844.4882" r="75" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="495" cy="844.4882" r="75" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="825" cy="844.4882" r="75" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1155" cy="844.4882" r="75" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="165" cy="1033.4646" r="60" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="495" cy="1033.4646" r="60" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="825" cy="1033.4646" r="60" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1155" cy="1033.4646" r="60" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="94.252" cy="1157.4804" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="282.874" cy="1157.4804" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="471.378" cy="1157.4804" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="660" cy="1157.4804" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="848.504" cy="1157.4804" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1037.126" cy="1157.4804" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1225.7481" cy="1157.4804" r="37.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="94.252" cy="1299.2126" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="282.874" cy="1299.2126" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="471.378" cy="1299.2126" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="660" cy="1299.2126" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="848.504" cy="1299.2126" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1037.126" cy="1299.2126" r="45" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1225.7481" cy="1299.2126" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="94.252" cy="1440.9449" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="282.874" cy="1440.9449" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="471.378" cy="1440.9449" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="660" cy="1440.9449" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="848.504" cy="1440.9449" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1037.126" cy="1440.9449" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
+    <circle cx="1225.7481" cy="1440.9449" r="52.5" fill="none" stroke="#b2b2b2" stroke-width="2"/>
   </g>
   <g id="Labels (mock)" data-name="Labels (mock)">
-
+    <text x="60" y="96" font-family="Figtree" font-size="66.1417" font-weight="600" letter-spacing="1.1811" fill="#231f20" text-anchor="start" dominant-baseline="middle">KIT</text>
+    <text x="165" y="754.4882" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">SIZE</text>
+    <text x="495" y="754.4882" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">TENSION</text>
+    <text x="825" y="754.4882" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">MATERIAL</text>
+    <text x="1155" y="754.4882" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">AIR</text>
+    <text x="165" y="958.4646" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">DECAY</text>
+    <text x="495" y="958.4646" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">TONE</text>
+    <text x="825" y="958.4646" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">EXCITER</text>
+    <text x="1155" y="958.4646" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">MUFFLE</text>
+    <text x="94.252" y="1104.9804" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">COUPLE</text>
+    <text x="282.874" y="1104.9804" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">RESO</text>
+    <text x="471.378" y="1104.9804" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">BEND</text>
+    <text x="660" y="1104.9804" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">WEIGHT</text>
+    <text x="848.504" y="1104.9804" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">WIRES</text>
+    <text x="1037.126" y="1104.9804" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">TIGHT</text>
+    <text x="1225.7481" y="1104.9804" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">LEVEL</text>
+    <text x="94.252" y="1231.7126" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">GATE</text>
+    <text x="282.874" y="1231.7126" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">VEL</text>
+    <text x="471.378" y="1231.7126" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">V/OCT</text>
+    <text x="660" y="1231.7126" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">X</text>
+    <text x="848.504" y="1231.7126" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">Y</text>
+    <text x="1037.126" y="1231.7126" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">HIT</text>
+    <text x="1225.7481" y="1231.7126" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">WIRES</text>
+    <text x="94.252" y="1373.4449" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">SIZE</text>
+    <text x="282.874" y="1373.4449" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">TEN</text>
+    <text x="471.378" y="1373.4449" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">MAT</text>
+    <text x="660" y="1373.4449" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">AIR</text>
+    <text x="848.504" y="1373.4449" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">MUFF</text>
+    <text x="1037.126" y="1373.4449" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">HEAD</text>
+    <text x="1225.7481" y="1373.4449" font-family="Figtree" font-size="38.9764" font-weight="400" letter-spacing="1.1811" fill="#231f20" text-anchor="middle" dominant-baseline="middle">OUT</text>
   </g>
   <g id="GUIDES" data-name="GUIDES">
     <line x1="7.5" y1="0" x2="7.5" y2="1517.7166" stroke="#eeeef2" stroke-width="0.8" stroke-opacity="0.5"/>
