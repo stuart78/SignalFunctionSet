@@ -23,3 +23,7 @@ __pycache__/
 
 # Local sample libraries used for testing Play (multi-GB, third-party)
 /Broken SZF/
+
+# stray offline-harness output (see tools/prism-envelope-harness.py)
+/h
+/h.cpp
