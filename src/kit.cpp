@@ -128,6 +128,10 @@ struct Kit : Module {
 		GATE_INPUT, VEL_INPUT, VOCT_INPUT,
 		STRIKEX_INPUT, STRIKEY_INPUT,
 		SIZE_INPUT, TENSION_INPUT, STIFF_INPUT, AIR_INPUT, MUFFLE_INPUT,
+		// APPENDED for the 2026-08 panel, which gives every voice control a CV
+		// in. New entries go on the END: inputs serialise by index, so slotting
+		// these in beside their siblings above would repatch every saved Kit.
+		DECAY_INPUT, TONE_INPUT, EXCITE_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId { OUT_OUTPUT, HEAD_OUTPUT, SNARE_OUTPUT, OUTPUTS_LEN };
@@ -190,6 +194,9 @@ struct Kit : Module {
 		configInput(STIFF_INPUT, "Material CV (+/-5V)");
 		configInput(AIR_INPUT, "Air CV (+/-5V)");
 		configInput(MUFFLE_INPUT, "Muffle CV (+/-5V)");
+		configInput(DECAY_INPUT, "Decay CV (+/-5V)");
+		configInput(TONE_INPUT, "Tone CV (+/-5V)");
+		configInput(EXCITE_INPUT, "Beater CV (+/-5V)");
 		configOutput(OUT_OUTPUT, "Mix");
 		configOutput(HEAD_OUTPUT, "Head only");
 		configOutput(SNARE_OUTPUT, "Wires only");
@@ -223,9 +230,9 @@ struct Kit : Module {
 			drum.resoTune = params[RESO_PARAM].getValue();
 			// A big drum rings longer than a small one at the same tension, so
 			// decay leans on size as well as on its own knob.
-			float dk = params[DECAY_PARAM].getValue();
+			float dk = pv(DECAY_PARAM, DECAY_INPUT);
 			drum.decay = 0.08f * std::pow(90.f, dk) * (0.6f + 0.8f * size);
-			drum.tone  = params[TONE_PARAM].getValue() * 1.3f;
+			drum.tone  = pv(TONE_PARAM, TONE_INPUT) * 1.3f;
 			drum.muffle    = pv(MUFFLE_PARAM, MUFFLE_INPUT);
 			drum.muffleAng = params[MUFFLEANG_PARAM].getValue() * (float)M_PI;
 			drum.bend      = params[BEND_PARAM].getValue() * 0.35f;
@@ -243,7 +250,7 @@ struct Kit : Module {
 			dispR = r; dispA = drum.strikeAng;
 			dispSize = size; dispTens = tens; dispAir = drum.air;
 			dispMuffle = drum.muffle; dispCouple = drum.couple;
-			dispExcite = clamp(params[EXCITE_PARAM].getValue(), 0.f, 1.f);
+			dispExcite = pv(EXCITE_PARAM, EXCITE_INPUT);
 			dispWires  = clamp(params[SNARE_PARAM].getValue(), 0.f, 1.f);
 			// modes first: updateStrike()'s excitation tilt reads ratio[], which
 			// updateModes() computes. The other order used last frame's layout.
@@ -274,7 +281,7 @@ struct Kit : Module {
 		}
 		if (fire) {
 			lastVel = vel;
-			float hard = clamp(params[EXCITE_PARAM].getValue(), 0.f, 1.f);
+			float hard = pv(EXCITE_PARAM, EXCITE_INPUT);
 			// Velocity is a real approach speed, so everything downstream --
 			// contact time, brightness, how far the pitch bends -- follows from
 			// the collision rather than from a curve drawn over the top.
@@ -813,79 +820,84 @@ struct KitWidget : ModuleWidget {
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/kit.svg")));
 		using sfs::hp;
 
-		sfs::PanelLabels* lbl = new sfs::PanelLabels();
-		lbl->box.size = box.size;
-		addChild(lbl);
-		lbl->title(hp(1), hp(1.6f), "KIT");
-
+		// NO PanelLabels, and no title. This panel's artwork carries its own text
+		// as outlined paths -- which Rack DOES render, unlike <text> -- so
+		// drawing them again in Figtree printed every label twice, half a
+		// millimetre out. Slice learned this first; see its widget. The grid
+		// below is read from the art, which is now the source of the layout.
 		KitDisplay* disp = new KitDisplay();
 		disp->module = module;
-		// Full width. The head is a circle so its size is set by the height; the
-		// width that buys goes to the mode spectrum beside it, which is the one
-		// thing about this engine you cannot see from the head alone.
-		disp->box.pos  = mm2px(Vec(3.f, 11.f));
-		disp->box.size = mm2px(Vec(105.76f, 48.f));
+		disp->box.pos  = mm2px(Vec(5.08f, 10.16f));
+		disp->box.size = mm2px(Vec(101.58f, 45.71f));
 		addChild(disp);
 
-		// Vertical positions are millimetres on a 128.5 mm panel. Only the
-		// horizontal grid is in HP.
-		const float cx[4] = {13.97f, 41.91f, 69.85f, 97.79f};
-		// Rows are spaced so each label's TEXT clears the control above it, not
-		// merely its baseline -- text rises from the baseline, so a baseline that
-		// clears is not the same as a label that clears. At the old spacing the
-		// trim labels ran 1.08mm into the knobs above them; the Rogan swap made
-		// that 1.59mm, which is what made it visible enough to measure.
-		const float KY1 = 71.5f, KY2 = 88.2f, TY = 100.6f, JY1 = 111.7f, JY2 = 123.8f;
+		// ── the 2026-08 grid: eight columns, four rows ─────────────────────
+		// Transcribed from the panel art, which is authored at 11.813 units/mm
+		// (1320 x 1518 for 22HP). Every control is a trimpot: sixteen of them
+		// on one pitch reads as one instrument, where four sizes of knob read
+		// as four separate ideas competing for the same panel.
+		static const float KX[8] = {10.96f, 23.74f, 36.53f, 49.31f,
+		                            62.09f, 74.87f, 87.66f, 100.44f};
+		static const float Y_VOICE = 70.26f;   // what the drum IS
+		static const float Y_CHAR  = 85.50f;   // how it is played and dressed
+		static const float Y_CV    = 102.43f;  // one CV in per voice control
+		static const float Y_PERF  = 119.36f;  // the transport row
 
 		struct K { int p; const char* t; };
-		const K big[4] = {{Kit::SIZE_PARAM, "SIZE"}, {Kit::TENSION_PARAM, "TENSION"},
-		                  {Kit::STIFF_PARAM, "MATERIAL"}, {Kit::AIR_PARAM, "AIR"}};
-		for (int i = 0; i < 4; i++) {
-			addParam(createParamCentered<Rogan3PBlue>(mm2px(Vec(cx[i], KY1)), module, big[i].p));
-			lbl->roganLarge(cx[i], KY1, big[i].t);
-		}
-		const K small[4] = {{Kit::DECAY_PARAM, "DECAY"}, {Kit::TONE_PARAM, "TONE"},
-		                    {Kit::EXCITE_PARAM, "EXCITER"}, {Kit::MUFFLE_PARAM, "MUFFLE"}};
-		for (int i = 0; i < 4; i++) {
-			addParam(createParamCentered<Rogan1PBlue>(mm2px(Vec(cx[i], KY2)), module, small[i].p));
-			lbl->rogan(cx[i], KY2, small[i].t);
+		// Row 1 and row 3 are the SAME EIGHT in the same order, so a cable
+		// hangs directly under the control it modulates and the pairing needs
+		// no label to explain it.
+		const K voice[8] = {
+			{Kit::SIZE_PARAM, "SIZE"},   {Kit::TENSION_PARAM, "TENSION"},
+			{Kit::STIFF_PARAM, "MATERIAL"}, {Kit::AIR_PARAM, "AIR"},
+			{Kit::DECAY_PARAM, "DECAY"}, {Kit::TONE_PARAM, "TONE"},
+			{Kit::EXCITE_PARAM, "EXCITER"}, {Kit::MUFFLE_PARAM, "MUFFLE"}};
+		for (int i = 0; i < 8; i++) {
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(KX[i], Y_VOICE)), module, voice[i].p));
 		}
 
-		const float tx[7] = {7.98f, 23.95f, 39.91f, 55.88f, 71.84f, 87.81f, 103.78f};
-		const K trims[7] = {{Kit::COUPLE_PARAM, "COUPLE"}, {Kit::RESO_PARAM, "RESO"},
-		                    {Kit::BEND_PARAM, "BEND"},     {Kit::WEIGHT_PARAM, "WEIGHT"},
-		                    {Kit::SNARE_PARAM, "WIRES"},   {Kit::SNARETHR_PARAM, "TIGHT"},
-		                    {Kit::LEVEL_PARAM, "LEVEL"}};
+		// HIT stays a BUTTON. It is a momentary strike, not a value, and the
+		// only reason it sits in a row of trimpots is that VCVButton is 6.10mm
+		// against Trimpot's 6.05 -- near enough to hold the grid.
+		const K chr[7] = {
+			{Kit::COUPLE_PARAM, "COUPLE"}, {Kit::RESO_PARAM, "RESO"},
+			{Kit::BEND_PARAM, "BEND"},     {Kit::WEIGHT_PARAM, "WEIGHT"},
+			{Kit::SNARE_PARAM, "WIRES"},   {Kit::SNARETHR_PARAM, "TIGHT"},
+			{Kit::LEVEL_PARAM, "LEVEL"}};
 		for (int i = 0; i < 7; i++) {
-			addParam(createParamCentered<Trimpot>(mm2px(Vec(tx[i], TY)), module, trims[i].p));
-			lbl->trim(tx[i], TY, trims[i].t);
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(KX[i], Y_CHAR)), module, chr[i].p));
 		}
+		addParam(createLightParamCentered<VCVLightButton<MediumSimpleLight<GreenLight>>>(
+			mm2px(Vec(KX[7], Y_CHAR)), module, Kit::STRIKE_PARAM, Kit::STRIKE_LIGHT));
 
 		struct J { int id; const char* t; };
-		const J in1[5] = {{Kit::GATE_INPUT, "GATE"}, {Kit::VEL_INPUT, "VEL"},
-		                  {Kit::VOCT_INPUT, "V/OCT"}, {Kit::STRIKEX_INPUT, "X"},
-		                  {Kit::STRIKEY_INPUT, "Y"}};
-		for (int i = 0; i < 5; i++) {
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(tx[i], JY1)), module, in1[i].id));
-			lbl->jack(tx[i], JY1, in1[i].t);
+		const J cv[8] = {
+			{Kit::SIZE_INPUT, "SIZE"},   {Kit::TENSION_INPUT, "TENSION"},
+			{Kit::STIFF_INPUT, "MAT"},   {Kit::AIR_INPUT, "AIR"},
+			{Kit::DECAY_INPUT, "DECAY"}, {Kit::TONE_INPUT, "TONE"},
+			{Kit::EXCITE_INPUT, "EXCITER"}, {Kit::MUFFLE_INPUT, "MUFFLE"}};
+		for (int i = 0; i < 8; i++) {
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(KX[i], Y_CV)), module, cv[i].id));
 		}
-		addParam(createLightParamCentered<VCVLightBezel<GreenLight>>(
-			mm2px(Vec(tx[5], JY1)), module, Kit::STRIKE_PARAM, Kit::STRIKE_LIGHT));
-		lbl->jack(tx[5], JY1, "HIT");
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(tx[6], JY1)), module, Kit::SNARE_OUTPUT));
-		lbl->jack(tx[6], JY1, "WIRES");
 
-		const J in2[5] = {{Kit::SIZE_INPUT, "SIZE"}, {Kit::TENSION_INPUT, "TEN"},
-		                  {Kit::STIFF_INPUT, "MAT"}, {Kit::AIR_INPUT, "AIR"},
-		                  {Kit::MUFFLE_INPUT, "MUFF"}};
+		// ── THE TRANSPORT ROW (house style) ────────────────────────────────
+		// The bottom row is performance data in and out, and nothing else:
+		// GATE, V/OCT, VEL first and in that order, then whatever else the
+		// instrument is played with, then its outputs on a plate at the right.
+		// Per-parameter CV belongs above, beside its control. See
+		// docs/conventions/panel-design.md.
+		const J perf[5] = {{Kit::GATE_INPUT, "GATE"}, {Kit::VOCT_INPUT, "V/OCT"},
+		                   {Kit::VEL_INPUT, "VEL"},   {Kit::STRIKEX_INPUT, "X"},
+		                   {Kit::STRIKEY_INPUT, "Y"}};
 		for (int i = 0; i < 5; i++) {
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(tx[i], JY2)), module, in2[i].id));
-			lbl->jack(tx[i], JY2, in2[i].t);
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(KX[i], Y_PERF)), module, perf[i].id));
 		}
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(tx[5], JY2)), module, Kit::HEAD_OUTPUT));
-		lbl->jack(tx[5], JY2, "HEAD");
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(tx[6], JY2)), module, Kit::OUT_OUTPUT));
-		lbl->jack(tx[6], JY2, "OUT");
+		const J outs[3] = {{Kit::HEAD_OUTPUT, "HEAD"}, {Kit::SNARE_OUTPUT, "WIRES"},
+		                   {Kit::OUT_OUTPUT, "MIX"}};
+		for (int i = 0; i < 3; i++) {
+			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(KX[5 + i], Y_PERF)),
+			                                           module, outs[i].id));
+		}
 	}
 };
 
