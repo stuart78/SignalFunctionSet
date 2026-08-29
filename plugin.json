@@ -444,6 +444,17 @@
         "Utility"
       ],
       "hidden": true
+    },
+    {
+      "slug": "Prism",
+      "name": "Prism",
+      "description": "Sixteen-partial additive voice after the Crumar GDS: every macro is a curve across the spectrum.",
+      "tags": [
+        "Oscillator",
+        "Polyphonic",
+        "Synth voice"
+      ],
+      "hidden": true
     }
   ]
 }

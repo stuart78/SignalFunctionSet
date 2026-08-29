@@ -45,6 +45,7 @@ void init(Plugin* p) {
 	p->addModel(modelSlice);
 	p->addModel(modelKit);
 	p->addModel(modelTrace);
+	p->addModel(modelPrism);
 
 	// Add modules here
 	// p->addModel(modelMyModule);

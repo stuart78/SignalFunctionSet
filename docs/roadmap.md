@@ -26,6 +26,38 @@ you. Known gap: the browser preview and the live display now draw the ribbon the
 same way, but the preview's content is still a synthetic sine rather than
 anything the module would produce.
 
+### Prism — v1 built, hidden
+A deep additive voice, sixteen partials, after the Crumar GDS. The GDS gave each
+oscillator a sixteen-stage amplitude AND frequency envelope, plus two complete
+envelope sets interpolated by velocity; that needed a $30,000 computer bolted to
+it to be programmable. The bet here is that the interesting behaviour survives
+two numbers per partial — envelope **depth** and envelope **rate** — because
+what makes a struck tone sound struck is that high partials die *sooner*, not
+just quieter, and depth alone cannot express that. Velocity morphs between two
+complete spectra rather than scaling one. Macros (TILT, ODD/EVEN, STRETCH,
+WIDTH, MORPH, ENV RATE, ENV SPREAD) reach all sixteen at once and take CV; deep
+editing is on screen, tabbed the way Loom is.
+
+The organising idea is that **every macro is a curve across the partial index**
+— tilt is a spread of level, stretch a spread of pitch, width a spread of pan,
+ENV SPREAD a spread of envelope start time so the tone blooms upward or the
+highs speak first and the fundamental builds underneath. The panel is that one
+gesture repeated per attribute; the screen holds the per-partial exceptions to
+it. The three LFOs use the same idea in phase rather than per-partial routing.
+
+Sixteen voices by sixteen partials, settled by measurement: 256 oscillators is
+1.6% of one core, so the GDS's spend-your-oscillators budget would be an
+artificial scarcity here rather than a homage. Specified in
+`docs/prism-design.md`. Distinct from Overtone, which stays the quick
+eight-harmonic additive VCO.
+
+Built, with the partial count now selectable at 16/32/64. What the v1 taught:
+the per-partial arrays are only worth having if the macros can be *escaped*, so
+the screen is five tabs over one shared spectrum rather than five graphs.
+Unproven by ear: whether ENV SPREAD's negative half (highs first, fundamental
+building underneath) is musical or merely a delay, and whether the SOFT/LEVEL
+velocity morph earns a second full spectrum's worth of editing.
+
 ### Comb filter
 A comb as an instrument rather than a utility: the delay-line half of what
 Loom's strings already do, exposed on its own so it can colour any source.
