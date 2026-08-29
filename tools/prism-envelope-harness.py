@@ -1,9 +1,15 @@
 # Builds a standalone harness from src/prism.cpp by EXTRACTING the real blocks.
 # Nothing here is retyped: if a block cannot be found the generator fails loudly
 # rather than silently testing a stale copy of the code.
+#
+#   cd /tmp && python3 <repo>/tools/prism-envelope-harness.py
+#   g++ -std=c++11 -O1 -o h h.cpp
+#   ./h 1     # retrigger step per preset -- the VCA discontinuity
+#   ./h 2     # attack time vs one cycle of each partial's own frequency
+#   ./h 0     # summed peak level per preset, against the +/-10V clamp
 import re, sys, os
-SRC = open('' + os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src', 'prism.cpp') + '').read()
-OUT = os.path.dirname(os.path.abspath(__file__))
+SRC = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src', 'prism.cpp')).read()
+OUT = os.getcwd()          # writes h.cpp beside you, not into tools/
 
 def grab(pat, label, flags=re.S):
     m = re.search(pat, SRC, flags)
@@ -42,6 +48,7 @@ H = r'''
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <algorithm>
 static float clamp(float v, float lo, float hi){ return v<lo?lo:(v>hi?hi:v); }
 %(consts)s
