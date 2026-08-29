@@ -187,3 +187,33 @@ at shutdown, and nothing about the running module hints at it.
 
 (A PNG is worth reaching for at all because nanosvg implements no SVG filters,
 so a drop shadow on component artwork is silently dropped.)
+
+## Figma exports
+
+A Figma export and a Rack panel are the same picture in two coordinate systems,
+and the conversion fails the same three ways every time — all three silent until
+you render. **`.claude/skills/figma-panel/` automates the checks**; run
+`scripts/figma_panel.py normalize|grid|check` rather than re-deriving them.
+
+1. **Figma writes a pixel artboard.** `width="1320"` is read by Rack at 75dpi as
+   447mm, so the module renders ~88HP wide. The header needs mm, snapped to the
+   HP grid. `res/slice.svg` is the reference.
+2. **Figma outlines its text, and Rack renders outlined paths.** It ignores only
+   `<text>`, which is why the half-remembered rule misleads. A widget that also
+   calls `PanelLabels` prints every label twice, half a millimetre out. When the
+   art carries text, the widget carries none — see `src/slice.cpp`, `src/kit.cpp`.
+3. **The guide circles are the spec.** Stroked `#B2B2B2`; their centres are the
+   control positions and their drawn diameters say which component was intended.
+
+Do NOT run `tools/panel_reticules.py` over a fresh export. That tool is for
+panels laid out **from code**; an export already carries its screens and plates
+as flattened paths, and regenerating adds a second copy on top.
+
+## The transport row
+
+The bottom row is performance data in and out, and nothing else: `GATE`,
+`V/OCT`, `VEL` first and in that order, then whatever else the instrument is
+played with, then its outputs on a dark plate at the right. Per-parameter CV
+belongs above, beside the control it modulates — ideally a full row in the same
+order as the controls it feeds, so a cable hangs under the thing it changes and
+the pairing needs no label.
