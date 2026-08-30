@@ -83,7 +83,52 @@ static const char* SG_MODNAME[SG_MOD_N] = {"LVL", "PIT", "PAN", "TLT", "STR", "C
 static const int SG_MODSRC = 4;
 static const char* SG_SRCNAME[SG_MODSRC] = {"LFO1", "LFO2", "LFO3", "ENV"};
 static const int SG_SCOPE = 512;
-static const int SG_NPRESET = 14;
+
+// Sixteen voices sum, and a hard clamp is the harshest thing an overload can
+// do. Measured single-voice peaks run to 6.9V on Bell, and incoherent voices
+// grow as sqrt(N) -- so a THREE-NOTE CHORD on Bell reached the old +/-10V clamp
+// and tore. Linear to +/-6V and then bending, asymptotic to +/-10, the worst
+// case compresses instead. Same curve as Loom, which learned this first with
+// eight bowed strings.
+// A fixed pseudo-random position per partial. A HASH, not a random draw: the
+// stereo image has to be the same every time the patch loads, and the same for
+// every voice, or a chord smears instead of placing itself.
+static inline float sgScatter(int p) {
+	uint32_t h = (uint32_t)p * 2654435761u;
+	h ^= h >> 15; h *= 2246822519u; h ^= h >> 13;
+	return (float)((h >> 8) & 0xFFFF) / 32767.5f - 1.f;
+}
+
+static inline float sgSoftClip(float x) {
+	const float T = 6.f, K = 4.f;
+	float a = std::fabs(x);
+	if (a <= T) return x;
+	return std::copysign(T + K * (1.f - K / (K + a - T)), x);
+}
+static const int SG_NPRESET = 21;
+
+// The ADSR sliders read in MILLISECONDS. What is stored is a 0..1 position on
+// an exponential map, and "0.373" says nothing about an envelope -- you cannot
+// tell a 4ms attack from a 400ms one, which is the whole difference between a
+// struck tone and a bowed one. The map lives here rather than in the display so
+// the tooltip, the typed-in value and the engine all read the same curve.
+struct SgTimeQuantity : ParamQuantity {
+	float lo = 0.001f, hi = 8.f;
+	float seconds() { return lo * std::pow(hi / lo, getValue()); }
+	std::string getDisplayValueString() override {
+		float ms = seconds() * 1000.f;
+		// A decimal below 10ms, where the difference between 1.0 and 1.4 is
+		// most of a cycle at the bottom of the range; whole milliseconds above,
+		// where a tenth of one is noise.
+		return ms < 10.f ? string::f("%.1f ms", ms) : string::f("%.0f ms", ms);
+	}
+	void setDisplayValueString(std::string t) override {
+		float ms = 0.f;
+		if (std::sscanf(t.c_str(), "%f", &ms) != 1) return;
+		float sec = clamp(ms * 0.001f, lo, hi);
+		setValue(std::log(sec / lo) / std::log(hi / lo));
+	}
+};
 
 struct Sigma : Module {
 	enum ParamId {
@@ -97,14 +142,23 @@ struct Sigma : Module {
 		LFOSPREAD_PARAM = LFODEPTH_PARAM + 3,           // 3
 		CUTOFF_PARAM    = LFOSPREAD_PARAM + 3,
 		RESO_PARAM,
-		PARAMS_LEN
+		// APPENDED 2026-08, after the Synergy manual. Params serialise by index,
+		// so these go on the end however much they belong beside MORPH.
+		AMPSENS_PARAM, AMPCENTER_PARAM,   // velocity -> loudness
+		MORPHSENS_PARAM,                  // velocity -> timbre, MORPH is its centre
+		LFODELAY_PARAM,                   // 3
+		LFORAND_PARAM = LFODELAY_PARAM + 3,   // 3
+		PARAMS_LEN = LFORAND_PARAM + 3
 	};
 	enum InputId {
 		VOCT_INPUT, GATE_INPUT, VEL_INPUT, VCA_INPUT,
 		TILT_INPUT, ODDEVEN_INPUT, STRETCH_INPUT, WIDTH_INPUT, MORPH_INPUT,
 		ENVRATE_INPUT, ENVSPREAD_INPUT, CUTOFF_INPUT,
 		LFOSYNC_INPUT,                                  // 3
-		INPUTS_LEN = LFOSYNC_INPUT + 3
+		// APPENDED for the 2026-08 panel, which draws a jack under RES. Inputs
+		// serialise by index, so it goes on the end rather than beside CUTOFF.
+		RESO_INPUT = LFOSYNC_INPUT + 3,
+		INPUTS_LEN
 	};
 	enum OutputId { L_OUTPUT, R_OUTPUT, OUTPUTS_LEN };
 	enum LightId  { LIGHTS_LEN };
@@ -128,11 +182,49 @@ struct Sigma : Module {
 		int   stage[SG_MAXP] = {};
 		float wait[SG_MAXP] = {};      // ENV SPREAD's start delay
 		float relFrom[SG_MAXP] = {};
+		// The highest this partial's envelope has reached since the note began.
+		// An INVERTED partial needs it: "one minus the envelope" is 1 at the
+		// end of a note and also 1 before it has started, and the second of
+		// those is not a bloom, it is a blast.
+		float envMax[SG_MAXP] = {};
 		float mEnv = 0.f; int mStage = ST_IDLE; float mRelFrom = 0.f;
+		float ampGain = 1.f;      // velocity -> level, latched at note-on
+		// The LFOs run PER VOICE. A periodic vibrato locks every voice together
+		// (the Synergy: a new note "immediately starts tracking" the one
+		// already sounding), where a random one must not, or every note in a
+		// chord wobbles identically and the whole point is lost.
+		float lfoPh[3] = {};
+		float rndCur[3] = {}, rndNext[3] = {};
+		uint32_t rng = 1u;
+		float age = 0.f;          // seconds since this note was struck
 	};
 	Voice voice[SG_VOICES];
 
-	float lfoPhase[3] = {};
+	// Which voice each poly channel is currently driving, or -1. A channel owns
+	// a voice only while its gate is HIGH; once released the voice keeps ringing
+	// on its own and the channel is free to strike another. That is what lets a
+	// MONO gate line overlap: sixteen voices, one channel feeding them in turn.
+	// -1 rather than 0, and set in the constructor as well as onReset, because
+	// 0 is a VALID voice index -- a default-initialised array would claim every
+	// channel already owns voice 0.
+	int chanVoice[SG_VOICES];
+	// FIRST AVAILABLE takes any idle voice, so a repeated note keeps landing on
+	// voice 0 and each strike cuts short the tail of the last. ROLLING takes the
+	// NEXT voice every time regardless, which maximises the time before a voice
+	// is reused -- on the Gong that is the difference between a ringing pile and
+	// a stutter. Both are the Synergy's, and its reason for having both is the
+	// same one.
+	enum Alloc { ALLOC_FIRST, ALLOC_ROLL };
+	int allocMode = ALLOC_FIRST;
+	int rollNext = 0;
+	float lfoPhase[3] = {};      // the shared periodic phase a locked voice tracks
+	// A deterministic per-voice generator. random::uniform() would make the
+	// same patch sound different on every load, and worse, would not be the
+	// same twice under the harness.
+	static inline float vrand(uint32_t& st) {
+		st = st * 1664525u + 1013904223u;
+		return (float)((st >> 8) & 0xFFFFFF) / (float)0xFFFFFF * 2.f - 1.f;
+	}
 	dsp::SchmittTrigger lfoSyncTrig[3];
 	float mod[SG_MODSRC][SG_MOD_N] = {};   // the matrix, bipolar
 
@@ -163,6 +255,7 @@ struct Sigma : Module {
 	};
 
 	Sigma() {
+		for (int v = 0; v < SG_VOICES; v++) chanVoice[v] = -1;
 		prInitTable();
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 
@@ -176,7 +269,12 @@ struct Sigma : Module {
 		// up from here opens the even harmonics and the tone fills out.
 		configParam(ODDEVEN_PARAM, -1.f, 1.f, -1.f, "Odd / even balance");
 		configParam(STRETCH_PARAM, 0.f, 1.f, 0.f, "Stretch (inharmonicity)");
-		configParam(WIDTH_PARAM, 0.f, 1.f, 0.5f, "Stereo width");
+		// BIPOLAR. Right fans the partials out in order, low to high; left
+		// SCATTERS them. Two genuinely different stereo images, and the fan was
+		// the only one available -- which is right for a bloom that should open
+		// outward and wrong for anything meant to be a body of sound rather
+		// than a diagram of one.
+		configParam(WIDTH_PARAM, -1.f, 1.f, 0.35f, "Stereo width (- scatter, + fan)");
 		// BIPOLAR, and it has to be. Velocity is 1.0 when VEL is unpatched, so a
 		// 0..1 morph that only ADDS to it sat pinned at the loud spectrum
 		// forever: SOFT was unreachable and MORPH itself did nothing until you
@@ -186,10 +284,16 @@ struct Sigma : Module {
 		configParam(ENVRATE_PARAM, 0.f, 1.f, 0.35f, "Envelope rate spread (highs die sooner)");
 		configParam(ENVSPREAD_PARAM, -1.f, 1.f, 0.f, "Envelope time spread (bloom / onset)");
 
-		configParam(ATTACK_PARAM,  0.f, 1.f, 0.02f, "Attack");
-		configParam(DECAY_PARAM,   0.f, 1.f, 0.35f, "Decay");
+		// The three ranges are the ones the engine uses, stated once here and
+		// read back by knobTime() below -- if they ever disagree the tooltip
+		// becomes a lie, which is worse than no tooltip.
+		auto* qa = configParam<SgTimeQuantity>(ATTACK_PARAM,  0.f, 1.f, 0.02f, "Attack");
+		qa->lo = 0.001f; qa->hi = 8.f;
+		auto* qd = configParam<SgTimeQuantity>(DECAY_PARAM,   0.f, 1.f, 0.35f, "Decay");
+		qd->lo = 0.005f; qd->hi = 12.f;
 		configParam(SUSTAIN_PARAM, 0.f, 1.f, 0.5f,  "Sustain", "%", 0.f, 100.f);
-		configParam(RELEASE_PARAM, 0.f, 1.f, 0.3f,  "Release");
+		auto* qr = configParam<SgTimeQuantity>(RELEASE_PARAM, 0.f, 1.f, 0.3f,  "Release");
+		qr->lo = 0.005f; qr->hi = 16.f;
 
 		for (int i = 0; i < 3; i++) {
 			configParam<LfoHzQuantity>(LFORATE_PARAM + i, 0.f, 1.f, 0.3f,
@@ -218,6 +322,30 @@ struct Sigma : Module {
 		// -- and it costs one evaluation per partial that was already looping.
 		configParam(CUTOFF_PARAM, 0.f, 1.f, 1.f, "Cutoff");
 		configParam(RESO_PARAM, 0.f, 1.f, 0.f, "Resonance");
+		configInput(RESO_INPUT, "Resonance CV");
+
+		// ── touch response, after the Synergy's four knobs ──────────────────
+		// SENSITIVITY is how much of the range velocity commands; CENTRE is
+		// where that range sits. The pair is the Synergy's idea and it is worth
+		// copying exactly, because with sensitivity at zero the centre stops
+		// being an offset and becomes a plain level control -- one knob doing
+		// two jobs with no mode to switch.
+		//
+		// Amplitude and timbre are kept INDEPENDENT, which the manual is
+		// emphatic about: you can have a voice whose loudness barely moves while
+		// its whole range of timbres is available, or the reverse.
+		configParam(AMPSENS_PARAM, 0.f, 1.f, 0.6f, "Velocity to level", "%", 0.f, 100.f);
+		configParam(AMPCENTER_PARAM, 0.f, 1.f, 0.8f, "Level centre", "%", 0.f, 100.f);
+		// 0.5 is the pre-2026-08 behaviour exactly: velocity spanning the whole
+		// morph, linearly. Below that it commands less of it; above, the blend
+		// hardens toward a SWITCH between the two spectra.
+		configParam(MORPHSENS_PARAM, 0.f, 1.f, 0.5f, "Velocity to timbre", "%", 0.f, 100.f);
+		for (int i = 0; i < 3; i++) {
+			configParam(LFODELAY_PARAM + i, 0.f, 1.f, 0.f,
+			            string::f("LFO %d delay", i + 1), " s", 0.f, 3.f);
+			configParam(LFORAND_PARAM + i, 0.f, 1.f, 0.f,
+			            string::f("LFO %d random", i + 1), "%", 0.f, 100.f);
+		}
 		configOutput(L_OUTPUT, "Left");
 		configOutput(R_OUTPUT, "Right");
 
@@ -262,7 +390,7 @@ struct Sigma : Module {
 	void onReset(const ResetEvent& e) override {
 		Module::onReset(e);
 		initSpectrum();
-		for (int v = 0; v < SG_VOICES; v++) voice[v] = Voice();
+		for (int v = 0; v < SG_VOICES; v++) { voice[v] = Voice(); chanVoice[v] = -1; }
 		for (int i = 0; i < 3; i++) lfoPhase[i] = 0.f;
 		for (int r = 0; r < SG_MODSRC; r++)
 			for (int d = 0; d < SG_MOD_N; d++) mod[r][d] = 0.f;
@@ -278,6 +406,33 @@ struct Sigma : Module {
 		return clamp(std::log(sec / lo) / std::log(hi / lo), 0.f, 1.f);
 	}
 	static float lfoKnob(float hz) { return timeKnob(hz, 0.02f, 30.f); }
+
+	// ── the Synergy's touch response, both axes ────────────────────────────
+	// SENSITIVITY is how much of the range velocity commands; CENTRE is where
+	// that range sits. With sensitivity at zero the centre is simply the value,
+	// which is why the pair needs no separate on/off.
+	static float touch(float vel, float sens, float centre) {
+		return clamp(centre + sens * (vel - 0.5f), 0.f, 1.f);
+	}
+
+	// Timbre is deliberately NOT the same curve. On the Synergy the widest
+	// spread between the two timbres is at the MIDDLE of the sensitivity range,
+	// and past the middle the control stops blending and starts SWITCHING --
+	// slow playing gives one spectrum, fast playing the other, with less and
+	// less in between. Storing two complete spectra and only ever crossfading
+	// them wastes what having two is for; a hard switch is a thing a crossfade
+	// cannot do at all.
+	static float touchMorph(float vel, float sens, float centre01) {
+		float span = std::min(sens, 0.5f) * 2.f;          // 0..1 over the lower half
+		float hard = std::max(0.f, sens - 0.5f) * 2.f;    // 0..1 over the upper half
+		float x = clamp(vel, 0.f, 1.f) * 2.f - 1.f;       // -1..1
+		if (hard > 0.f) {
+			float k = 1.f + hard * 15.f;
+			float y = std::tanh(x * k) / std::tanh(k);
+			x = x + (y - x) * hard;                       // linear -> step
+		}
+		return clamp(centre01 + span * 0.5f * x, 0.f, 1.f);
+	}
 	static float cutKnob(float hz) {                       // fc = 30 * 2^(k*10)
 		return clamp(std::log2(std::max(hz, 30.f) / 30.f) / 10.f, 0.f, 1.f);
 	}
@@ -321,7 +476,7 @@ struct Sigma : Module {
 				params[RELEASE_PARAM].setValue(timeKnob(0.3f, 0.005f, 16.f));
 				break;
 
-			case 2: {  // CS-80 -- lush brass. Slow swell, wide, and drifting:
+			case 14: {  // CS-80 -- lush brass. Slow swell, wide, and drifting:
 				// the CS-80's signature is not a waveform, it is that nothing
 				// in it sits still, so the two LFOs matter more than the levels.
 				for (int p = 0; p < SG_MAXP; p++) {
@@ -333,7 +488,7 @@ struct Sigma : Module {
 				params[STRETCH_PARAM].setValue(0.06f);      // a little unrest
 				params[WIDTH_PARAM].setValue(0.75f);
 				params[ENVRATE_PARAM].setValue(0.2f);
-				params[ATTACK_PARAM].setValue(timeKnob(0.35f, 0.001f, 8.f));
+				params[ATTACK_PARAM].setValue(timeKnob(0.22f, 0.001f, 8.f));
 				params[DECAY_PARAM].setValue(timeKnob(1.2f, 0.005f, 12.f));
 				params[SUSTAIN_PARAM].setValue(0.75f);
 				params[RELEASE_PARAM].setValue(timeKnob(0.9f, 0.005f, 16.f));
@@ -349,7 +504,7 @@ struct Sigma : Module {
 				break;
 			}
 
-			case 3: {  // MARIMBA -- a tuned bar is UNDERCUT so its first
+			case 5: {  // MARIMBA -- a tuned bar is UNDERCUT so its first
 				// overtone lands two octaves up, at 4x rather than the 2x a
 				// harmonic series would give, and the next near 10x. That is
 				// the whole sound, and it is why this preset is really a use of
@@ -359,13 +514,17 @@ struct Sigma : Module {
 					pRate[p] = 0.5f; pDepth[p] = 1.f;
 				}
 				pLevel[0] = 1.f;                                   // fundamental
-				pLevel[1] = 0.45f; pPitch[1] = 0.5f;                    // 2x -> 4x
-				pLevel[2] = 0.16f; pPitch[2] = std::log2(10.f / 3.f) / 2.f;  // 3x -> 10x
-				pLevel[5] = 0.05f;                                 // a little air
-				for (int p = 0; p < SG_MAXP; p++)
-					pRate[p] = clamp(0.5f + 0.03f * (float)p, 0.f, 1.f);
+				pLevel[1] = 0.32f; pPitch[1] = 0.5f;                    // 2x -> 4x
+				// The 10x was at 0.16 and it is INHARMONIC, so it read as metal
+				// rather than as wood. On a real bar the second overtone is
+				// audible in the strike and gone almost at once; it belongs in
+				// the attack, not in the tone.
+				pLevel[2] = 0.06f; pPitch[2] = std::log2(10.f / 3.f) / 2.f;  // 3x -> 10x
+				// and the two overtones die far sooner than the fundamental,
+				// which is most of what separates a struck bar from a bell
+				pRate[1] = 0.74f; pRate[2] = 0.88f;
 				params[ODDEVEN_PARAM].setValue(0.f);
-				params[ENVRATE_PARAM].setValue(0.55f);
+				params[ENVRATE_PARAM].setValue(0.68f);
 				params[ATTACK_PARAM].setValue(timeKnob(0.002f, 0.001f, 8.f));
 				params[DECAY_PARAM].setValue(timeKnob(0.45f, 0.005f, 12.f));
 				params[SUSTAIN_PARAM].setValue(0.f);               // struck, not held
@@ -374,30 +533,61 @@ struct Sigma : Module {
 				break;
 			}
 
-			case 4: {  // BELL -- STRETCH as the instrument. B = stretch^2/50 and
-				// f_n = n*f0*sqrt(1 + B*n^2), so at 0.55 the octave partial is
-				// 21 cents sharp, the fourth 80 cents, the eighth 17.8% and the
-				// sixteenth 59.6%. The partials stop agreeing on a fundamental
-				// while the low ones still nearly do, which is the difference
-				// between a struck bar and a struck bell -- and between this and
-				// the Gong preset, where they stop agreeing altogether.
+			case 6: {  // BELL -- the PARTIALS OF A BELL, placed one by one.
+				// STRETCH was the wrong tool: it bends the whole series smoothly
+				// and that is a gong, not a bell. A bell is tuned, and what it
+				// is tuned TO is a specific set -- hum, prime, TIERCE, quint,
+				// nominal. The tierce sits a minor third above the prime, and
+				// that one interval is why a bell sounds like a bell and why
+				// bells have a minor tonality. A smooth stretch has no minor
+				// third anywhere in it, which is exactly why the old one came
+				// out thin and tinny.
+				//
+				// Ratios 0.5 / 1.0 / 1.2 / 1.5 / 2.0 / 2.5 / 3.0 / 4.0, reached
+				// by detuning harmonic n down to the ratio wanted.
 				for (int p = 0; p < SG_MAXP; p++) {
-					pLevel[p] = 1.f / std::pow((float)(p + 1), 0.8f);
-					pSoft[p]  = 1.f / std::pow((float)(p + 1), 1.6f);
-					pRate[p]  = clamp(0.5f + 0.02f * (float)p, 0.f, 1.f);
-					pDepth[p] = 1.f;
+					pLevel[p] = 0.f; pSoft[p] = 0.f; pPitch[p] = 0.f;
+					pRate[p] = 0.5f; pDepth[p] = 1.f;
 				}
-				params[STRETCH_PARAM].setValue(0.55f);
-				params[ENVRATE_PARAM].setValue(0.6f);   // highs die SOONER
+				// The RATIOS ARE RIGHT and stay untouched. An attempt to temper
+				// them toward the harmonic series was measured and thrown away:
+				// interpolating each partial toward harmonic n moved the whole
+				// set 420-594 cents sharp and stretched prime-to-tierce from
+				// 316 cents to 871, which does not reduce the detuning, it
+				// destroys the minor third the bell is built on.
+				//
+				// "Too detuned" was a BALANCE problem. The tierce was the
+				// loudest partial in the set, so the minor third was the pitch
+				// you heard rather than a colour on the prime. Prime leads now
+				// and the tierce sits under it, which is how a bell you would
+				// call in tune is actually voiced.
+				static const float BR[8] = {0.5f, 1.f, 1.2f, 1.5f, 2.f, 2.5f, 3.f, 4.f};
+				// Rebalanced AND re-levelled. Dropping the tierce to fix the
+				// balance took the whole preset 2.4x quieter than its
+				// neighbours, which is its own kind of wrong; everything is
+				// scaled back up with the prime pinned at the top, so the prime
+				// still leads and the preset sits with the others.
+				static const float BL[8] = {0.40f, 1.f, 0.74f, 0.51f, 0.84f,
+				                            0.27f, 0.22f, 0.15f};
+				for (int p = 0; p < 8; p++) {
+					float n = (float)(p + 1);
+					pLevel[p] = BL[p];
+					pSoft[p]  = BL[p] * (p < 3 ? 0.9f : 0.35f);   // quiet = fewer highs
+					pPitch[p] = std::log2(BR[p] / n) / 2.f;
+					// the upper partials are the strike, the low ones the ring
+					pRate[p]  = clamp(0.5f + 0.055f * (float)p, 0.f, 1.f);
+				}
+				params[STRETCH_PARAM].setValue(0.f);       // the pitches ARE the bell
+				params[ENVRATE_PARAM].setValue(0.35f);
 				params[ATTACK_PARAM].setValue(timeKnob(0.002f, 0.001f, 8.f));
-				params[DECAY_PARAM].setValue(timeKnob(6.f, 0.005f, 12.f));
+				params[DECAY_PARAM].setValue(timeKnob(7.f, 0.005f, 12.f));
 				params[SUSTAIN_PARAM].setValue(0.f);
-				params[RELEASE_PARAM].setValue(timeKnob(5.f, 0.005f, 16.f));
-				params[WIDTH_PARAM].setValue(0.5f);
+				params[RELEASE_PARAM].setValue(timeKnob(6.f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.45f);
 				break;
 			}
 
-			case 5: {  // BOWED -- ENV SPREAD's NEGATIVE half, which is the part
+			case 11: {  // BOWED -- ENV SPREAD's NEGATIVE half, which is the part
 				// that reads as broken when you sweep it with nothing else set
 				// up. A bow does not start a note, it works one up: the upper
 				// partials speak first and the fundamental arrives underneath
@@ -414,15 +604,19 @@ struct Sigma : Module {
 				params[ATTACK_PARAM].setValue(timeKnob(0.12f, 0.001f, 8.f));
 				params[DECAY_PARAM].setValue(timeKnob(0.5f, 0.005f, 12.f));
 				params[SUSTAIN_PARAM].setValue(0.9f);
-				params[RELEASE_PARAM].setValue(timeKnob(0.25f, 0.005f, 16.f));
+				params[RELEASE_PARAM].setValue(timeKnob(0.7f, 0.005f, 16.f));
 				mod[0][SG_MOD_PITCH] = 0.07f;
+				// A bow leaves the string ringing; it does not stop it. And the
+				// vibrato now waits, which is the single biggest thing separating
+				// a played vibrato from an applied one.
+				params[LFODELAY_PARAM + 0].setValue(0.25f);   // 0.75s
 				params[LFORATE_PARAM + 0].setValue(lfoKnob(5.2f));
 				params[LFOSPREAD_PARAM + 0].setValue(0.f);   // one vibrato, not sixteen
 				params[WIDTH_PARAM].setValue(0.35f);
 				break;
 			}
 
-			case 6: {  // BLOOM -- ENV SPREAD's positive half AND negative DEPTH
+			case 16: {  // BLOOM -- ENV SPREAD's positive half AND negative DEPTH
 				// together, the only preset that uses the inverse envelope. The
 				// upper half of the spectrum both starts late and follows the
 				// envelope BACKWARDS, so those partials arrive as the lower ones
@@ -444,7 +638,7 @@ struct Sigma : Module {
 				break;
 			}
 
-			case 7: {  // E-PIANO -- the SOFT/LEVEL morph on its own, with MORPH
+			case 3: {  // E-PIANO -- the SOFT/LEVEL morph on its own, with MORPH
 				// left at zero so VELOCITY has the whole say. Played softly this
 				// is very nearly a sine; played hard the tine bark at partials
 				// 4-6 comes in. That is a different spectrum, not a louder one,
@@ -461,12 +655,12 @@ struct Sigma : Module {
 				params[ATTACK_PARAM].setValue(timeKnob(0.003f, 0.001f, 8.f));
 				params[DECAY_PARAM].setValue(timeKnob(1.6f, 0.005f, 12.f));
 				params[SUSTAIN_PARAM].setValue(0.14f);
-				params[RELEASE_PARAM].setValue(timeKnob(0.5f, 0.005f, 16.f));
+				params[RELEASE_PARAM].setValue(timeKnob(0.85f, 0.005f, 16.f));
 				params[WIDTH_PARAM].setValue(0.3f);
 				break;
 			}
 
-			case 8: {  // ROTOR -- PAN spread. LFO2 sweeps pan with its spread
+			case 18: {  // ROTOR -- PAN spread. LFO2 sweeps pan with its spread
 				// wide open, so the partials are at different points of the
 				// same circle and the spectrum turns rather than the sound
 				// sliding side to side. LFO1 works level in the opposite
@@ -483,6 +677,7 @@ struct Sigma : Module {
 				params[SUSTAIN_PARAM].setValue(0.85f);
 				params[RELEASE_PARAM].setValue(timeKnob(0.6f, 0.005f, 16.f));
 				params[WIDTH_PARAM].setValue(1.f);
+				params[CUTOFF_PARAM].setValue(cutKnob(2600.f));
 				mod[1][SG_MOD_PAN]   =  0.85f;
 				mod[0][SG_MOD_LEVEL] = -0.30f;
 				params[LFORATE_PARAM + 1].setValue(lfoKnob(0.8f));
@@ -492,30 +687,7 @@ struct Sigma : Module {
 				break;
 			}
 
-			case 9: {  // CLARINET -- ODD/EVEN against a DRAWN level, because a
-				// clarinet is not simply "odd harmonics". Its 3rd and 5th are
-				// strong, the 7th is nearly as loud as the 5th, and everything
-				// above about the 11th falls off a cliff. ODD/EVEN alone gives
-				// a hollow square; the drawn curve is what makes it reedy.
-				for (int p = 0; p < SG_MAXP; p++) {
-					pLevel[p] = 0.f; pSoft[p] = 0.f;
-					pRate[p]  = 0.5f; pDepth[p] = 1.f;
-				}
-				static const float CL[9] =
-					{1.f, 0.f, 0.82f, 0.f, 0.60f, 0.f, 0.52f, 0.f, 0.22f};
-				for (int p = 0; p < 9; p++) { pLevel[p] = CL[p]; pSoft[p] = CL[p] * 0.55f; }
-				pLevel[10] = 0.08f; pLevel[12] = 0.03f;
-				params[ODDEVEN_PARAM].setValue(-1.f);
-				params[ENVRATE_PARAM].setValue(0.f);
-				params[ATTACK_PARAM].setValue(timeKnob(0.03f, 0.001f, 8.f));
-				params[DECAY_PARAM].setValue(timeKnob(0.2f, 0.005f, 12.f));
-				params[SUSTAIN_PARAM].setValue(0.95f);
-				params[RELEASE_PARAM].setValue(timeKnob(0.12f, 0.005f, 16.f));
-				params[WIDTH_PARAM].setValue(0.2f);
-				break;
-			}
-
-			case 10: {  // GONG -- 64 partials, and the only preset that
+			case 10: {  // PSYCHEDELIC GONG -- 64 partials, and the only preset
 				// MODULATES inharmonicity rather than setting it. A struck gong
 				// does not hold still: its partials wander as the plate's modes
 				// trade energy, and LFO3 on STRETCH is the cheapest honest
@@ -550,7 +722,7 @@ struct Sigma : Module {
 				break;
 			}
 
-			case 11: {  // VOWEL -- formants drawn straight into the spectrum. An
+			case 13: {  // VOWEL -- formants drawn straight into the spectrum. An
 				// "ah" sits at roughly 730 / 1090 / 2440 Hz, which against a
 				// 261.6 Hz fundamental is partials 2.8, 4.2 and 9.3. Peaks are
 				// therefore placed by FREQUENCY and not by index, and the
@@ -583,7 +755,7 @@ struct Sigma : Module {
 				break;
 			}
 
-			case 12: {  // ACID -- the only preset where the spectral filter IS
+			case 19: {  // ACID -- the only preset where the spectral filter IS
 				// the instrument. A saw, the cutoff parked low, resonance up,
 				// and the envelope driving CUT hard from the matrix. Worth
 				// contrasting with a real ladder: this filter is evaluated per
@@ -596,18 +768,22 @@ struct Sigma : Module {
 					pRate[p]  = 0.5f; pDepth[p] = 1.f;
 				}
 				params[ENVRATE_PARAM].setValue(0.f);
-				params[CUTOFF_PARAM].setValue(cutKnob(320.f));
-				params[RESO_PARAM].setValue(0.8f);
-				mod[3][SG_MOD_CUT] = 0.55f;
+				// TILT is POSITIVE FOR DARKER: lv *= n^(-tilt*2.5), so a positive
+				// value pulls the high partials down. A small amount takes the
+				// glare off the top without touching the filter.
+				params[TILT_PARAM].setValue(0.18f);
+				params[CUTOFF_PARAM].setValue(cutKnob(170.f));
+				params[RESO_PARAM].setValue(0.85f);
+				mod[3][SG_MOD_CUT] = 0.78f;
 				params[ATTACK_PARAM].setValue(timeKnob(0.002f, 0.001f, 8.f));
-				params[DECAY_PARAM].setValue(timeKnob(0.28f, 0.005f, 12.f));
+				params[DECAY_PARAM].setValue(timeKnob(0.19f, 0.005f, 12.f));
 				params[SUSTAIN_PARAM].setValue(0.05f);
 				params[RELEASE_PARAM].setValue(timeKnob(0.15f, 0.005f, 16.f));
 				params[WIDTH_PARAM].setValue(0.f);
 				break;
 			}
 
-			case 13: {  // ENSEMBLE -- PITCH as fine detune, the counterpart to
+			case 20: {  // ENSEMBLE -- PITCH as fine detune, the counterpart to
 				// Marimba's coarse retuning. Each partial is a few cents off its
 				// harmonic, by a fixed irrational-stride pattern rather than by
 				// random(), so the preset is the same every time it is loaded.
@@ -634,6 +810,274 @@ struct Sigma : Module {
 				params[LFOSPREAD_PARAM + 0].setValue(1.f);
 				break;
 			}
+
+			case 4: {  // VIBRAPHONE -- the MOTOR. A vibraphone's tremolo is
+				// not an effect on the tone, it is discs spinning in the
+				// resonator tubes under the bars, and it is the one classic
+				// additive sound Sigma could not make: nothing else here uses
+				// an LFO on LEVEL as the point of the patch.
+				//
+				// Aluminium bars are undercut like a marimba's, so the same
+				// 1 : 4 : 10 -- but far purer, and they ring for seconds.
+				for (int p = 0; p < SG_MAXP; p++) {
+					pLevel[p] = 0.f; pSoft[p] = 0.f; pPitch[p] = 0.f;
+					pRate[p] = 0.5f; pDepth[p] = 1.f;
+				}
+				pLevel[0] = 1.f;    pSoft[0] = 1.f;
+				pLevel[1] = 0.22f;  pSoft[1] = 0.10f;  pPitch[1] = 0.5f;
+				pLevel[2] = 0.05f;  pSoft[2] = 0.02f;  pPitch[2] = std::log2(10.f / 3.f) / 2.f;
+				pRate[1] = 0.66f; pRate[2] = 0.78f;
+				params[ENVRATE_PARAM].setValue(0.30f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.003f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(4.5f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.f);
+				params[RELEASE_PARAM].setValue(timeKnob(3.5f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.25f);
+				mod[0][SG_MOD_LEVEL] = 0.38f;                  // the discs
+				params[LFORATE_PARAM + 0].setValue(lfoKnob(5.2f));
+				params[LFOSPREAD_PARAM + 0].setValue(0.f);     // one motor, not sixteen
+				break;
+			}
+
+			case 7: {  // TUBULAR BELLS -- a different bell entirely. Where a cast
+				// bell is tuned to hum/prime/tierce, a hanging tube rings at
+				// 1 : 2.76 : 5.40 : 8.93, and those upper three are near enough
+				// to 2:4:6 that the ear invents a fundamental an octave BELOW
+				// the tube's own -- which is why chimes sound lower than they
+				// measure. Nothing else here puts the PITCH tab to this use.
+				for (int p = 0; p < SG_MAXP; p++) {
+					pLevel[p] = 0.f; pSoft[p] = 0.f; pPitch[p] = 0.f;
+					pRate[p] = 0.5f; pDepth[p] = 1.f;
+				}
+				static const float TB[5] = {1.f, 2.76f, 5.40f, 8.93f, 13.34f};
+				static const float TL[5] = {0.55f, 1.f, 0.62f, 0.34f, 0.16f};
+				for (int p = 0; p < 5; p++) {
+					pLevel[p] = TL[p];
+					pSoft[p]  = TL[p] * (p < 2 ? 0.85f : 0.3f);
+					pPitch[p] = std::log2(TB[p] / (float)(p + 1)) / 2.f;
+					pRate[p]  = clamp(0.5f + 0.06f * (float)p, 0.f, 1.f);
+				}
+				params[ENVRATE_PARAM].setValue(0.30f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.0015f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(9.f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.f);
+				params[RELEASE_PARAM].setValue(timeKnob(7.f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.4f);
+				break;
+			}
+
+			case 12: {  // CHOIR -- the case where per-voice RANDOM matters most.
+				// A chord whose vibratos all lock reads as one machine; the
+				// same chord with each voice drifting on its own reads as
+				// people. That is the Synergy's aperiodic vibrato, and a choir
+				// is what it is for.
+				nPartials = 32;
+				static const float FQ[3] = {730.f, 1150.f, 2600.f};   // "ah"
+				static const float AM[3] = {1.f, 0.55f, 0.16f};
+				static const float BW[3] = {1.3f, 1.6f, 2.4f};
+				for (int p = 0; p < SG_MAXP; p++) {
+					float n = (float)(p + 1);
+					float v = 0.05f / n;
+					for (int k = 0; k < 3; k++) {
+						float d = (n - FQ[k] / 261.6f) / BW[k];
+						v += AM[k] * std::exp(-d * d);
+					}
+					pLevel[p] = clamp(v, 0.f, 1.f);
+					pSoft[p]  = pLevel[p] * (0.35f + 0.65f / n);
+					pRate[p] = 0.5f; pDepth[p] = 1.f;
+				}
+				params[ENVRATE_PARAM].setValue(0.f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.28f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(0.8f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.88f);
+				params[RELEASE_PARAM].setValue(timeKnob(0.6f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(-0.55f);          // a body, not a fan
+				mod[0][SG_MOD_PITCH] = 0.045f;
+				params[LFORATE_PARAM + 0].setValue(lfoKnob(4.6f));
+				params[LFODELAY_PARAM + 0].setValue(0.22f);
+				params[LFORAND_PARAM + 0].setValue(0.75f);     // each singer alone
+				mod[1][SG_MOD_LEVEL] = 0.12f;
+				params[LFORATE_PARAM + 1].setValue(lfoKnob(0.6f));
+				params[LFORAND_PARAM + 1].setValue(0.9f);
+				break;
+			}
+
+			case 15: {  // TOUCH SWITCH -- two instruments, chosen by how hard you
+				// play. MORPH SENS past halfway stops blending and starts
+				// switching, so slow gives one spectrum and fast gives the
+				// other with very little in between. It is the Synergy's
+				// headline trick and it only means anything if the two spectra
+				// are genuinely different, so they are: a near-sine and a
+				// bright odd-harmonic reed.
+				for (int p = 0; p < SG_MAXP; p++) {
+					float n = (float)(p + 1);
+					pSoft[p]  = (p == 0) ? 1.f : ((p == 2) ? 0.06f : 0.f);
+					pLevel[p] = (p & 1) ? 0.f : 1.f / std::pow(n, 0.85f);
+					pRate[p] = 0.5f; pDepth[p] = 1.f; pPitch[p] = 0.f;
+				}
+				params[MORPHSENS_PARAM].setValue(1.f);         // a switch
+				params[MORPH_PARAM].setValue(0.f);             // centred on the threshold
+				params[AMPSENS_PARAM].setValue(0.25f);         // level barely moves...
+				params[AMPCENTER_PARAM].setValue(0.85f);       // ...so the TIMBRE is the news
+				params[ENVRATE_PARAM].setValue(0.1f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.02f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(0.5f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.8f);
+				params[RELEASE_PARAM].setValue(timeKnob(0.3f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.3f);
+				break;
+			}
+
+			case 17: {  // CLOUD -- WIDTH fully NEGATIVE. The fan opens outward in
+				// order and you hear it as a shape; the scatter puts every
+				// partial somewhere of its own and you hear a width you are
+				// inside. Nothing else uses it, and a slow 64-partial bloom is
+				// what it is for.
+				nPartials = 64;
+				for (int p = 0; p < SG_MAXP; p++) {
+					float n = (float)(p + 1);
+					pLevel[p] = 1.f / std::pow(n, 0.85f);
+					pSoft[p]  = 1.f / std::pow(n, 1.5f);
+					pRate[p]  = 0.3f;
+					pDepth[p] = (p >= 30) ? -0.45f : 1.f;
+					pPitch[p] = 0.f;
+				}
+				params[STRETCH_PARAM].setValue(0.12f);
+				params[ENVSPREAD_PARAM].setValue(0.8f);
+				params[ENVRATE_PARAM].setValue(0.08f);
+				params[ATTACK_PARAM].setValue(timeKnob(1.6f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(6.f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.55f);
+				params[RELEASE_PARAM].setValue(timeKnob(4.f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(-1.f);
+				params[CUTOFF_PARAM].setValue(cutKnob(6000.f));
+				params[TILT_PARAM].setValue(0.12f);
+				mod[2][SG_MOD_LEVEL] = 0.15f;
+				params[LFORATE_PARAM + 2].setValue(lfoKnob(0.09f));
+				params[LFOSPREAD_PARAM + 2].setValue(1.f);
+				params[LFORAND_PARAM + 2].setValue(0.5f);
+				break;
+			}
+
+			case 2: {  // DRAWBAR ORGAN -- the plainest thing in the set, and the
+				// reference the others are heard against. A Hammond is additive
+				// synthesis with nine sliders and no envelope at all, so this
+				// has no spread, no rate spread, and NO VELOCITY: amplitude
+				// sensitivity at zero, which turns the centre into a plain
+				// level control. That is the Synergy's pair doing its second
+				// job, and an organ is the case that needs it.
+				for (int p = 0; p < SG_MAXP; p++) {
+					pLevel[p] = 0.f; pSoft[p] = 0.f; pPitch[p] = 0.f;
+					pRate[p] = 0.5f; pDepth[p] = 1.f;
+				}
+				// 8' 4' 2-2/3' 2' 1-3/5' 1-1/3' 1'  -- harmonics 1 2 3 4 5 6 8
+				static const int  DH[7] = {0, 1, 2, 3, 4, 5, 7};
+				static const float DL[7] = {1.f, 0.8f, 0.55f, 0.45f, 0.2f, 0.16f, 0.28f};
+				for (int k = 0; k < 7; k++) { pLevel[DH[k]] = DL[k]; pSoft[DH[k]] = DL[k]; }
+				params[ENVRATE_PARAM].setValue(0.f);
+				params[ENVSPREAD_PARAM].setValue(0.f);
+				params[ATTACK_PARAM].setValue(timeKnob(0.006f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(0.02f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(1.f);
+				params[RELEASE_PARAM].setValue(timeKnob(0.02f, 0.005f, 16.f));
+				params[AMPSENS_PARAM].setValue(0.f);           // no touch at all
+				params[AMPCENTER_PARAM].setValue(0.8f);        // so this IS the level
+				params[MORPHSENS_PARAM].setValue(0.f);
+				params[WIDTH_PARAM].setValue(0.15f);
+				break;
+			}
+
+			case 8: {  // SINGING BOWL -- Bell's partials with Bowed's envelope.
+				// Both already exist and their intersection is neither: a bowl
+				// has no strike at all, it swells from nothing and keeps going
+				// long after you stop. The beating between the low partials is
+				// the sound, so the rate spread stays near zero -- if the highs
+				// die first there is nothing left to beat against.
+				for (int p = 0; p < SG_MAXP; p++) {
+					pLevel[p] = 0.f; pSoft[p] = 0.f; pPitch[p] = 0.f;
+					pRate[p] = 0.5f; pDepth[p] = 1.f;
+				}
+				static const float SBR[6] = {1.f, 2.32f, 4.25f, 6.63f, 9.38f, 12.2f};
+				static const float SBL[6] = {1.f, 0.5f, 0.3f, 0.16f, 0.09f, 0.05f};
+				for (int p = 0; p < 6; p++) {
+					pLevel[p] = SBL[p];
+					pSoft[p]  = SBL[p] * 0.6f;
+					pPitch[p] = std::log2(SBR[p] / (float)(p + 1)) / 2.f;
+				}
+				params[ENVRATE_PARAM].setValue(0.06f);
+				params[ENVSPREAD_PARAM].setValue(-0.3f);
+				params[ATTACK_PARAM].setValue(timeKnob(1.2f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(8.f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.55f);
+				params[RELEASE_PARAM].setValue(timeKnob(9.f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.5f);
+				mod[2][SG_MOD_LEVEL] = 0.10f;
+				params[LFORATE_PARAM + 2].setValue(lfoKnob(0.18f));
+				params[LFOSPREAD_PARAM + 2].setValue(0.7f);
+				params[LFORAND_PARAM + 2].setValue(0.35f);
+				break;
+			}
+
+			case 9: {  // GONG
+				// The trippy Gong slides downward through its whole tail, and it
+				// is worth being precise about why, because NO PARTIAL MOVES.
+				// ENV RATE makes the top of the spectrum die up to eleven times
+				// faster than the bottom; with the partials stretched as far as
+				// they are, the centre of mass of what is left slides down, and
+				// the ear hears a centre of mass. It is a real effect and it is
+				// not a gong.
+				//
+				// A struck tam-tam does the OPPOSITE. Energy migrates UPWARD
+				// over the first seconds -- the shimmer that builds after the
+				// strike rather than arriving with it -- because the plate is
+				// driven hard enough to couple its modes nonlinearly. Sigma
+				// cannot model that coupling, but it can state its outcome:
+				// negative DEPTH on the upper partials, so they follow the
+				// envelope INVERTED and bloom in as the fundamental falls.
+				//
+				// That both removes the downward slide and puts the real
+				// behaviour in its place, which is a better trade than simply
+				// turning ENV RATE down.
+				nPartials = 64;
+				for (int p = 0; p < SG_MAXP; p++) {
+					float n = (float)(p + 1);
+					pLevel[p] = 1.f / std::pow(n, 0.75f);
+					pSoft[p]  = 1.f / std::pow(n, 1.35f);
+					pRate[p]  = 0.5f;
+					// the top third arrives late and backwards -- the shimmer
+					pDepth[p] = (p >= 40) ? -0.55f : ((p >= 24) ? -0.25f : 1.f);
+				}
+				// Half the old stretch. At 0.85 only 27 of the 64 partials were
+				// under Nyquist at C4; at 0.45 that is 45, so the spectrum the
+				// preset asks for is closer to the one it gets.
+				params[STRETCH_PARAM].setValue(0.45f);
+				// The spread is what tilted the tail. Small, not zero: a plate
+				// does lose its top eventually, just not eleven times over.
+				params[ENVRATE_PARAM].setValue(0.12f);
+				params[ENVSPREAD_PARAM].setValue(0.55f);   // the bloom takes time
+				params[ATTACK_PARAM].setValue(timeKnob(0.006f, 0.001f, 8.f));
+				params[DECAY_PARAM].setValue(timeKnob(11.f, 0.005f, 12.f));
+				params[SUSTAIN_PARAM].setValue(0.f);
+				params[RELEASE_PARAM].setValue(timeKnob(9.f, 0.005f, 16.f));
+				params[WIDTH_PARAM].setValue(0.8f);
+				// THE SQUISH WAS THIS. A random LFO on STRETCH moves every
+				// partial's pitch at once and by a different amount each --
+				// which is not a plate breathing, it is the whole spectrum
+				// sliding around underneath itself. Slower, a third the depth,
+				// and periodic rather than random, so it drifts instead of
+				// wobbling.
+				mod[2][SG_MOD_STRETCH] = 0.035f;
+				params[LFORATE_PARAM + 2].setValue(lfoKnob(0.035f));
+				params[LFORAND_PARAM + 2].setValue(0.f);
+				// And the top needed taking off. 64 stretched partials put real
+				// energy above 10kHz where the ear is least forgiving, and the
+				// bloom brings MORE of it in as the note decays rather than
+				// less -- so a preset that grows its own top end has to have a
+				// ceiling.
+				params[CUTOFF_PARAM].setValue(cutKnob(5200.f));
+				params[TILT_PARAM].setValue(0.22f);
+				break;
+			}
 		}
 	}
 
@@ -648,7 +1092,7 @@ struct Sigma : Module {
 		float tilt    = mac(TILT_PARAM, TILT_INPUT, -1.f, 1.f);
 		float oddEven = mac(ODDEVEN_PARAM, ODDEVEN_INPUT, -1.f, 1.f);
 		float stretch = mac(STRETCH_PARAM, STRETCH_INPUT, 0.f, 1.f);
-		float width   = mac(WIDTH_PARAM, WIDTH_INPUT, 0.f, 1.f);
+		float width   = mac(WIDTH_PARAM, WIDTH_INPUT, -1.f, 1.f);
 		float morphK  = mac(MORPH_PARAM, MORPH_INPUT, -1.f, 1.f);
 		float envRate = mac(ENVRATE_PARAM, ENVRATE_INPUT, 0.f, 1.f);
 		float envSpr  = mac(ENVSPREAD_PARAM, ENVSPREAD_INPUT, -1.f, 1.f);
@@ -660,14 +1104,16 @@ struct Sigma : Module {
 		float R = knobTime(params[RELEASE_PARAM].getValue(), 0.005f, 16.f);
 
 		// ── LFOs ────────────────────────────────────────────────────────────
-		float lfoSpread[3], lfoFlat[3];
+		float lfoSpread[3], lfoFlat[3], lfoHz[3], lfoRand[3], lfoDelay[3];
 		for (int i = 0; i < 3; i++) {
 			if (lfoSyncTrig[i].process(inputs[LFOSYNC_INPUT + i].getVoltage(), 0.1f, 2.f))
 				lfoPhase[i] = 0.f;
-			float hz = knobTime(params[LFORATE_PARAM + i].getValue(), 0.02f, 30.f);
-			lfoPhase[i] += hz * dt;
+			lfoHz[i] = knobTime(params[LFORATE_PARAM + i].getValue(), 0.02f, 30.f);
+			lfoPhase[i] += lfoHz[i] * dt;
 			lfoPhase[i] -= std::floor(lfoPhase[i]);
 			lfoSpread[i] = params[LFOSPREAD_PARAM + i].getValue();
+			lfoRand[i]  = params[LFORAND_PARAM + i].getValue();
+			lfoDelay[i] = params[LFODELAY_PARAM + i].getValue() * 3.f;   // seconds
 			// TILT, STRETCH and CUT are whole-spectrum controls, so they take
 			// the LFO flat. Spread only means something for a destination that
 			// exists once per partial.
@@ -675,7 +1121,8 @@ struct Sigma : Module {
 		}
 		float cutK = params[CUTOFF_PARAM].getValue();
 		if (inputs[CUTOFF_INPUT].isConnected()) cutK += inputs[CUTOFF_INPUT].getVoltage() * 0.1f;
-		float reso = params[RESO_PARAM].getValue();
+		float reso = clamp(params[RESO_PARAM].getValue()
+		                 + inputs[RESO_INPUT].getVoltage() * 0.1f, 0.f, 1.f);
 		float baseTilt = tilt, baseStretch = stretch;
 
 		// STRETCH by the real law: f_n = n*f0*sqrt(1 + B*n^2), which is piano
@@ -690,8 +1137,8 @@ struct Sigma : Module {
 		// a display that jumps to whichever note was struck last is unreadable
 		// while a chord is held.
 		int dispVoice = -1;
-		for (int c = 0; c < nch; c++)
-			if (voice[c].mStage != ST_IDLE) { dispVoice = c; break; }
+		for (int v = 0; v < SG_VOICES; v++)
+			if (voice[v].mStage != ST_IDLE) { dispVoice = v; break; }
 		liveOn = (dispVoice >= 0);
 		if (!liveOn) for (int p = 0; p < nPartials; p++) { liveAmp[p] = 0.f; liveEnv[p] = 0.f; }
 
@@ -699,28 +1146,77 @@ struct Sigma : Module {
 		float nyq = args.sampleRate * 0.5f;
 		float fadeLo = nyq * 0.72f;                 // start fading an octave down
 
+		// ── gate pass: channels strike voices ──────────────────────────────
+		// Allocation, NOT a fixed channel->voice mapping. Sigma is a struck
+		// voice with releases measured in seconds -- the Gong preset rings for
+		// ten -- so a mono gate line pinned to voice 0 meant every note cut off
+		// the one before it and the module could not be polyphonic at all
+		// unless you fed it a poly cable. A note-on now takes an idle voice if
+		// there is one, and otherwise steals the quietest, which is the one
+		// nobody will miss.
 		for (int c = 0; c < nch; c++) {
-			Voice& V = voice[c];
 			bool gate = inputs[GATE_INPUT].getVoltage(c) >= 1.f;
-			if (gate && !V.on) {
+			int v = chanVoice[c];
+			if (gate && v < 0) {
+				int pick = -1;
+				if (allocMode == ALLOC_ROLL) {
+					// step to the next voice that no channel is holding
+					for (int k = 0; k < SG_VOICES; k++) {
+						int cand = (rollNext + k) % SG_VOICES;
+						if (!voice[cand].on) { pick = cand; break; }
+					}
+					rollNext = (pick + 1) % SG_VOICES;
+				}
+				for (int k = 0; pick < 0 && k < SG_VOICES; k++)
+					if (voice[k].mStage == ST_IDLE) { pick = k; break; }
+				if (pick < 0) {
+					float q = 1e9f;
+					for (int k = 0; k < SG_VOICES; k++)
+						if (!voice[k].on && voice[k].mEnv < q) { q = voice[k].mEnv; pick = k; }
+					if (pick < 0) {                 // every voice still held
+						for (int k = 0; k < SG_VOICES; k++)
+							if (voice[k].mEnv < q) { q = voice[k].mEnv; pick = k; }
+					}
+				}
+				chanVoice[c] = v = pick;
+				Voice& V = voice[v];
 				V.on = true;
+				// LATCHED AT NOTE-ON, both of them. Reading V/OCT every sample
+				// meant a voice that had been released still tracked the input,
+				// so a mono sequencer moving to the next note dragged the tone
+				// still ringing along with it -- audible as a pitch bend on
+				// every note, and worst on the presets that ring longest.
+				// getPolyVoltage, not getVoltage: a mono V/OCT feeding a poly
+				// gate would otherwise read 0V on every channel above the first
+				// and put the whole chord on middle C.
+				V.pitch = inputs[VOCT_INPUT].getPolyVoltage(c);
 				V.vel = inputs[VEL_INPUT].isConnected()
-				      ? clamp(inputs[VEL_INPUT].getVoltage(c) * 0.1f, 0.f, 1.f) : 1.f;
+				      ? clamp(inputs[VEL_INPUT].getPolyVoltage(c) * 0.1f, 0.f, 1.f) : 1.f;
+				// Latched with the pitch, and for the same reason: a note's
+				// loudness is decided when it is struck. Reading it live would
+				// make a held chord swell as the next note's velocity arrived.
+				V.ampGain = touch(V.vel, params[AMPSENS_PARAM].getValue(),
+				                  params[AMPCENTER_PARAM].getValue());
+				V.age = 0.f;
+				// A PERIODIC LFO tracks the one already sounding; a RANDOM one
+				// does not. Straight from the Synergy, and it is the difference
+				// between a vibraphone (every bar shimmering together) and a
+				// section of players (each drifting on their own).
+				V.rng = 0x9E3779B9u ^ (uint32_t)(v * 2654435761u) ^ 1u;
+				for (int i = 0; i < 3; i++) {
+					float rnd = params[LFORAND_PARAM + i].getValue();
+					V.lfoPh[i] = rnd < 0.001f ? lfoPhase[i] : std::fabs(vrand(V.rng)) ;
+					V.rndCur[i] = vrand(V.rng); V.rndNext[i] = vrand(V.rng);
+				}
 				for (int p = 0; p < nPartials; p++) {
 					// ATTACK FROM WHERE THE ENVELOPE ALREADY IS, not from zero.
 					// `g = V.mEnv` IS the VCA, so zeroing it on a note-on threw
 					// the output to silence in a single sample whenever the
-					// voice was still sounding -- which is every note played
-					// closer together than the release time. Measured across
-					// the presets, the step was 0.55 to 0.94 of full scale on
-					// thirteen of fourteen. That was the clicking.
-					//
-					// Re-attacking from the current level is also the musically
-					// right answer: a retriggered note that is still ringing
-					// swells rather than restarting, and a note struck after
-					// silence still begins at zero because an idle voice is
-					// already there.
+					// voice was still sounding. Measured across the presets the
+					// step was 0.55 to 0.94 of full scale on thirteen of
+					// fourteen. That was the clicking.
 					V.stage[p] = ST_ATT;
+					V.envMax[p] = V.env[p];   // the bloom restarts with the note
 					// ENV SPREAD: positive delays the HIGH partials so the tone
 					// blooms upward; negative delays the LOW ones so the highs
 					// speak first and the fundamental builds underneath, which
@@ -732,24 +1228,65 @@ struct Sigma : Module {
 					V.wait[p] = std::fabs(envSpr) * 0.25f * (envSpr >= 0.f ? f : 1.f - f);
 				}
 				V.mStage = ST_ATT;
-			} else if (!gate && V.on) {
+			} else if (!gate && v >= 0) {
+				Voice& V = voice[v];
 				V.on = false;
 				for (int p = 0; p < nPartials; p++) {
 					V.stage[p] = ST_REL; V.relFrom[p] = std::max(V.env[p], 1e-4f);
 				}
 				V.mStage = ST_REL; V.mRelFrom = std::max(V.mEnv, 1e-4f);
+				chanVoice[c] = -1;      // the voice rings on; the channel is free
 			}
+		}
+		for (int c = nch; c < SG_VOICES; c++) chanVoice[c] = -1;
+
+		// ── synthesis pass: EVERY voice, not just the patched channels ──────
+		// A released voice is still sounding, so the loop that renders them
+		// cannot be bounded by the cable's channel count.
+		for (int c = 0; c < SG_VOICES; c++) {
+			Voice& V = voice[c];
 			if (V.mStage == ST_IDLE && !V.on) continue;
 
-			V.pitch = inputs[VOCT_INPUT].getVoltage(c);
 			float f0 = 261.6256f * std::pow(2.f, V.pitch);
 			if (c == dispVoice) dispF0 = f0;
-			float morph = clamp(V.vel + morphK, 0.f, 1.f);
+			// MORPH is the CENTRE of the timbre range; MORPH SENS is how much
+			// of it velocity commands. At sens 0.5 with morph at zero this is
+			// exactly the old `vel + morphK`.
+			float mSens = params[MORPHSENS_PARAM].getValue();
+			float morph = touchMorph(V.vel, mSens, clamp(0.5f + morphK * 0.5f, 0.f, 1.f));
 
 			// The whole-spectrum controls are resolved PER VOICE, because the
 			// envelope is per voice: a held chord whose tilt followed whichever
 			// note was struck last would be one voice modulating the others.
-			float mSrc[SG_MODSRC] = {lfoFlat[0], lfoFlat[1], lfoFlat[2], V.mEnv};
+			// ── this voice's own LFOs ──────────────────────────────────────
+			V.age += dt;
+			float vLfo[3], vLfoSpread[3];
+			for (int i = 0; i < 3; i++) {
+				V.lfoPh[i] += lfoHz[i] * dt;
+				if (V.lfoPh[i] >= 1.f) {
+					V.lfoPh[i] -= std::floor(V.lfoPh[i]);
+					// a fresh target once per cycle, so RANDOM moves at the
+					// rate the knob says rather than at the sample rate
+					V.rndCur[i] = V.rndNext[i];
+					V.rndNext[i] = vrand(V.rng);
+				}
+				float per = sgSin(V.lfoPh[i]);
+				// A random LFO is a walk between held targets, not noise: the
+				// Synergy calls it "aperiodic vibrato", and what makes it read
+				// as vibrato at all is that it still moves at the vibrato rate.
+				float rnd = V.rndCur[i] + (V.rndNext[i] - V.rndCur[i]) * V.lfoPh[i];
+				float v = per + (rnd - per) * lfoRand[i];
+				// DELAY: nothing, then a fade in over a third of a second. An
+				// abrupt start is what makes vibrato sound applied rather than
+				// played, and it is the one thing the LFOs had no answer for.
+				float d = lfoDelay[i];
+				float ramp = d <= 0.f ? 1.f
+				           : clamp((V.age - d) / 0.3f, 0.f, 1.f);
+				vLfo[i] = v * ramp;
+				vLfoSpread[i] = lfoSpread[i];
+			}
+			(void)vLfoSpread;
+			float mSrc[SG_MODSRC] = {vLfo[0], vLfo[1], vLfo[2], V.mEnv};
 			float tilt = baseTilt, stretch = baseStretch, cutM = 0.f;
 			for (int i = 0; i < SG_MODSRC; i++) {
 				tilt    += mSrc[i] * mod[i][SG_MOD_TILT];
@@ -791,8 +1328,26 @@ struct Sigma : Module {
 				// which is the spectral evolution additive is actually for and
 				// which a 0..1 control cannot ask for at all.
 				float d = pDepth[p];
-				float envAmt = (d >= 0.f) ? (1.f - d + d * V.env[p])
-				                          : (1.f + d * V.env[p]);
+				float envAmt;
+				if (d >= 0.f) {
+					envAmt = 1.f - d + d * V.env[p];
+				} else {
+					// BLOOM FROM SILENCE, not from full. `1 + d*env` is at its
+					// maximum when the envelope is at zero -- which is the end
+					// of the note, as intended, but ALSO the beginning of it.
+					// The master envelope opens in a few milliseconds, so for
+					// those milliseconds the entire voice was its inverted
+					// partials at full level, and on Gong those are the high
+					// inharmonic ones. That was the squelch on the transient:
+					// not a click, a burst of the wrong partials.
+					//
+					// Measuring the distance the envelope has FALLEN from its
+					// own peak is zero before the note and zero at the peak,
+					// and only opens as the note decays. Which is what a bloom
+					// is.
+					if (V.env[p] > V.envMax[p]) V.envMax[p] = V.env[p];
+					envAmt = -d * (V.envMax[p] - V.env[p]);
+				}
 				lv *= envAmt;
 
 				// ── pitch ───────────────────────────────────────────────────
@@ -814,9 +1369,15 @@ struct Sigma : Module {
 				// alternately left and right, further out as they climb, which
 				// is the same "panel is a spread, screen is the exceptions"
 				// rule as every other macro.
-				float fan = ((p & 1) ? 1.f : -1.f)
-				          * (float)p / (float)std::max(nPartials - 1, 1);
-				float pan = clamp(fan * width + pPan[p], -1.f, 1.f);
+				// Right: an ordered fan, alternating sides and widening with the
+				// partial index, so the spectrum opens outward. Left: a fixed
+				// scatter, each partial at its own place. The fan is a shape you
+				// hear move; the scatter is a width you sit inside.
+				float place = (width >= 0.f)
+				            ? ((p & 1) ? 1.f : -1.f)
+				              * (float)p / (float)std::max(nPartials - 1, 1)
+				            : sgScatter(p);
+				float pan = clamp(place * std::fabs(width) + pPan[p], -1.f, 1.f);
 
 				// ── LFOs, spread across the partial index ───────────────────
 				for (int i = 0; i < SG_MODSRC; i++) {
@@ -826,7 +1387,7 @@ struct Sigma : Module {
 					// owns that idea and owning it twice would fight.
 					float m;
 					if (i < 3) {
-						float ph = lfoPhase[i] + lfoSpread[i] * (float)p / (float)nPartials;
+						float ph = V.lfoPh[i] + lfoSpread[i] * (float)p / (float)nPartials;
 						ph -= std::floor(ph);
 						m = sgSin(ph);
 					} else m = V.mEnv;
@@ -872,7 +1433,12 @@ struct Sigma : Module {
 				vL += s * pl; vR += s * pr;
 			}
 
-			float g = V.mEnv;
+			// VELOCITY REACHES THE LEVEL AT LAST. Until now V.vel fed the morph
+			// and nothing else, so a pianissimo note was exactly as loud as a
+			// fortissimo one -- it simply had a different spectrum. That is a
+			// defensible purist position but it was never a decision, and there
+			// was no way to ask for the ordinary behaviour.
+			float g = V.mEnv * V.ampGain;
 			outL += vL * g; outR += vR * g;
 		}
 
@@ -882,8 +1448,8 @@ struct Sigma : Module {
 		// and the tilt default already tapers them, so this is a fixed trim
 		// rather than a normaliser -- a normaliser would pump with the spectrum.
 		float trim = 1.6f * vca;
-		float fl = clamp(outL * trim, -10.f, 10.f);
-		float fr = clamp(outR * trim, -10.f, 10.f);
+		float fl = sgSoftClip(outL * trim);
+		float fr = sgSoftClip(outR * trim);
 		// Captured on a RISING ZERO CROSSING and then held: a free-running ring
 		// slides sideways at whatever the pitch happens to be, which reads as
 		// the module being unstable when it is the display that is.
@@ -948,6 +1514,7 @@ struct Sigma : Module {
 		json_object_set_new(root, "mod", mm);
 		json_object_set_new(root, "tab", json_integer(dispTab));
 		json_object_set_new(root, "nPartials", json_integer(nPartials));
+		json_object_set_new(root, "allocMode", json_integer(allocMode));
 		return root;
 	}
 	void dataFromJson(json_t* root) override {
@@ -970,6 +1537,8 @@ struct Sigma : Module {
 			dispTab = clamp((int)json_integer_value(j), 0, 4);
 		if (json_t* j = json_object_get(root, "nPartials"))
 			nPartials = clamp((int)json_integer_value(j), 1, SG_MAXP);
+		if (json_t* j = json_object_get(root, "allocMode"))
+			allocMode = clamp((int)json_integer_value(j), 0, 1);
 	}
 };
 
@@ -1050,7 +1619,36 @@ struct SigmaDisplay : OpaqueWidget {
 	void applyAt(Vec p);
 	// tabs explain themselves on hover; five one-word names cannot
 	ui::Tooltip* tip = nullptr;
-	int hoverTab = -1;
+	// What the pointer is over, already formatted. Held as a string rather than
+	// as a (region, index) pair because every region says something different
+	// and the drawing code has no use for it.
+	std::string hoverStr;
+	std::string hoverAt(float ux, float uy);
+
+	// The hit tests, in ONE place. Editing and reading-out used to compute the
+	// same indices from the same geometry in two functions, which is a standing
+	// invitation for the tooltip to name one partial while the drag edits its
+	// neighbour. Sharing them means the readout cannot describe a control other
+	// than the one a click would land on.
+	int barIndexAt(float ux) const {
+		return clamp((int)(ux / (splitX() / (float)np())), 0, np() - 1);
+	}
+	float barValueAt(float uy) const {
+		return clamp(1.f - (uy - specY()) / std::max(specH(), 1.f), 0.f, 1.f);
+	}
+	int panIndexAt(float uy) const {
+		float h = blkH(1) - 12.f, y0 = blkY(1) + 9.f;
+		return clamp((int)((uy - y0) / std::max(h / np(), 0.5f)), 0, np() - 1);
+	}
+	void matrixCellAt(float ux, float uy, int& r, int& c, float& t) const {
+		float h = blkH(2) - 12.f, y0 = blkY(2) + 9.f, lw = 14.f;
+		float cw = (rw() - lw) / (float)SG_MOD_N, ch = h / (float)SG_MODSRC;
+		r = clamp((int)((uy - y0) / std::max(ch, 0.5f)), 0, SG_MODSRC - 1);
+		c = clamp((int)((ux - rx() - lw) / std::max(cw, 0.5f)), 0, SG_MOD_N - 1);
+		// vertical drag from the cell's own centre, so a click lands where you
+		// clicked rather than snapping to whatever the pointer's row implies
+		t = clamp(1.f - (uy - (y0 + r * ch)) / std::max(ch, 0.5f), 0.f, 1.f);
+	}
 	void onHover(const HoverEvent& e) override;
 	void onLeave(const LeaveEvent& e) override;
 	void step() override;
@@ -1130,23 +1728,13 @@ void SigmaDisplay::applyAt(Vec p) {
 	if (dragKind == DRAG_BARS) {
 		float* arr = tabArray(module->dispTab);
 		if (!arr) return;
-		float colW = splitX() / (float)np();
-		int i = clamp((int)(ux / colW), 0, np() - 1);
-		float t = clamp(1.f - (uy - specY()) / std::max(specH(), 1.f), 0.f, 1.f);
-		arr[i] = SG_TABBIP[module->dispTab] ? (t * 2.f - 1.f) : t;
+		float t = barValueAt(uy);
+		arr[barIndexAt(ux)] = SG_TABBIP[module->dispTab] ? (t * 2.f - 1.f) : t;
 	} else if (dragKind == DRAG_PAN) {
-		float h = blkH(1) - 12.f, y0 = blkY(1) + 9.f;
-		int i = clamp((int)((uy - y0) / std::max(h / np(), 0.5f)), 0, np() - 1);
-		module->pPan[i] = clamp((ux - rx()) / rw() * 2.f - 1.f, -1.f, 1.f);
+		module->pPan[panIndexAt(uy)] = clamp((ux - rx()) / rw() * 2.f - 1.f, -1.f, 1.f);
 	} else if (dragKind == DRAG_MATRIX) {
-		float h = blkH(2) - 12.f, y0 = blkY(2) + 9.f;
-		float lw = 14.f;
-		float cw = (rw() - lw) / (float)SG_MOD_N, ch = h / (float)SG_MODSRC;
-		int r = clamp((int)((uy - y0) / std::max(ch, 0.5f)), 0, SG_MODSRC - 1);
-		int c = clamp((int)((ux - rx() - lw) / std::max(cw, 0.5f)), 0, SG_MOD_N - 1);
-		// vertical drag from the cell's own centre, so a click lands where you
-		// clicked rather than snapping to whatever the pointer's row implies
-		float t = clamp(1.f - (uy - (y0 + r * ch)) / std::max(ch, 0.5f), 0.f, 1.f);
+		int r, c; float t;
+		matrixCellAt(ux, uy, r, c, t);
 		module->mod[r][c] = t * 2.f - 1.f;
 	}
 }
@@ -1159,24 +1747,102 @@ static const char* SG_TABHELP[SG_NTAB] = {
 	"RATE - envelope speed per partial. Faster highs is what makes a struck tone sound struck.",
 };
 
+// Everything on this screen is editable, and until now only the tabs said what
+// they were. A bar you can drag but cannot read is a control you have to
+// discover by ear -- so every region reports the value under the pointer, in
+// the unit that region actually means: cents for PITCH, a rate multiplier for
+// RATE, per cent for the levels.
+//
+std::string SigmaDisplay::hoverAt(float ux, float uy) {
+	if (!module) return "";
+	if (uy < tabsH() && ux < splitX()) {
+		int t = clamp((int)(ux / (splitX() / SG_NTAB)), 0, SG_NTAB - 1);
+		return SG_TABHELP[t];
+	}
+	if (ux < splitX() && uy >= specY() && uy <= specY() + specH()) {
+		int tb = clamp(module->dispTab, 0, SG_NTAB - 1);
+		int i = barIndexAt(ux);
+		const float* arr = nullptr;
+		switch (tb) {
+			case 0: arr = module->pLevel; break;
+			case 1: arr = module->pSoft;  break;
+			case 2: arr = module->pPitch; break;
+			case 3: arr = module->pDepth; break;
+			default: arr = module->pRate; break;
+		}
+		float v = arr[i];
+		std::string val;
+		if (tb == 2) {
+			// cents, the unit the tab is actually in
+			val = string::f("%+.0f cents", v * 2400.f);
+		} else if (tb == 3) {
+			val = v >= 0.f ? string::f("%.0f%%", v * 100.f)
+			               : string::f("%.0f%% inverted -- blooms as the rest fall",
+			                           -v * 100.f);
+		} else if (tb == 4) {
+			val = string::f("%.2fx", 0.25f * std::pow(16.f, clamp(v, 0.f, 1.f)));
+		} else {
+			val = string::f("%.0f%%", v * 100.f);
+		}
+		// The live amplitude is what you are hearing, which is not the same as
+		// what you drew once the macros and the envelope have had their say.
+		std::string live;
+		if ((tb == 0 || tb == 1) && module->liveOn && i < SG_MAXP)
+			live = string::f("   (sounding %.0f%%)", clamp(module->liveAmp[i], 0.f, 1.f) * 100.f);
+		return string::f("Partial %d   %s  %s%s", i + 1, SG_TABNAME[tb],
+		                 val.c_str(), live.c_str());
+	}
+	if (ux >= rx()) {
+		if (uy >= blkY(1) && uy < blkY(1) + blkH(1)) {
+			int i = panIndexAt(uy);
+			float pan = clamp(module->pPan[i], -1.f, 1.f);
+			const char* side = pan < -0.02f ? "L" : (pan > 0.02f ? "R" : "centre");
+			return std::fabs(pan) < 0.02f
+			     ? string::f("Partial %d   PAN  centre", i + 1)
+			     : string::f("Partial %d   PAN  %.0f%% %s", i + 1,
+			                 std::fabs(pan) * 100.f, side);
+		}
+		if (uy >= blkY(2) && uy < blkY(2) + blkH(2)) {
+			int r, c; float t;
+			matrixCellAt(ux, uy, r, c, t);
+			static const char* DEST[SG_MOD_N] = {"level", "pitch", "pan",
+			                                     "tilt", "stretch", "cutoff"};
+			float v = module->mod[r][c];
+			return std::fabs(v) < 0.005f
+			     ? string::f("%s -> %s   off", SG_SRCNAME[r], DEST[c])
+			     : string::f("%s -> %s   %+.0f%%", SG_SRCNAME[r], DEST[c], v * 100.f);
+		}
+		if (uy >= blkY(0) && uy < blkY(0) + blkH(0))
+			return string::f("WAVE   one cycle at %.1f Hz", module->dispF0);
+	}
+	return "";
+}
+
 void SigmaDisplay::onHover(const HoverEvent& e) {
 	float s = box.size.x / SG_DESIGN_W;
-	float ux = e.pos.x / s, uy = e.pos.y / s;
-	hoverTab = (uy < tabsH() && ux < splitX())
-	         ? clamp((int)(ux / (splitX() / SG_NTAB)), 0, SG_NTAB - 1) : -1;
+	hoverStr = hoverAt(e.pos.x / s, e.pos.y / s);
 	OpaqueWidget::onHover(e);
 }
 void SigmaDisplay::onLeave(const LeaveEvent& e) {
-	hoverTab = -1;
+	hoverStr.clear();
 	OpaqueWidget::onLeave(e);
 }
 void SigmaDisplay::step() {
-	if (hoverTab >= 0 && !tip) { tip = new ui::Tooltip; APP->scene->addChild(tip); }
-	else if (hoverTab < 0 && tip) {
+	// While a drag is in progress the value under the pointer is changing, so
+	// keep the readout live rather than leaving it at whatever it said when the
+	// drag started -- during an edit is exactly when you want to see the number.
+	if (dragKind != DRAG_NONE) {
+		float s = box.size.x / SG_DESIGN_W;
+		Vec p = APP->scene->mousePos.minus(getAbsoluteOffset(Vec(0, 0)));
+		hoverStr = hoverAt(p.x / s, p.y / s);
+	}
+	bool want = !hoverStr.empty();
+	if (want && !tip) { tip = new ui::Tooltip; APP->scene->addChild(tip); }
+	else if (!want && tip) {
 		APP->scene->removeChild(tip); delete tip; tip = nullptr;
 	}
 	if (tip) {
-		tip->text = SG_TABHELP[clamp(hoverTab, 0, SG_NTAB - 1)];
+		tip->text = hoverStr;
 		tip->box.pos = APP->scene->mousePos.plus(Vec(15, 15));
 	}
 	OpaqueWidget::step();
@@ -1499,84 +2165,114 @@ void SigmaDisplay::drawPreview(const DrawArgs& args, float s) {
 // The macros sit to the right of the envelope, which keeps the two things you
 // reach for while playing -- the spectrum's shape and its shape in time --
 // side by side rather than on separate rows.
-static const float SG_MX[8] = {54.f, 68.f, 82.f, 96.f, 110.f, 124.f, 138.f, 152.f};
-static const float SG_MKY = 88.f, SG_MJY = 102.f;
-static const float SG_SX[4] = {10.f, 20.f, 30.f, 40.f};   // A D S R sliders
-static const float SG_SY = 95.f;
-static const float SG_JY = 119.f;                          // the one jack row
-static const float SG_JX[4] = {10.f, 21.f, 32.f, 43.f};    // V/OCT GATE VEL VCA
-// Six now, not nine: RATE and SPREAD per LFO. Depth left with the matrix.
-// SYNC, RATE, SPREAD per LFO.
-static const float SG_LSY[3] = {66.f, 96.f, 126.f};
-static const float SG_LX[6]  = {76.f, 85.f, 106.f, 115.f, 136.f, 145.f};
-static const float SG_RESOX  = 54.f;
+// ── the 2026-08 grid, transcribed from res/sigma.svg ───────────────────────
+// EVERY POT IS A TRIMPOT now, and several pairings went HORIZONTAL: ENV RATE
+// and ENV SPREAD each sit as trimpot-then-jack along the bottom rather than
+// stacked, which is what let CUTOFF and RES move out to their own column on
+// the right. The macro order changed too -- WIDTH and STRETCH swapped.
+static const float SG_SX[4] = {8.89f, 17.78f, 26.67f, 35.55f};   // A D S R
+static const float SG_SY = 94.60f;
+
+// TILT ODD/EVN WIDTH STRETCH MORPH, trimpot over its CV.
+static const float SG_MX[5] = {47.79f, 59.21f, 70.64f, 82.07f, 93.50f};
+static const float SG_MJX[5] = {47.62f, 59.04f, 70.47f, 81.90f, 93.33f};
+static const float SG_MKY = 86.70f, SG_MJY = 98.40f;
+
+// CUTOFF and RES, the same pairing, off on the right.
+static const float SG_FX[2] = {149.37f, 160.79f};
+static const float SG_FJX[2] = {149.20f, 160.62f};
+
+// The LFO block: three columns, three rows -- RATE, SPREAD, then SYNC.
+static const float SG_LRX[3] = {108.73f, 120.16f, 131.59f};
+static const float SG_LSX[3] = {108.56f, 119.99f, 131.42f};
+static const float SG_LYX[3] = {108.40f, 119.82f, 131.25f};
+static const float SG_LRY = 91.80f, SG_LSY = 105.80f, SG_LYY = 121.10f;
+
+// The bottom row. The two horizontal pairs put their trimpot 11.7mm to the
+// LEFT of the jack it belongs to, which is why they need their own constants
+// rather than sharing the jack row's.
+static const float SG_JY = 121.30f;
+static const float SG_JX[3] = {9.52f, 22.22f, 34.92f};      // GATE V/OCT VEL
+static const float SG_HPX[2] = {47.36f, 70.22f};            // ENV RATE / SPREAD pots
+static const float SG_HJX[2] = {59.04f, 81.90f};            // and their jacks
+static const float SG_HPY = 121.10f;
+static const float SG_VCAX = 93.33f;
+static const float SG_OUTX[2] = {149.20f, 161.89f};         // L and R, on the plate
+
+// A menu row that edits a param directly, so the tooltip's units and range are
+// the param's own and there is no second copy of either to drift.
+struct ParamSlider : ui::Slider {
+	ParamSlider(Module* m, int paramId) {
+		quantity = m->paramQuantities[paramId];
+		box.size.x = 200.f;
+	}
+};
 
 struct SigmaWidget : ModuleWidget {
 	SigmaWidget(Sigma* module) {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/sigma.svg")));
 
+		// NO PanelLabels, and no title. The 2026-08 artwork carries its own text
+		// as outlined paths, which Rack DOES render -- it ignores only <text> --
+		// so drawing them again in Figtree printed every label twice, half a
+		// millimetre out. Slice, Kit and Trace carry the same note.
 		SigmaDisplay* disp = new SigmaDisplay;
 		disp->module = module;
-		disp->box.pos = mm2px(Vec(6.f, 6.f));
-		disp->box.size = mm2px(Vec(160.f, 70.f));
+		disp->box.pos  = mm2px(Vec(5.08f, 10.16f));
+		disp->box.size = mm2px(Vec(162.53f, 65.52f));
 		addChild(disp);
 
-		static const int MP[8] = {Sigma::TILT_PARAM, Sigma::ODDEVEN_PARAM,
-			Sigma::STRETCH_PARAM, Sigma::WIDTH_PARAM, Sigma::MORPH_PARAM,
-			Sigma::ENVRATE_PARAM, Sigma::ENVSPREAD_PARAM, Sigma::CUTOFF_PARAM};
-		static const int MI[8] = {Sigma::TILT_INPUT, Sigma::ODDEVEN_INPUT,
-			Sigma::STRETCH_INPUT, Sigma::WIDTH_INPUT, Sigma::MORPH_INPUT,
-			Sigma::ENVRATE_INPUT, Sigma::ENVSPREAD_INPUT, Sigma::CUTOFF_INPUT};
-		for (int i = 0; i < 8; i++) {
-			addParam(createParamCentered<Rogan1PBlue>(mm2px(Vec(SG_MX[i], SG_MKY)), module, MP[i]));
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_MX[i], SG_MJY)), module, MI[i]));
+		// ── ADSR ───────────────────────────────────────────────────────────
+		for (int i = 0; i < 4; i++)
+			addParam(createParamCentered<VCVSlider>(mm2px(Vec(SG_SX[i], SG_SY)),
+			                                        module, Sigma::ATTACK_PARAM + i));
+
+		// ── five macros, trimpot over CV. WIDTH and STRETCH are swapped from
+		//    the old panel, so the order here is the ART's, not the enum's.
+		static const int MP[5] = {Sigma::TILT_PARAM, Sigma::ODDEVEN_PARAM,
+			Sigma::WIDTH_PARAM, Sigma::STRETCH_PARAM, Sigma::MORPH_PARAM};
+		static const int MI[5] = {Sigma::TILT_INPUT, Sigma::ODDEVEN_INPUT,
+			Sigma::WIDTH_INPUT, Sigma::STRETCH_INPUT, Sigma::MORPH_INPUT};
+		for (int i = 0; i < 5; i++) {
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_MX[i], SG_MKY)), module, MP[i]));
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_MJX[i], SG_MJY)), module, MI[i]));
 		}
 
-		// ADSR as real sliders rather than trimpots: an envelope is a SHAPE and
-		// four sliders draw it, where four knobs make you read four numbers.
-		for (int i = 0; i < 4; i++)
-			addParam(createParamCentered<VCVSlider>(mm2px(Vec(SG_SX[i], SG_SY)), module,
-			                                        Sigma::ATTACK_PARAM + i));
+		// ── the filter, in its own column ──────────────────────────────────
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_FX[0], SG_MKY)), module, Sigma::CUTOFF_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_FJX[0], SG_MJY)), module, Sigma::CUTOFF_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_FX[1], SG_MKY)), module, Sigma::RESO_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_FJX[1], SG_MJY)), module, Sigma::RESO_INPUT));
+
+		// ── the LFO block: three columns, RATE / SPREAD / SYNC ─────────────
 		for (int i = 0; i < 3; i++) {
-			addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_LX[i * 2 + 0], SG_JY)), module,
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_LRX[i], SG_LRY)), module,
 			                                      Sigma::LFORATE_PARAM + i));
-			addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_LX[i * 2 + 1], SG_JY)), module,
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_LSX[i], SG_LSY)), module,
 			                                      Sigma::LFOSPREAD_PARAM + i));
-		}
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_RESOX, SG_JY)), module, Sigma::RESO_PARAM));
-		for (int i = 0; i < 3; i++)
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_LSY[i], SG_JY)), module,
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_LYX[i], SG_LYY)), module,
 			                                         Sigma::LFOSYNC_INPUT + i));
-		static const int JI[4] = {Sigma::VOCT_INPUT, Sigma::GATE_INPUT,
-		                          Sigma::VEL_INPUT, Sigma::VCA_INPUT};
-		for (int i = 0; i < 4; i++)
-			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_JX[i], SG_JY)), module, JI[i]));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(157.f, SG_JY)), module, Sigma::L_OUTPUT));
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(167.f, SG_JY)), module, Sigma::R_OUTPUT));
-
-		sfs::PanelLabels* lab = new sfs::PanelLabels;
-		lab->title(6.f, 124.f, "SIGMA");
-		// abbreviated because at 15mm pitch "ENV SPREAD" is wider than its knob
-		static const char* MN[8] = {"TILT", "ODD/EVN", "STRETCH", "WIDTH",
-		                            "MORPH", "E.RATE", "E.SPRD", "CUTOFF"};
-		for (int i = 0; i < 8; i++) lab->rogan(SG_MX[i], SG_MKY, MN[i]);
-		static const char* EN[4] = {"A", "D", "S", "R"};
-		for (int i = 0; i < 4; i++) lab->add(SG_SX[i], SG_SY - 16.f, EN[i]);
-		static const char* JN[4] = {"V/OCT", "GATE", "VEL", "VCA"};
-		for (int i = 0; i < 4; i++) lab->jack(SG_JX[i], SG_JY, JN[i]);
-		// R is rate, S is spread across the partials -- low partial to high.
-		static const char* LN[2] = {"R", "S"};
-		for (int i = 0; i < 6; i++) lab->note(SG_LX[i], SG_JY - 5.f, LN[i % 2]);
-		for (int i = 0; i < 3; i++) {
-			lab->note(SG_LSY[i], SG_JY - 5.f, "SYN");
-			lab->add((SG_LSY[i] + SG_LX[i * 2 + 1]) * 0.5f, SG_JY - 10.f,
-			         string::f("LFO %d", i + 1));
 		}
-		lab->trim(SG_RESOX, SG_JY, "RES");
-		lab->jack(157.f, SG_JY, "L");
-		lab->jack(167.f, SG_JY, "R");
-		addChild(lab);
+
+		// ── the bottom row ─────────────────────────────────────────────────
+		static const int JI[3] = {Sigma::GATE_INPUT, Sigma::VOCT_INPUT, Sigma::VEL_INPUT};
+		for (int i = 0; i < 3; i++)
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_JX[i], SG_JY)), module, JI[i]));
+		// The two HORIZONTAL pairs: the trimpot sits beside its jack rather than
+		// above it, which is what freed the height the filter column needed.
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_HPX[0], SG_HPY)), module, Sigma::ENVRATE_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_HJX[0], SG_JY)), module, Sigma::ENVRATE_INPUT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(SG_HPX[1], SG_HPY)), module, Sigma::ENVSPREAD_PARAM));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_HJX[1], SG_JY)), module, Sigma::ENVSPREAD_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(SG_VCAX, SG_JY)), module, Sigma::VCA_INPUT));
+
+		// The plate's two jacks. NOTE: the art labels them GATE and V/OCT, which
+		// cannot be right -- Sigma's only outputs are the stereo pair, and both
+		// of those labels already appear on the input row. Placed as L and R.
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(SG_OUTX[0], SG_JY)), module, Sigma::L_OUTPUT));
+		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(SG_OUTX[1], SG_JY)), module, Sigma::R_OUTPUT));
+
 	}
 
 	void appendContextMenu(Menu* menu) override {
@@ -1584,17 +2280,17 @@ struct SigmaWidget : ModuleWidget {
 		if (!m) return;
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createSubmenuItem("Preset", "", [=](Menu* sub) {
-			// Grouped by WHAT EACH ONE EXERCISES rather than by timbre: the
-			// second group is here to make a mechanism audible, which is also
-			// how the pitch-range and Nyquist bugs were found.
+			// ONE list. It was split in two because the second batch arrived
+			// later, which is a fact about how it was built rather than about
+			// how it is used -- and it left the two gongs eight rows apart.
 			static const char* PN[SG_NPRESET] = {
-				"Ramp (default)", "Square", "CS-80", "Marimba",
-				"Bell", "Bowed", "Bloom", "E-piano", "Rotor",
-				"Clarinet", "Gong", "Vowel", "Acid", "Ensemble"};
-			for (int i = 0; i < SG_NPRESET; i++) {
-				if (i == 4) sub->addChild(new MenuSeparator);
+				"Ramp", "Square", "Drawbar Organ", "E-piano", "Vibraphone",
+				"Marimba", "Bell", "Tubular Bells", "Singing Bowl", "Gong",
+				"Psychedelic Gong", "Bowed", "Choir", "Vowel", "CS-80",
+				"Touch Switch", "Bloom", "Cloud", "Rotor", "Acid",
+				"Ensemble"};
+			for (int i = 0; i < SG_NPRESET; i++)
 				sub->addChild(createMenuItem(PN[i], "", [=]() { m->loadPreset(i); }));
-			}
 		}));
 		menu->addChild(createIndexSubmenuItem("Partials", {"16", "32", "64"},
 			[=]() {
@@ -1602,6 +2298,31 @@ struct SigmaWidget : ModuleWidget {
 				return 0;
 			},
 			[=](int i) { m->nPartials = SG_COUNTS[clamp(i, 0, SG_NCOUNT - 1)]; }));
+		menu->addChild(createIndexPtrSubmenuItem("Voice allocation",
+			{"First available", "Rolling"}, &m->allocMode));
+
+		// Menu sliders rather than panel knobs, the way Chance keeps GATE LEN
+		// and GLIDE off its panel: these are set once for a patch and then left,
+		// and Sigma's panel is already eight macros wide.
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createSubmenuItem("Touch response", "", [=](Menu* sub) {
+			sub->addChild(createMenuLabel("Velocity to level, and where its range sits"));
+			sub->addChild(new ParamSlider(m, Sigma::AMPSENS_PARAM));
+			sub->addChild(new ParamSlider(m, Sigma::AMPCENTER_PARAM));
+			sub->addChild(createMenuLabel("Velocity to timbre. MORPH is its centre;"));
+			sub->addChild(createMenuLabel("past halfway the blend hardens to a switch."));
+			sub->addChild(new ParamSlider(m, Sigma::MORPHSENS_PARAM));
+		}));
+		menu->addChild(createSubmenuItem("LFO delay and random", "", [=](Menu* sub) {
+			sub->addChild(createMenuLabel("RANDOM also frees each voice's phase:"));
+			sub->addChild(createMenuLabel("periodic locks together, aperiodic drifts apart."));
+			for (int i = 0; i < 3; i++) {
+				sub->addChild(createMenuLabel(string::f("LFO %d", i + 1)));
+				sub->addChild(new ParamSlider(m, Sigma::LFODELAY_PARAM + i));
+				sub->addChild(new ParamSlider(m, Sigma::LFORAND_PARAM + i));
+			}
+		}));
+		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuItem("Reset spectrum", "", [=]() { m->initSpectrum(); }));
 		menu->addChild(createMenuItem("Reset modulation", "", [=]() {
 			for (int r = 0; r < SG_MODSRC; r++)
