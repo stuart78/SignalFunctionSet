@@ -139,6 +139,9 @@ struct Trace : Module {
 		RUN_PARAM, DIR_PARAM, RESET_PARAM,
 		BRUSH_PARAM,                          // 4 lane selects, then erase
 		SPREAD_PARAM = BRUSH_PARAM + 5,
+		// APPENDED. The new panel has a WRITE BUTTON where the write gate jack
+		// used to be. WRITE_INPUT stays in the enum, retired in place.
+		WRITE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -150,6 +153,10 @@ struct Trace : Module {
 		OFFSET_INPUT,                         // 4, one per lane
 		THICK_INPUT = OFFSET_INPUT + TR_LANES,// 4, one per lane
 		SPREAD_INPUT = THICK_INPUT + TR_LANES,
+		// APPENDED for the 2026-08 panel, which gives LEAK the CV in every
+		// other control already had. Inputs serialise by index; it goes on the
+		// end however much it belongs beside INK_INPUT.
+		LEAK_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId {
@@ -359,7 +366,9 @@ struct Trace : Module {
 			configOutput(INK_OUTPUT + i,   string::f("Lane %d ink", i + 1));
 			configInput(OFFSET_INPUT + i, string::f("Lane %d head offset CV", i + 1));
 		}
-		configInput(WRITE_INPUT, "Write gate");
+		configInput(WRITE_INPUT, "Write gate (retired -- no jack on the panel)");
+		configSwitch(WRITE_PARAM, 0.f, 1.f, 1.f, "Write", {"Off", "On"});
+		configInput(LEAK_INPUT, "Leak CV");
 		configInput(CLOCK_INPUT, "Clock");
 		configInput(BAR_INPUT, "Bar");
 		configInput(SPEED_INPUT, "Speed CV");
@@ -574,7 +583,8 @@ struct Trace : Module {
 		spread = clamp(spread, -1.f, 1.f);
 		dispSpread = spread;
 
-		float leakKnob = params[LEAK_PARAM].getValue();
+		float leakKnob = clamp(params[LEAK_PARAM].getValue()
+		                     + inputs[LEAK_INPUT].getVoltage() * 0.1f, 0.f, 1.f);
 		float inkWear = leakKnob * leakKnob * 0.5f;     // lifted per read pass
 
 		// Reverse used to forbid writing, on the theory that a brush working
@@ -583,8 +593,11 @@ struct Trace : Module {
 		// span handling and the edge tapers cope with it, so the restriction
 		// was buying nothing and costing a legitimate gesture.
 		bool writeOK = true;
-		bool writeGate = !inputs[WRITE_INPUT].isConnected()
-		              || inputs[WRITE_INPUT].getVoltage() >= 1.f;
+		// The jack is gone from the panel, so the button is what decides. The
+		// input is still read for any patch saved before the 2026-08 layout.
+		bool writeGate = params[WRITE_PARAM].getValue() > 0.5f
+		              && (!inputs[WRITE_INPUT].isConnected()
+		                  || inputs[WRITE_INPUT].getVoltage() >= 1.f);
 
 		{
 			UiBrush ub; uint32_t g;
@@ -1526,122 +1539,118 @@ void TraceDisplay::drawPreview(const DrawArgs& args, float s) {
 // module actually has.
 // Three input columns mirroring the three output columns: the lane rows carry
 // that lane's draw CV and its head-offset CV, and the globals take column C.
-static const float TR_INX1 = 8.40f, TR_INX2 = 20.40f, TR_INX3 = 32.40f;
-static const float TR_OUTX1 = 152.60f, TR_OUTX2 = 164.60f;
-static const float TR_ROW[5] = {16.00f, 28.00f, 40.00f, 52.00f, 64.00f};
-static const float TR_KY = 100.00f;     // control row
-static const float TR_JY = 116.00f;     // the jacks under it
-static const float TR_KX[6] = {52.00f, 66.00f, 80.00f, 94.00f, 108.00f, 122.00f};
-static const float TR_BRX = 133.00f;    // first brush button
-static const float TR_BRP = 8.00f;      // brush button pitch
+// ── the 2026-08 grid, transcribed from res/trace.svg ───────────────────────
+// Four LANE ROWS rather than four columns: the panel now reads across, A to D,
+// with each lane's brush and its three inputs on one line and its two outputs
+// on the plate at the far right. The screen went full width, which is what the
+// rest of this had to make room for.
+static const float TR_ROW[4] = {87.00f, 98.40f, 109.85f, 121.30f};
+static const float TR_BRX  = 10.75f;    // the lane's brush button
+static const float TR_INX1 = 22.22f;    // VOLT in  (the value the lane draws)
+static const float TR_INX2 = 33.65f;    // INK in
+static const float TR_INX3 = 45.08f;    // OFFSET in
+static const float TR_OUTX1 = 150.47f, TR_OUTX2 = 161.89f;   // on the plate
+
+// The transport and the paper controls, seven columns of knob-over-jack.
+static const float TR_MX[7] = {63.54f, 74.96f, 86.39f, 97.82f,
+                               109.25f, 120.67f, 132.10f};
+static const float TR_KY = 86.70f;      // the controls
+static const float TR_JY = 98.40f;      // their CV, directly beneath
+// The bottom strip. The three jacks share the lane rows' baseline, but the
+// three BUTTONS sit on their own centres -- read from the art rather than
+// assumed onto the knob columns, which put them up to 0.6mm out.
+static const float TR_BY = 121.30f;              // clock / bar / reset jacks
+static const float TR_RSTBX = 98.41f, TR_RSTBY = 121.40f;   // reset button
+static const float TR_WRX = 109.33f, TR_ERX = 120.75f, TR_BTNY = 121.00f;
 
 struct TraceWidget : ModuleWidget {
 	TraceWidget(Trace* module) {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/trace.svg")));
 
+		// NO PanelLabels, and no title. The 2026-08 artwork carries its own text
+		// as outlined paths, which Rack DOES render -- it ignores only <text> --
+		// so drawing them again in Figtree printed every label twice, half a
+		// millimetre out. Slice and Kit carry the same note. The grid above is
+		// read from the art, which is now the source of the layout.
 		TraceDisplay* disp = new TraceDisplay;
 		disp->module = module;
-		disp->box.pos = mm2px(Vec(38.50f, 7.50f));
-		disp->box.size = mm2px(Vec(105.00f, 77.00f));
+		disp->box.pos  = mm2px(Vec(5.08f, 10.16f));
+		disp->box.size = mm2px(Vec(162.53f, 63.49f));
 		addChild(disp);
 
-		// inputs, left
-		for (int i = 0; i < TR_LANES; i++)
+		// ── one row per lane: brush, then what feeds it ────────────────────
+		for (int i = 0; i < TR_LANES; i++) {
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_INX1, TR_ROW[i])),
 			                                         module, Trace::LANE_INPUT + i));
-		for (int i = 0; i < TR_LANES; i++) {
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_INX2, TR_ROW[i])),
 			                                         module, Trace::THICK_INPUT + i));
 			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_INX3, TR_ROW[i])),
 			                                         module, Trace::OFFSET_INPUT + i));
-		}
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_INX1, TR_ROW[4])), module, Trace::WRITE_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_INX2, TR_ROW[4])), module, Trace::CLOCK_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_INX3, TR_ROW[4])), module, Trace::BAR_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_KX[0], TR_JY)), module, Trace::SPEED_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_KX[2], TR_JY)), module, Trace::SLEW_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_KX[3], TR_JY)), module, Trace::INK_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_KX[5], TR_JY)), module, Trace::SPREAD_INPUT));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(TR_KX[5], TR_KY)), module, Trace::SPREAD_PARAM));
-
-		// outputs, right: one row per lane, value / ink / trigger
-		for (int i = 0; i < TR_LANES; i++) {
 			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(TR_OUTX1, TR_ROW[i])),
 			                                           module, Trace::VALUE_OUTPUT + i));
 			addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(TR_OUTX2, TR_ROW[i])),
 			                                           module, Trace::INK_OUTPUT + i));
 		}
-		addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(TR_OUTX2, TR_ROW[4])),
-		                                           module, Trace::LOOP_OUTPUT));
-
-		// transport
-		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
-			mm2px(Vec(10.00f, TR_KY)), module, Trace::RUN_PARAM, Trace::RUN_LIGHT));
-		addParam(createLightParamCentered<VCVLightBezel<RedLight>>(
-			mm2px(Vec(22.00f, TR_KY)), module, Trace::DIR_PARAM, Trace::DIR_LIGHT));
-		addParam(createParamCentered<VCVButton>(mm2px(Vec(34.00f, TR_KY)), module, Trace::RESET_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(10.00f, TR_JY)), module, Trace::RUN_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(22.00f, TR_JY)), module, Trace::DIR_INPUT));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(34.00f, TR_JY)), module, Trace::RESET_INPUT));
-
-		// controls
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(TR_KX[0], TR_KY)), module, Trace::SPEED_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(TR_KX[1], TR_KY)), module, Trace::LENGTH_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(TR_KX[2], TR_KY)), module, Trace::SLEW_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(TR_KX[3], TR_KY)), module, Trace::INK_PARAM));
-		addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(TR_KX[4], TR_KY)), module, Trace::LEAK_PARAM));
-
-		// Brush selector. ERASE is RED, not another white one: it latches, and
-		// a latched erase looks exactly like drawing that does not work.
+		// The brush buttons moved to the head of their own lane's row, which is
+		// the one place they cannot be mistaken for a global control.
 		addParam(createLightParamCentered<VCVLightBezel<TrLaneLight0>>(
-			mm2px(Vec(TR_BRX + 0 * TR_BRP, TR_KY)), module,
-			Trace::BRUSH_PARAM + 0, Trace::BRUSH_LIGHT + 0));
+			mm2px(Vec(TR_BRX, TR_ROW[0])), module, Trace::BRUSH_PARAM + 0, Trace::BRUSH_LIGHT + 0));
 		addParam(createLightParamCentered<VCVLightBezel<TrLaneLight1>>(
-			mm2px(Vec(TR_BRX + 1 * TR_BRP, TR_KY)), module,
-			Trace::BRUSH_PARAM + 1, Trace::BRUSH_LIGHT + 1));
+			mm2px(Vec(TR_BRX, TR_ROW[1])), module, Trace::BRUSH_PARAM + 1, Trace::BRUSH_LIGHT + 1));
 		addParam(createLightParamCentered<VCVLightBezel<TrLaneLight2>>(
-			mm2px(Vec(TR_BRX + 2 * TR_BRP, TR_KY)), module,
-			Trace::BRUSH_PARAM + 2, Trace::BRUSH_LIGHT + 2));
+			mm2px(Vec(TR_BRX, TR_ROW[2])), module, Trace::BRUSH_PARAM + 2, Trace::BRUSH_LIGHT + 2));
 		addParam(createLightParamCentered<VCVLightBezel<TrLaneLight3>>(
-			mm2px(Vec(TR_BRX + 3 * TR_BRP, TR_KY)), module,
-			Trace::BRUSH_PARAM + 3, Trace::BRUSH_LIGHT + 3));
-		addParam(createLightParamCentered<VCVLightBezel<RedLight>>(
-			mm2px(Vec(TR_BRX + 4 * TR_BRP, TR_KY)), module,
-			Trace::BRUSH_PARAM + 4, Trace::BRUSH_LIGHT + 4));
+			mm2px(Vec(TR_BRX, TR_ROW[3])), module, Trace::BRUSH_PARAM + 3, Trace::BRUSH_LIGHT + 3));
 
-		sfs::PanelLabels* lab = new sfs::PanelLabels;
-		lab->title(6.f, 122.f, "TRACE");
-		for (int i = 0; i < TR_LANES; i++) {
-			lab->jack(TR_INX1, TR_ROW[i], string::f("L%d", i + 1));
-			lab->jack(TR_INX2, TR_ROW[i], string::f("TH%d", i + 1));
-			lab->jack(TR_INX3, TR_ROW[i], string::f("OF%d", i + 1));
-		}
-		// The output rows are the lanes, top to bottom, in the same order as
-		// the screen's numbered strips — so the columns get the labels and the
-		// rows do not need repeating four times.
-		lab->jackOnPlate(TR_OUTX1, TR_ROW[0], "VAL");
-		lab->jack(TR_INX1, TR_ROW[4], "WRT");
-		lab->jack(TR_INX2, TR_ROW[4], "CLK");
-		lab->jack(TR_INX3, TR_ROW[4], "BAR");
-		// the three that modulate a knob now sit under it, joined by a line
-		lab->link(TR_KX[0], TR_KY, TR_KX[0], TR_JY);
-		lab->link(TR_KX[2], TR_KY, TR_KX[2], TR_JY);
-		lab->link(TR_KX[3], TR_KY, TR_KX[3], TR_JY);
-		lab->link(TR_KX[5], TR_KY, TR_KX[5], TR_JY);
-		lab->jackOnPlate(TR_OUTX2, TR_ROW[0], "INK");
-		lab->jackOnPlate(TR_OUTX2, TR_ROW[4], "LOOP");
-		lab->jack(10.00f, TR_KY, "RUN");
-		lab->jack(22.00f, TR_KY, "DIR");
-		lab->jack(34.00f, TR_KY, "RST");
-		static const char* KN[6] = {"SPEED", "LENGTH", "SLEW", "INK", "LEAK", "SPREAD"};
-		for (int i = 0; i < 6; i++) lab->knob(TR_KX[i], TR_KY, KN[i]);
-		lab->add(TR_BRX + 2.f * TR_BRP, TR_KY - 6.6f, "BRUSH");
-		lab->note(TR_BRX + 4.f * TR_BRP, TR_KY + 7.0f, "ERA");
-		addChild(lab);
+		// ── seven columns of control over CV ───────────────────────────────
+		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
+			mm2px(Vec(TR_MX[0], TR_KY)), module, Trace::RUN_PARAM, Trace::RUN_LIGHT));
+		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<RedLight>>>(
+			mm2px(Vec(TR_MX[1], TR_KY)), module, Trace::DIR_PARAM, Trace::DIR_LIGHT));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(TR_MX[2], TR_KY)), module, Trace::SPEED_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(TR_MX[3], TR_KY)), module, Trace::SLEW_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(TR_MX[4], TR_KY)), module, Trace::INK_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(TR_MX[5], TR_KY)), module, Trace::LEAK_PARAM));
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(TR_MX[6], TR_KY)), module, Trace::SPREAD_PARAM));
+		static const int MI[7] = {Trace::RUN_INPUT, Trace::DIR_INPUT, Trace::SPEED_INPUT,
+		                          Trace::SLEW_INPUT, Trace::INK_INPUT, Trace::LEAK_INPUT,
+		                          Trace::SPREAD_INPUT};
+		for (int i = 0; i < 7; i++)
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_MX[i], TR_JY)), module, MI[i]));
+
+		// ── the bottom strip ───────────────────────────────────────────────
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_MX[0], TR_BY)), module, Trace::CLOCK_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_MX[1], TR_BY)), module, Trace::BAR_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_MX[2], TR_BY)), module, Trace::RESET_INPUT));
+		addParam(createParamCentered<VCVButton>(mm2px(Vec(TR_RSTBX, TR_RSTBY)),
+		                                        module, Trace::RESET_PARAM));
+		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
+			mm2px(Vec(TR_WRX, TR_BTNY)), module, Trace::WRITE_PARAM, Trace::BRUSH_LIGHT + 4));
+		// ERASE is the fifth brush, and it is RED: it latches, and a latched
+		// erase looks exactly like drawing that does not work.
+		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<RedLight>>>(
+			mm2px(Vec(TR_ERX, TR_BTNY)), module, Trace::BRUSH_PARAM + 4, Trace::DIR_LIGHT));
+
 	}
 
 	void appendContextMenu(Menu* menu) override {
+		// LENGTH HAS NO PLACE ON THE 2026-08 PANEL -- the art draws no guide for
+		// it. It is the paper loop's length, which is far too central to simply
+		// drop, so it lives here as a menu slider (the pattern Chance uses for
+		// GATE LEN and GLIDE) until the panel finds room for it again.
+		{
+			Trace* t = dynamic_cast<Trace*>(module);
+			if (t) {
+				struct TrSlider : ui::Slider {
+					TrSlider(Module* m, int id) {
+						quantity = m->paramQuantities[id]; box.size.x = 200.f;
+					}
+				};
+				menu->addChild(new TrSlider(t, Trace::LENGTH_PARAM));
+				menu->addChild(new MenuSeparator);
+			}
+		}
 		Trace* m = dynamic_cast<Trace*>(module);
 		if (!m) return;
 		menu->addChild(new MenuSeparator);
