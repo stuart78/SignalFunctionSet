@@ -473,6 +473,7 @@ MODULES = {
     "slide":   ("Slide",   "src/slide.cpp",   "res/slide.svg",   {"SLIDE_NCH": 8}),
     "loom":    ("Loom",    "src/loom.cpp",    "res/loom.svg",    {"LOOM_N": 8}),
     "gravity": ("Gravity", "src/gravity.cpp", "res/gravity.svg", {}),
+    "touch":   ("Touch",   "src/touch.cpp",   "res/touch.svg",   {"ART_COUNT": 6}),
     "slidex":  ("SlideX",  "src/slidex.cpp",  "res/slidex.svg",  {"NCH": 8}),
     "slice": ("Slice", "src/slice.cpp", "res/slice.svg",
                {"SLICE_NXF": 7}),

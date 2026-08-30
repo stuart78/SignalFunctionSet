@@ -46,6 +46,7 @@ void init(Plugin* p) {
 	p->addModel(modelKit);
 	p->addModel(modelTrace);
 	p->addModel(modelSigma);
+	p->addModel(modelTouch);
 
 	// Add modules here
 	// p->addModel(modelMyModule);

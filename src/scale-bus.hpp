@@ -35,6 +35,7 @@
 #include "plugin.hpp"
 #include "scales.hpp"
 #include <cmath>
+#include <string>
 
 namespace sfs {
 
@@ -54,6 +55,11 @@ struct BusScale {
 	float period = 12.f;          // semitones per repeat
 	int   index = 0;              // the channel-0 summary
 	bool  extended = false;       // came off the bus rather than the list
+	// Degrees the source had that did not fit. A 31-note Scala scale arrives
+	// as 14 degrees and `dropped` = 17. Without it a consumer cannot tell a
+	// scale that genuinely has fourteen degrees from one cut down to fourteen,
+	// and so cannot say the one thing the reader needs to know.
+	int   dropped = 0;
 
 	// Degree `k`, continuing past the end by repeating at the period, so a
 	// caller can ask for a row above the scale without a special case.
@@ -63,8 +69,47 @@ struct BusScale {
 		int within = k - rep * size;
 		return intervals[within] + (float)rep * period;
 	}
-	const char* longName()  const { return extended ? "Scala" : SCALES[index].longName; }
-	const char* shortName() const { return extended ? "Scala" : SCALES[index].shortName; }
+	// Does the index actually NAME this scale, or is it only the nearest
+	// canonical neighbour? `extended` cannot answer that: it says the scale
+	// came off the wire, and a plain Major relayed by Key comes off the wire
+	// too. Naming that "Scala" is just as wrong as naming Bohlen-Pierce
+	// "Chromatic" — which is the bug this replaces. Compare the degrees.
+	bool canonical() const {
+		if (dropped > 0) return false;
+		if (std::fabs(period - 12.f) > 1e-3f) return false;
+		if (index < 0 || index >= NUM_SCALES) return false;
+		const Scale& c = SCALES[index];
+		if (c.size != size) return false;
+		for (int k = 0; k < size; k++)
+			if (std::fabs(intervals[k] - c.intervals[k]) > 0.01f) return false;   // a cent
+		return true;
+	}
+	bool truncated() const { return dropped > 0; }
+	bool octave()    const { return std::fabs(period - 12.f) < 1e-3f; }
+
+	const char* longName()  const { return canonical() ? SCALES[index].longName  : "Scala"; }
+	const char* shortName() const { return canonical() ? SCALES[index].shortName : "Scala"; }
+
+	// For a status cell with room for about seven characters. A scale an index
+	// cannot name is described by its shape instead of misnamed: "13 deg", or
+	// "13/31" when the wire could not carry all of it.
+	std::string label() const {
+		if (canonical()) return SCALES[index].shortName;
+		if (dropped > 0) return string::f("%d/%d", size, size + dropped);
+		return string::f("%d deg", size);
+	}
+
+	// One line, for a readout or a menu. Says what the scale IS, and what was
+	// lost getting here.
+	std::string describe() const {
+		if (canonical()) return SCALES[index].longName;
+		std::string s = (dropped > 0)
+			? string::f("%d of %d degrees", size, size + dropped)
+			: string::f("%d degrees", size);
+		if (!octave()) s += string::f(", period %.2f st", period);
+		if (dropped > 0) s += string::f("  (cut to the %d-degree bus limit)", BUS_MAXDEG);
+		return s;
+	}
 };
 
 // The canonical list, in the same shape.
@@ -104,7 +149,17 @@ inline bool busScaleFromInput(Input& in, BusScale& out) {
 	if (std::fabs(out.intervals[0]) > 0.01f) return false;     // degree 0 is the root
 	out.size = n;
 	out.period = per;
-	out.index = clamp((int)std::round(in.getVoltage(0)), 0, NUM_SCALES - 1);
+	// Channel 0 is "1V per scale", so its INTEGER part is the whole payload for
+	// anyone reading an index -- they all round it. That leaves the fraction
+	// spare, and it carries how many degrees were dropped. A count rather than
+	// a flag, because "13 of 31" tells the reader something and "13, and some
+	// were lost" does not. Invisible to an index-only consumer by the
+	// definition of the format, and it costs no channel: there is none to
+	// spare when a fourteen-degree scale already fills all sixteen.
+	float v0 = in.getVoltage(0);
+	float iv = std::round(v0);
+	out.index = clamp((int)iv, 0, NUM_SCALES - 1);
+	out.dropped = clamp((int)std::round((v0 - iv) * 128.f), 0, 127);
 	out.extended = true;
 	return true;
 }
@@ -125,9 +180,10 @@ inline BusScale busResolve(Input& in, int knobIndex) {
 // every scale an index cannot name.
 inline void busScaleToOutput(Output& out, const BusScale& s) {
 	int n = std::min(s.size, BUS_MAXDEG);
+	int dropped = clamp(s.dropped + (s.size - n), 0, 127);
 	if (n <= 0) { out.setChannels(1); out.setVoltage((float)s.index); return; }
 	out.setChannels(n + 2);
-	out.setVoltage((float)s.index, 0);
+	out.setVoltage((float)s.index + (float)dropped / 128.f, 0);
 	out.setVoltage(s.period / 12.f, 1);
 	for (int k = 0; k < n; k++) out.setVoltage(s.intervals[k] / 12.f, 2 + k);
 }

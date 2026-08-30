@@ -545,6 +545,11 @@ struct Key : Module {
 		for (int k = 0; k < b.size; k++) b.intervals[k] = parent.iv[k];
 		b.period = parent.period;
 		b.index = idx;
+		// Key holds up to KEY_MAXDEG degrees and the bus holds fourteen, so a
+		// long Scala scale leaves some behind. Say how many, or every module
+		// downstream shows a fourteen-degree scale as if that were the whole
+		// of it.
+		b.dropped = std::max(0, parent.n - b.size);
 		sfs::busScaleToOutput(outputs[SCALE_OUTPUT], b);
 	}
 
@@ -1097,9 +1102,18 @@ struct KeyWidget : ModuleWidget {
 				}
 				std::free(path);
 			}));
-		if (m->scalaLoaded)
+		if (m->scalaLoaded) {
 			menu->addChild(createMenuLabel(string::f("   %d degrees, period %.1f cents",
 				m->scala.n, m->scala.period * 100.f)));
+			// Key quantises from all of them; the SCALE bus cannot carry all of
+			// them. Better said here, at the point the file is loaded, than
+			// discovered later as a downstream module quietly playing a
+			// different scale.
+			if (m->scala.n > sfs::BUS_MAXDEG)
+				menu->addChild(createMenuLabel(string::f(
+					"   SCALE out carries the first %d — %d will not travel",
+					sfs::BUS_MAXDEG, m->scala.n - sfs::BUS_MAXDEG)));
+		}
 
 		menu->addChild(new MenuSeparator);
 		// Degrees is the default because it is the scale-aware answer: +2 moves

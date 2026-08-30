@@ -78,7 +78,7 @@ struct ChanceDisplay : OpaqueWidget {
 	               const bool* rest, const int* harm, bool harmOn, const int* seq, int seqLen,
 	               int curNode, int maxPos, bool running, int root, int scaleIdx);
 	void drawReseedIcon(NVGcontext* vg, rack::math::Rect r, bool on);
-	void drawKeyReadout(NVGcontext* vg, int root, int scaleIdx);
+	void drawKeyReadout(NVGcontext* vg, int root, const sfs::BusScale& sc);
 	void drawBank(const DrawArgs& args);
 	void drawControls(const DrawArgs& args);
 	void drawPreview(const DrawArgs& args);
@@ -744,21 +744,35 @@ void ChanceDisplay::drawPreview(const DrawArgs& args) {
 	const int harm[8] = {3, 7, 8, 6, 5, 4, 6, 8};   // a weaving 2nd voice
 	const int seq[8] = {0, 1, 2, 3, 4, 5, 6, 7};
 	drawScene(args, core, play, play, rest, harm, true, seq, 8, 2, 8, true, 0, 1);
-	drawKeyReadout(args.vg, 0, 1);
+	sfs::BusScale prev; sfs::busScaleFromIndex(1, prev);
+	drawKeyReadout(args.vg, 0, prev);
 }
 
-// Top-left key/scale readout: note name (white) + full scale name (orange).
-void ChanceDisplay::drawKeyReadout(NVGcontext* vg, int root, int scaleIdx) {
+// Top-left key/scale readout: note name (white) + the scale (orange).
+//
+// The scale is the one ACTUALLY in force, from the bus, not the canonical name
+// of the channel-0 index. Once the key comes off the wire that index is only
+// ever a nearest neighbour, so reading its name here announced "Chromatic" over
+// a Bohlen-Pierce scale -- confidently, in the one place a player looks to see
+// what key they are in.
+void ChanceDisplay::drawKeyReadout(NVGcontext* vg, int root, const sfs::BusScale& sc) {
 	if (!font) return;
 	static const char* NN[12] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
 	std::string note = NN[((root % 12) + 12) % 12];
-	std::string scale = sfs::SCALES[clamp(scaleIdx, 0, NUM_SCALES - 1)].longName;
+	std::string scale = sc.canonical()
+		? std::string(sc.longName())
+		: (sc.truncated() ? string::f("%d of %d deg", sc.size, sc.size + sc.dropped)
+		                  : string::f("%d deg", sc.size));
+	// A period that is not an octave is the other thing an index cannot say,
+	// and it changes how every row above the first reads.
+	if (!sc.canonical() && !sc.octave()) scale += string::f("  %.2f st", sc.period);
 	nvgFontFaceId(vg, font->handle); nvgFontSize(vg, SH(12));
 	nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 	float y = SY(9);   // sit in the top band, clear of the divider (16.5) + pattern rects (19)
 	nvgFillColor(vg, nvgRGB(0xe6, 0xe6, 0xf0));
 	float adv = nvgText(vg, SX(18), y, note.c_str(), NULL);
-	nvgFillColor(vg, nvgRGB(0xec, 0x65, 0x2e));
+	// Red rather than orange when the wire could not carry the whole scale.
+	nvgFillColor(vg, sc.truncated() ? nvgRGB(0xe0, 0x3a, 0x2a) : nvgRGB(0xec, 0x65, 0x2e));
 	nvgText(vg, adv + SW(6), y, scale.c_str(), NULL);
 }
 
@@ -770,7 +784,7 @@ void ChanceDisplay::drawLayer(const DrawArgs& args, int layer) {
 	if (!m) { drawPreview(args); drawBank(args); drawControls(args); return; }
 	drawScene(args, m->coreNote, m->playNote, m->baseNote, m->pathRest, m->harmNote, m->harmonyEnabled(),
 	          m->seq, m->seqLen, m->curNodeIdx, m->maxPosDeg, m->dispRunning, m->curRoot, m->curScale);
-	drawKeyReadout(args.vg, m->curRoot, m->curScale);
+	drawKeyReadout(args.vg, m->curRoot, m->scale);
 	drawBank(args);
 	drawControls(args);
 }

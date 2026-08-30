@@ -87,7 +87,7 @@ custom note mask, a loaded Scala file, or a scale whose period is not an octave.
 
 | channel | carries |
 |---|---|
-| 0 | the scale index, 1V per scale — exactly as before |
+| 0 | the scale index, 1V per scale — exactly as before. Its **fractional part** carries how many degrees did not fit (see *What was cut*) |
 | 1 | the period, in volts (12 semitones = 1V) |
 | 2 … n+1 | the n degrees, as 1V/oct offsets from the root; channel 2 is always 0 |
 
@@ -137,6 +137,45 @@ pitch-class set.)
 
 Limits: 14 degrees, since 16 channels less the index and the period. That covers
 every canonical scale and most Scala files; a 31-note Scala scale is truncated.
+
+### What was cut
+
+A consumer that is handed fourteen degrees cannot tell a scale that genuinely
+has fourteen from a 31-note scale cut down to fourteen — and that is exactly
+what its reader needs to know. So `BusScale::dropped` carries the count, and
+the producer sets it (Key: `parent.n - b.size`).
+
+There is no channel left to put it in: a fourteen-degree scale already fills all
+sixteen. It rides in the **fractional part of channel 0** instead. Channel 0 is
+defined as "1V per scale", so every index-only consumer rounds it, and the
+fraction is spare by the definition of the format — invisible to them, free to
+us. `busScaleToOutput` writes `index + dropped/128`; `busScaleFromInput` takes
+the integer as the index and the remainder as the count. A count rather than a
+flag, because "14 of 31" tells the reader something that "14, and some were
+lost" does not.
+
+### Naming a scale on screen
+
+`BusScale::canonical()` asks whether the index actually **names** this scale, by
+comparing the degrees with `SCALES[index]`. Do not use `extended` for this: it
+says the scale arrived over the wire, and a plain Major relayed by Key arrives
+over the wire too.
+
+Once the key comes off the bus, channel 0 is only ever a nearest neighbour, so
+a display that reads `SCALES[index].longName` announces **"Chromatic" over a
+Bohlen-Pierce scale** — confidently, in the one place a player looks to find out
+what key they are in. Note's status cell and Chance's key readout both did.
+
+Use the shared formatters so every module says the same thing:
+
+| | canonical | microtonal / custom | cut |
+|---|---|---|---|
+| `label()` (a status cell) | `Major` | `13 deg` | `14/31` |
+| `describe()` (a readout or menu) | `Major` | `13 degrees, period 19.02 st` | `14 of 31 degrees (cut to the 14-degree bus limit)` |
+
+Flag a cut scale in the display's warning colour: the degrees shown are a
+prefix of the real scale, not the whole of it. Key says the same thing at the
+source, in the Scala section of its menu, since Key is where the cut happens.
 
 **Receiving:** validate before trusting. A 16-channel pitch cable patched into a
 SCALE input would otherwise be read as a scale. Require an ascending degree list

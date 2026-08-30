@@ -1223,11 +1223,18 @@ void NoteDisplay::drawLayer(const DrawArgs& args, int layer) {
 	}
 	{
 		const rack::math::Rect* statRects[3] = { &rootRect, &scaleRect, &octRect };
+		// The scale ACTUALLY in force, not the canonical index. The index is
+		// only ever a nearest-neighbour summary once the key comes off the bus,
+		// so reading its name here announced "Chromatic" over a Scala scale --
+		// the one place the reader looks to find out what key they are in.
 		std::string statValues[3] = {
 			std::string(NOTE_NAMES[module->rootNote]),
-			std::string(SCALES[module->scaleIndex].shortName),
+			module->scale.label(),
 			string::f("%+d", module->octaveShift)
 		};
+		// Orange where the scale on the wire is longer than the wire: the
+		// degrees below are a prefix of the real scale, not the whole of it.
+		bool cut = module->scale.truncated();
 		for (int i = 0; i < 3; i++) {
 			const rack::math::Rect& r = *statRects[i];
 			nvgBeginPath(args.vg);
@@ -1238,7 +1245,7 @@ void NoteDisplay::drawLayer(const DrawArgs& args, int layer) {
 				nvgFontFaceId(args.vg, font->handle);
 				nvgFontSize(args.vg, 9.f * s);   // match PATTERN font size
 				nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_BASELINE);
-				nvgFillColor(args.vg, COL_TEXT_BRIGHT);
+				nvgFillColor(args.vg, (i == 1 && cut) ? COL_ORANGE : COL_TEXT_BRIGHT);
 				nvgText(args.vg,
 					r.pos.x + r.size.x * 0.5f,
 					184.f * s,                    // shared baseline with PATTERN
@@ -1548,6 +1555,15 @@ struct NoteWidget : ModuleWidget {
 	void appendContextMenu(Menu* menu) override {
 		Note* module = dynamic_cast<Note*>(this->module);
 		assert(module);
+
+		// What key Note is actually in. The status cell has room for a shape
+		// ("13/31") and no more; the sentence belongs here.
+		menu->addChild(new MenuSeparator);
+		menu->addChild(createMenuLabel("Scale in force"));
+		menu->addChild(createMenuLabel("   " + module->scale.describe()));
+		if (module->scale.truncated())
+			menu->addChild(createMenuLabel(
+				"   the rows below are the first degrees of it, not all of them"));
 
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createBoolPtrMenuItem(

@@ -455,6 +455,15 @@
         "Synth voice"
       ],
       "hidden": true
+    },
+    {
+      "slug": "Touch",
+      "name": "Touch",
+      "description": "Decides how each note is reached \u2014 picked, slid into, hammered, pedalled \u2014 and re-emits the melody as V/OCT and a trigger.",
+      "tags": [
+        "Sequencer",
+        "Utility"
+      ]
     }
   ]
 }
