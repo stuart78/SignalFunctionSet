@@ -49,6 +49,11 @@ struct OpMorph : Module {
 	enum InputId {
 		SPEED_CV_INPUT, SHAPE_CV_INPUT, CLOCK_INPUT, RESET_INPUT,
 		PARAMS_UNUSED_INPUT,      // reserved; keeps later appends honest
+		// APPENDED for the 2026-08 panel, which draws a CV jack under every one
+		// of the four pots rather than only under SPEED and SHAPE. They go on
+		// the end, after the reserved slot, because inputs serialise by index
+		// and putting them beside their siblings would repatch saved patches.
+		SPREAD_CV_INPUT, MODE_CV_INPUT,
 		INPUTS_LEN
 	};
 
@@ -122,6 +127,8 @@ struct OpMorph : Module {
 		configSwitch(STEP_PARAM, 0.f, 1.f, 0.f, "Clock quantizes the movement", {"Off", "On"});
 		configInput(SPEED_CV_INPUT, "Speed CV (±5V)");
 		configInput(SHAPE_CV_INPUT, "Shape CV (±5V)");
+		configInput(SPREAD_CV_INPUT, "Depth CV (±5V)");
+		configInput(MODE_CV_INPUT, "Movement CV (1V per mode)");
 		configInput(CLOCK_INPUT, "Clock — steps to the next slot");
 		configInput(RESET_INPUT, "Return to the first slot");
 		// A spread of algorithms rather than 1..16: the field is nicer to travel
@@ -231,7 +238,11 @@ struct OpMorph : Module {
 		                  + inputs[SPEED_CV_INPUT].getVoltage() / 5.f, 0.f, 1.f) * 4.f;
 		float shape = clamp(params[SHAPE_PARAM].getValue()
 		                  + inputs[SHAPE_CV_INPUT].getVoltage() / 5.f, 0.f, 1.f);
-		int mode = clamp((int)std::round(params[MODE_PARAM].getValue()), 0, MOVE_COUNT - 1);
+		// 1V per mode, added to the knob, so a sequencer can step the movement
+		// the same way ROOT and SCALE are stepped elsewhere in the plugin.
+		int mode = clamp((int)std::round(params[MODE_PARAM].getValue()
+		                               + inputs[MODE_CV_INPUT].getVoltage()),
+		                 0, MOVE_COUNT - 1);
 		if (mode != lastMode) { cmdTime = cmdDur = 0.f; lastMode = mode; }
 
 		if (mode == MOVE_LINEAR && stepping) {
@@ -267,7 +278,8 @@ struct OpMorph : Module {
 		float a = (1.f - fx) * (1.f - fy), b = fx * (1.f - fy);
 		float c = (1.f - fx) * fy,          d = fx * fy;
 
-		float depth = params[SPREAD_PARAM].getValue();
+		float depth = clamp(params[SPREAD_PARAM].getValue()
+		                  + inputs[SPREAD_CV_INPUT].getVoltage() / 5.f * 2.f, 0.f, 2.f);
 		float w[6][7];
 		for (int i = 0; i < 6; i++)
 			for (int j = 0; j < 7; j++) {
@@ -345,6 +357,40 @@ struct OpMorphDisplay : Widget {
 
 	int selected = -1;
 
+	// ── the split, in ONE place ─────────────────────────────────────────────
+	// These four numbers were written out four times over -- in both hit tests
+	// and both draw paths -- with the same two literals each time. That is how
+	// a click comes to land on a different cell from the one it is drawn over.
+	//
+	// THE FIELD IS A FIXED HEIGHT AND THE MATRIX TAKES THE REST. It used to be
+	// 46% of the screen, so a taller screen grew both of them in proportion --
+	// and the 2026-08 art made the screen taller specifically to give the
+	// matrix more room. Stated as a height rather than a share, the extra goes
+	// where the art meant it to go. The clamp keeps it sane if the screen ever
+	// shrinks instead.
+	// The screen is the whole interface here -- sixteen slots and forty-two
+	// routing cells, none of which can carry a label at this size -- so what a
+	// thing IS gets said on hover rather than printed.
+	ui::Tooltip* tip = nullptr;
+	std::string hoverStr;
+	std::string hoverAt(Vec p);
+
+	static constexpr float PAD = 4.f;
+	// A NAME GUTTER AND A HEADER, as Sigma's matrix has. Without them nothing on
+	// screen said the rows were operators, the columns were their destinations,
+	// or what the orange column was -- so the colour was carrying a meaning it
+	// had no way to explain, and the only reader who could decode it was one who
+	// already knew. They come out of the matrix's own area, so the cells and the
+	// hit test shrink together.
+	static constexpr float GUT = 9.f;      // row names, down the left
+	static constexpr float HDR = 8.f;      // column names, along the top
+	float bodyW()  const { return box.size.x - 2 * PAD; }
+	float fieldH() const { return std::min(mm2px(30.4f), box.size.y * 0.5f); }
+	float matX()   const { return PAD + GUT; }
+	float matW()   const { return bodyW() - GUT; }
+	float matY()   const { return PAD * 2 + fieldH() + HDR; }
+	float matH()   const { return box.size.y - fieldH() - 3 * PAD - HDR; }
+
 	// The trail, oldest faintest. A segment is DROPPED where the point crossed
 	// a seam: on a torus a wrap is a jump of nearly the whole field, and joining
 	// those two ends draws a line straight back across everything the point did
@@ -409,41 +455,134 @@ struct OpMorphDisplay : Widget {
 		nvgRestore(vg);
 	}
 
+	// The matrix is drawn the way Sigma draws its mod matrix, and for the same
+	// two reasons.
+	//
+	// A LATTICE, ruled all the way across, rather than forty-two separate
+	// tiles. Drawn one at a time with a gap between them, the block read as a
+	// scatter of little meters and you could not see that the OUT column was a
+	// column. One wash of field with dark rules cut through it in both
+	// directions makes the seven destinations line up as columns and the six
+	// operators as rows, which is what you are reading when you look for a
+	// route.
+	//
+	// A DOT THAT RIDES A LINE, not a bar that grows from one. A bar has AREA,
+	// and area reads as quantity even when there is almost none of it -- a cell
+	// at 5% still drew a visible slab, so a sparse algorithm looked busy. A dot
+	// sitting ON the baseline is plainly off, and its distance from that line is
+	// the amount.
 	void drawMatrix(NVGcontext* vg, float x, float y, float w, float h, const float ww[6][7]) {
 		float cw = w / 7.f, ch = h / 6.f;
+		auto usableAt = [](int i, int j) { return (j == 6) || (j > i); };
+
+		nvgBeginPath(vg);
+		nvgRect(vg, x, y, w, h);
+		nvgFillColor(vg, OPM_DIM);
+		nvgFill(vg);
+
+		// the structurally empty half, painted back over the wash: no operator
+		// can modulate itself or anything above it, so those cells are not
+		// controls that happen to be at zero
+		nvgFillColor(vg, nvgRGB(0x22, 0x22, 0x38));
 		for (int i = 0; i < 6; i++)
-			for (int j = 0; j < 7; j++) {
-				float cx = x + j * cw, cy = y + i * ch;
-				bool usable = (j == 6) || (j > i);       // the rest is structurally empty
-				bool on = !module || module->cellOn[i][j];
-				float v = clamp(ww ? ww[i][j] : 0.f, 0.f, 1.f);
-				nvgBeginPath(vg);
-				nvgRoundedRect(vg, cx + 0.8f, cy + 0.8f, cw - 1.6f, ch - 1.6f, 1.5f);
-				nvgFillColor(vg, usable ? OPM_DIM : nvgRGB(0x22, 0x22, 0x38));
-				nvgFill(vg);
-				// A node switched off keeps its outline, so you can see it is a
-				// path you muted rather than one the field is simply not using.
-				if (usable && !on) {
+			for (int j = 0; j < 7; j++)
+				if (!usableAt(i, j)) {
 					nvgBeginPath(vg);
-					nvgMoveTo(vg, cx + 2.2f, cy + ch / 2); nvgLineTo(vg, cx + cw - 2.2f, cy + ch / 2);
-					nvgStrokeColor(vg, OPM_MID); nvgStrokeWidth(vg, 1.f); nvgStroke(vg);
-				}
-				if (usable && on && v > 0.004f) {
-					nvgBeginPath(vg);
-					nvgRoundedRect(vg, cx + 0.8f, cy + 0.8f, cw - 1.6f, (ch - 1.6f) * v, 1.5f);
-					// the output column is a level; the rest is FM index
-					nvgFillColor(vg, j == 6 ? OPM_HOT : OPM_BLUE);
+					nvgRect(vg, x + j * cw, y + i * ch, cw, ch);
 					nvgFill(vg);
 				}
+
+		// CENTRELINES, through the middle of each cell, and drawn before the
+		// rules so the rules cut them. They sat near the cell's floor at first,
+		// on the argument that these values are unipolar and so have no need of
+		// the lower half. That was reasoning about the numbers rather than about
+		// the picture: a line a couple of pixels above the row rule reads as a
+		// doubled rule, the row looks ragged, and the matrix stops being a
+		// lattice. A line down the middle of a cell is the one place it cannot
+		// be confused with the cell's own edge.
+		float inset = std::min(2.6f, ch * 0.22f);
+		nvgFillColor(vg, OPM_MID);
+		for (int i = 0; i < 6; i++)
+			for (int j = 0; j < 7; j++) {
+				if (!usableAt(i, j)) continue;
+				nvgBeginPath(vg);
+				nvgRect(vg, x + j * cw, y + i * ch + ch * 0.5f - 0.5f, cw, 1.f);
+				nvgFill(vg);
 			}
+
+		nvgFillColor(vg, OPM_BG);
+		for (int j = 0; j <= 7; j++) {          // verticals, both edges in
+			nvgBeginPath(vg);
+			nvgRect(vg, x + j * cw - 0.5f, y, 1.f, h);
+			nvgFill(vg);
+		}
+		for (int i = 1; i < 6; i++) {           // horizontals, between rows
+			nvgBeginPath(vg);
+			nvgRect(vg, x, y + i * ch - 0.5f, w, 1.f);
+			nvgFill(vg);
+		}
+
+		for (int i = 0; i < 6; i++)
+			for (int j = 0; j < 7; j++) {
+				if (!usableAt(i, j)) continue;
+				float cx = x + j * cw, cy = y + i * ch;
+				float base = cy + ch * 0.5f;
+				bool on = !module || module->cellOn[i][j];
+				// A node switched off keeps a mark, so you can see it is a path
+				// you muted rather than one the field is simply not using.
+				if (!on) {
+					nvgBeginPath(vg);
+					nvgMoveTo(vg, cx + 3.f, cy + ch * 0.5f);
+					nvgLineTo(vg, cx + cw - 3.f, cy + ch * 0.5f);
+					nvgStrokeColor(vg, OPM_MID);
+					nvgStrokeWidth(vg, 1.f);
+					nvgStroke(vg);
+					continue;
+				}
+				float v = clamp(ww ? ww[i][j] : 0.f, 0.f, 1.f);
+				// Unipolar, so the dot only ever rises: half the travel Sigma
+				// has, for a value that can only go one way.
+				float travel = ch * 0.5f - inset;
+				float dy = base - v * travel;
+				bool lit = v > 0.004f;
+				// the output column is a level; the rest is FM index
+				NVGcolor col = (j == 6) ? OPM_HOT : OPM_BLUE;
+				if (lit) {                      // a stem back to the baseline, so
+					nvgBeginPath(vg);           // the eye can read the distance
+					nvgMoveTo(vg, cx + cw * 0.5f, base);
+					nvgLineTo(vg, cx + cw * 0.5f, dy);
+					nvgStrokeColor(vg, nvgTransRGBA(col, 150));
+					nvgStrokeWidth(vg, 1.f);
+					nvgStroke(vg);
+				}
+				nvgBeginPath(vg);
+				nvgCircle(vg, cx + cw * 0.5f, dy, 2.f);
+				nvgFillColor(vg, lit ? col : OPM_MID);
+				nvgFill(vg);
+			}
+
+		// Rows are the SOURCE operator, columns the DESTINATION -- w is [src][dst]
+		// and the last column is the output bus. OUT is named rather than merely
+		// coloured differently, because a colour cannot say what it means.
+		if (font && font->handle >= 0) {
+			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
+			nvgFillColor(vg, OPM_MID);
+			nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
+			for (int j = 0; j < 7; j++)
+				nvgText(vg, x + j * cw + cw * 0.5f, y - 1.5f,
+				        j == 6 ? "OUT" : string::f("%d", j + 1).c_str(), NULL);
+			nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+			for (int i = 0; i < 6; i++)
+				nvgText(vg, x - 2.5f, y + i * ch + ch * 0.5f,
+				        string::f("%d", i + 1).c_str(), NULL);
+		}
 	}
 
 	// Which matrix cell is under a point, packed as i*7+j, or -1.
 	int cellAt(Vec p) {
-		float pad = 4.f, w = box.size.x - 2 * pad, fieldH = box.size.y * 0.46f;
-		float my = pad * 2 + fieldH, mh = box.size.y - fieldH - 3 * pad;
-		if (p.x < pad || p.x > pad + w || p.y < my || p.y > my + mh) return -1;
-		int j = (int)((p.x - pad) / (w / 7.f));
+		float mx = matX(), w = matW(), my = matY(), mh = matH();
+		if (p.x < mx || p.x > mx + w || p.y < my || p.y > my + mh) return -1;
+		int j = (int)((p.x - mx) / (w / 7.f));
 		int i = (int)((p.y - my) / (mh / 6.f));
 		if (i < 0 || i > 5 || j < 0 || j > 6) return -1;
 		if (!(j == 6 || j > i)) return -1;            // structurally empty
@@ -452,10 +591,10 @@ struct OpMorphDisplay : Widget {
 
 	// Which slot is under a point, or -1 outside the field.
 	int slotAt(Vec p) {
-		float pad = 4.f, w = box.size.x - 2 * pad, fieldH = box.size.y * 0.46f;
-		if (p.x < pad || p.x > pad + w || p.y < pad || p.y > pad + fieldH) return -1;
-		int c = (int)((p.x - pad) / (w / OPM_COLS));
-		int r = (int)((p.y - pad) / (fieldH / OPM_ROWS));
+		float w = bodyW(), fh = fieldH();
+		if (p.x < PAD || p.x > PAD + w || p.y < PAD || p.y > PAD + fh) return -1;
+		int c = (int)((p.x - PAD) / (w / OPM_COLS));
+		int r = (int)((p.y - PAD) / (fh / OPM_ROWS));
 		if (c < 0 || c >= OPM_COLS || r < 0 || r >= OPM_ROWS) return -1;
 		return r * OPM_COLS + c;
 	}
@@ -495,6 +634,49 @@ struct OpMorphDisplay : Widget {
 	}
 	float dragAccum = 0.f;
 
+	// Driven from the pointer position rather than from onHover/onLeave, and
+	// that is deliberate. This widget is a plain Widget and does not CONSUME the
+	// hover event -- it must not, or a click on the screen's empty space would
+	// stop falling through to the module and you could no longer drag the module
+	// by its screen. But a widget that never consumes hover never becomes the
+	// hovered widget, so it is never sent onLeave either: the readout would
+	// simply keep saying whatever it last said, with the tooltip stranded on
+	// screen after the pointer had gone. Testing containment each frame has no
+	// such hole, and it keeps the number live during a drag for free -- dragging
+	// a slot walks its algorithm, and during an edit is exactly when you want to
+	// see the value.
+	void step() override {
+		// DIVIDE BY THE ZOOM. getAbsoluteOffset() transforms a LOCAL vector into
+		// absolute coordinates, and ZoomWidget scales it on the way, so
+		//     absolute(p) = offset0 + zoom * p_local
+		// and recovering p_local needs both the subtraction and the division.
+		// With only the subtraction the error is (zoom - 1) * p_local: zero at
+		// the widget's top-left corner and growing with distance from it. Zoomed
+		// in, the readout therefore worked near the corner, named the wrong cell
+		// further out, and stopped appearing at all once the inflated point fell
+		// outside the box -- which reads as "it works for a bit and then stops".
+		float z = getAbsoluteZoom();
+		if (z <= 0.f) z = 1.f;
+		Vec p = APP->scene->mousePos.minus(getAbsoluteOffset(Vec(0, 0))).div(z);
+		hoverStr = box.zeroPos().contains(p) ? hoverAt(p) : std::string();
+		bool want = !hoverStr.empty();
+		if (want && !tip) { tip = new ui::Tooltip; APP->scene->addChild(tip); }
+		else if (!want && tip) {
+			APP->scene->removeChild(tip); delete tip; tip = nullptr;
+		}
+		if (tip) {
+			tip->text = hoverStr;
+			tip->box.pos = APP->scene->mousePos.plus(Vec(15, 15));
+		}
+		Widget::step();
+	}
+	~OpMorphDisplay() override {
+		// The tooltip is parented to the SCENE, not to this widget, so it does
+		// not go away when the widget does -- a module deleted with the pointer
+		// over its screen would otherwise leave the readout floating there.
+		if (tip) { APP->scene->removeChild(tip); delete tip; tip = nullptr; }
+	}
+
 	void draw(const DrawArgs& args) override {
 		NVGcontext* vg = args.vg;
 		if (!font || font->handle < 0) font = sfs::screenFontFace();
@@ -502,13 +684,12 @@ struct OpMorphDisplay : Widget {
 		nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 3.f);
 		nvgFillColor(vg, OPM_BG); nvgFill(vg);
 
-		float pad = 4.f, w = box.size.x - 2 * pad;
-		float fieldH = box.size.y * 0.46f;
-		if (!module) { drawPreview(vg, pad, w, fieldH); return; }
+		float w = bodyW(), fh = fieldH();
+		if (!module) { drawPreview(vg, PAD, w, fh); return; }
 		selected = module->editSlot;
-		drawField(vg, pad, pad, w, fieldH, module->slotAlgo,
+		drawField(vg, PAD, PAD, w, fh, module->slotAlgo,
 		          module->outX, module->outY, true);
-		drawMatrix(vg, pad, pad * 2 + fieldH, w, box.size.y - fieldH - 3 * pad, module->dispW);
+		drawMatrix(vg, matX(), matY(), matW(), matH(), module->dispW);
 		if (!module->dispActive && font && font->handle >= 0) {
 			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 			nvgFillColor(vg, OPM_MID);
@@ -525,46 +706,88 @@ struct OpMorphDisplay : Widget {
 		static float dm[6][7] = {
 			{0,1,0,0,0,0, 0}, {0,0,.65f,0,0,0, .35f}, {0,0,0,1,0,0, 0},
 			{0,0,0,0,0,0, 1}, {0,0,0,0,0,.8f, .2f},   {0,0,0,0,0,0, 1}};
-		drawMatrix(vg, pad, pad * 2 + fieldH, w, box.size.y - fieldH - 3 * pad, dm);
+		drawMatrix(vg, matX(), matY(), matW(), matH(), dm);
 	}
 };
+
+// What the pointer is over, already formatted. The hit tests are the SAME ones
+// a click uses -- slotAt() and cellAt() -- so the readout cannot describe a cell
+// other than the one a click would land on. Computing the indices a second time
+// from the same geometry is a standing invitation for the tooltip to name one
+// cell while the click edits its neighbour.
+std::string OpMorphDisplay::hoverAt(Vec p) {
+	if (!module) return "";
+	int sl = slotAt(p);
+	if (sl >= 0) {
+		int a = module->slotAlgo[clamp(sl, 0, OPM_SLOTS - 1)];
+		std::string what = (a < 0) ? std::string("edited")
+		                           : string::f("algorithm %d", a + 1);
+		// Which slot the field is actually sitting on is the one thing the
+		// numbers on screen cannot say, since the dot is between four of them.
+		const char* mark = (sl == module->editSlot) ? "   (editing)" : "";
+		return string::f("Slot %d,%d   %s%s",
+		                 sl % OPM_COLS + 1, sl / OPM_COLS + 1, what.c_str(), mark);
+	}
+	int c = cellAt(p);
+	if (c >= 0) {
+		int i = c / 7, j = c % 7;
+		float v = clamp(module->dispW[i][j], 0.f, 1.f);
+		if (!module->cellOn[i][j])
+			return j == 6 ? string::f("OP %d -> OUT   muted", i + 1)
+			              : string::f("OP %d -> OP %d   muted", i + 1, j + 1);
+		// The output column is a LEVEL and the rest is an FM INDEX. They are
+		// different quantities that happen to share a scale, and the tooltip is
+		// the only place on this screen that can say so.
+		return j == 6 ? string::f("OP %d -> OUT   level %.0f%%", i + 1, v * 100.f)
+		              : string::f("OP %d -> OP %d   index %.0f%%", i + 1, j + 1, v * 100.f);
+	}
+	return "";
+}
+
+// ── the 2026-08 grid, transcribed from res/opmorph.svg ─────────────────────
+// The screen grew 5mm taller and every macro gained a pot with a CV jack under
+// it; STEP stayed a switch, drawn as a rounded rect rather than a circle.
+static const float SCR_X = 5.08f, SCR_Y = 10.16f, SCR_W = 50.96f, SCR_H = 71.11f;
+static const float KX[4] = {7.75f, 19.17f, 30.60f, 42.03f};   // pots
+static const float KY = 93.58f;
+static const float JX[4] = {7.58f, 19.00f, 30.43f, 41.86f};   // their CV
+static const float JY = 105.26f;
+static const float STEP_X = 53.33f, STEP_Y = 93.88f;
+static const float BX[2] = {7.66f, 19.00f};                   // clock, reset
+static const float BY = 121.26f;
 
 struct OpMorphWidget : ModuleWidget {
 	OpMorphWidget(OpMorph* module) {
 		setModule(module);
 		setPanel(createPanel(asset::plugin(pluginInstance, "res/opmorph.svg")));
-		using sfs::hp;
 
-		sfs::PanelLabels* lbl = new sfs::PanelLabels();
-		lbl->box.size = box.size;
-		addChild(lbl);
-		lbl->title(hp(1), hp(1.6f), "MORPH");
+		static const int KP[4] = {OpMorph::SPEED_PARAM, OpMorph::SHAPE_PARAM,
+		                          OpMorph::SPREAD_PARAM, OpMorph::MODE_PARAM};
+		static const int KI[4] = {OpMorph::SPEED_CV_INPUT, OpMorph::SHAPE_CV_INPUT,
+		                          OpMorph::SPREAD_CV_INPUT, OpMorph::MODE_CV_INPUT};
+
+		// NO PanelLabels, and no title. This panel's artwork carries its own
+		// text as outlined paths and Rack renders those, so a runtime label
+		// layer prints every word twice about half a millimetre off -- which
+		// reads as a blurry panel rather than as an obvious duplicate. Do not
+		// "fix" the missing labels by adding them back.
 
 		OpMorphDisplay* disp = new OpMorphDisplay();
 		disp->module = module;
-		disp->box.pos  = mm2px(Vec(hp(0.75f), hp(2)));
-		disp->box.size = mm2px(Vec(hp(10.5f), hp(13)));
+		disp->box.pos  = mm2px(Vec(SCR_X, SCR_Y));
+		disp->box.size = mm2px(Vec(SCR_W, SCR_H));
 		addChild(disp);
 
-		const float colA = hp(2.75f), colB = hp(9);
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, hp(17))), module, OpMorph::SPEED_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, hp(19))), module, OpMorph::SPEED_CV_INPUT));
-		lbl->pairDown(colA, hp(17), hp(19), "SPEED");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(colB, hp(17))), module, OpMorph::SHAPE_PARAM));
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, hp(19))), module, OpMorph::SHAPE_CV_INPUT));
-		lbl->pairDown(colB, hp(17), hp(19), "SHAPE");
+		// A pot per macro with its CV directly underneath, in the same order,
+		// so a cable hangs under the thing it modulates.
+		for (int i = 0; i < 4; i++) {
+			addParam(createParamCentered<Trimpot>(mm2px(Vec(KX[i], KY)), module, KP[i]));
+			addInput(createInputCentered<PJ301MPort>(mm2px(Vec(JX[i], JY)), module, KI[i]));
+		}
+		addParam(createParamCentered<CKSS>(mm2px(Vec(STEP_X, STEP_Y)), module, OpMorph::STEP_PARAM));
 
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(colA, hp(22))), module, OpMorph::SPREAD_PARAM));
-		lbl->trim(colA, hp(22), "DEPTH");
-		addParam(createParamCentered<Trimpot>(mm2px(Vec(hp(6), hp(22))), module, OpMorph::MODE_PARAM));
-		lbl->trim(hp(6), hp(22), "MOVE");
-		addParam(createParamCentered<CKSS>(mm2px(Vec(colB, hp(22))), module, OpMorph::STEP_PARAM));
-		lbl->trim(colB, hp(22), "STEP");
-
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colA, hp(25))), module, OpMorph::CLOCK_INPUT));
-		lbl->jack(colA, hp(25), "CLOCK");
-		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(colB, hp(25))), module, OpMorph::RESET_INPUT));
-		lbl->jack(colB, hp(25), "RESET");
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(BX[0], BY)), module, OpMorph::CLOCK_INPUT));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(BX[1], BY)), module, OpMorph::RESET_INPUT));
 	}
 
 	void appendContextMenu(Menu* menu) override {

@@ -442,7 +442,16 @@ struct KitDisplay : OpaqueWidget {
 	// wants none of that while having the deepest shell of anything here. So the
 	// kick rendered with no shell at all. AIR now closes the BOTTOM instead,
 	// which is what a kettle actually is: one head over a sealed bowl.
-	float shellDepth(float rad) const { return rad * 0.30f; }
+	// DEPTH, AS A FRACTION OF THE RADIUS. It was 0.30, which is a depth of 15%
+	// of the diameter -- a tambourine, not a drum. Real shells run far deeper:
+	// a 14x5.5 snare is 0.79 of its radius, a 12x9 tom is 1.5. It also had a
+	// consequence nobody would predict from the number: the bottom head's plane
+	// sat at cy + 0.30r while the TOP head's front rim reaches cy + 0.40r, so
+	// the plane the snare wires live in passed INSIDE the head's own silhouette
+	// and the wires came out strung across the rim like a bracelet. There was
+	// no honest place to put them until the drum had a depth.
+	static constexpr float SHELL = 0.52f;
+	float shellDepth(float rad) const { return rad * SHELL; }
 	float airAmt() const {
 		return module ? clamp(module->dispAir, 0.f, 1.f) : 0.35f;
 	}
@@ -451,7 +460,12 @@ struct KitDisplay : OpaqueWidget {
 		// spectrum on the right -- otherwise "centred" and "does not overlap"
 		// cannot both be true.
 		float wAvail = box.size.x - 2.f * mm2px(3.f);
-		float byH = (box.size.y - mm2px(5.f)) / (2.f * TILT + 0.34f + 0.34f);
+		// The divisor is the object's own height in radii: the mode rise on top,
+		// the near and far halves of the tilted disc, and the shell. The second
+		// 0.34 used to stand in for the shell and happened to be close to it;
+		// now that the shell is a named constant the sum says what it means, and
+		// deepening the shell cannot silently push the drum off the bottom.
+		float byH = (box.size.y - mm2px(5.f)) / (0.34f + 2.f * TILT + SHELL);
 		return std::min(wAvail * 0.5f, byH) * sizeScale();
 	}
 	// The scope is a CORNER READOUT now, not a column. As a full-height column
@@ -531,7 +545,13 @@ struct KitDisplay : OpaqueWidget {
 
 		nvgLineCap(args.vg, NVG_ROUND);
 
-		// ── the shell, drawn first so the head sits on top of it ──────────────
+		// The snare goes down FIRST, before the shell and before the head, so
+		// every line of the drum crosses over it. Drawn last it sat on top of
+		// the shell and read as a band strapped round the outside; underneath
+		// everything, it reads as hardware slung below the body.
+		if (airv < 0.85f) drawWires(args, cx, cy, rad, shell);
+
+		// ── the shell, drawn over the snare so the head sits on top of it ─────
 		if (shell >= 1.f) {
 			nvgBeginPath(args.vg);
 			for (int j = 0; j <= SECT; j++) {
@@ -576,9 +596,6 @@ struct KitDisplay : OpaqueWidget {
 				nvgStroke(args.vg);
 			}
 		}
-		// The resonant head and its wires only exist while the bottom is open.
-		if (airv < 0.85f) drawWires(args, cx, cy, rad, shell);
-
 		// ── the surface: rings in arcs so colour is local, then spokes ────────
 		for (int i = RINGS; i >= 1; i--) {
 			int per = SECT / ARCS;
@@ -700,82 +717,89 @@ struct KitDisplay : OpaqueWidget {
 	// couple of inches wide, running parallel from a strainer on one side to a
 	// butt plate on the other, so nearly all of them are close to full length
 	// and they sit together rather than dividing the head up.
+	float wirePh = 0.f;              // the snare's rattle, advanced per frame
 	void drawWires(const DrawArgs& args, float cx, float cy, float rad, float shell) {
-		// THREE SPRINGS, NOT A BAND OF STRANDS. Sixteen straight lines under the
-		// shell merged into a grey slab at this size and read as shading rather
-		// than as hardware. A snare wire IS a coiled spring, and three of them
-		// drawn as springs say "snare" at a glance where sixteen lines said
-		// "smudge".
+		// THREE WIRES, STRAIGHT, SOLID, AND FINE.
 		//
-		// They arrive one at a time so the knob's whole travel does something:
-		// the centre wire fades in over the first third and is solid at 33%,
-		// the top over the second and solid at 66%, the bottom over the last.
-		// A single opacity ramp on all three would have made 0-100% one gesture
-		// with nothing to see in the middle of it.
+		// This was a coil first, and the coil was the more accurate drawing --
+		// a snare wire really is a helix, and the loops were geometrically
+		// honest right down to why they cross. (An orthographic projection of a
+		// helix is a sinusoid and can never cross itself; you only get the
+		// crossing by leaning each turn along the axis, which is what the eye
+		// sees the moment the view is off perpendicular.) It was still wrong
+		// for this picture. At the size these are drawn the loops turned into
+		// a scalloped braid wrapped round the shell, and accuracy that reads as
+		// decoration is worse than a straight line that reads as a wire.
+		//
+		// SOLID, at one weight, with no translucency to overlap. The coil
+		// needed a dim pass for its far side and a bright pass for its near
+		// side, and stacking two alphas is what made the band look woven.
+		// Straight wires have no far side, so they need no second pass.
+		//
+		// FINE, and no end plates. Drawn heavy, three wires plus a strainer and
+		// a butt plate stopped being hardware slung under a drum and became a
+		// gate across the front of it -- the vertical plates read as posts and
+		// the wires as rails. The drum is the subject; the snare is a detail on
+		// it, and a detail that outweighs its subject is just an error with
+		// good intentions.
 		float w = module ? clamp(module->dispWires, 0.f, 1.f) : 0.85f;
 		if (w < 0.005f) return;
-		const float A[3] = {clamp(w / 0.33f, 0.f, 1.f),               // centre
-		                    clamp((w - 0.33f) / 0.33f, 0.f, 1.f),     // top
-		                    clamp((w - 0.66f) / 0.34f, 0.f, 1.f)};    // bottom
-		const float O[3] = {0.f, -1.f, 1.f};                          // across the band
-
-		// TIGHT is the coil pitch. The parameter already means how tightly the
-		// wires are strained, and a strained spring has its coils closer
-		// together -- so the control gets a picture for free and an honest one.
-		float tight = module ? clamp(module->params[Kit::SNARETHR_PARAM].getValue(),
-		                             0.f, 1.f) : 0.5f;
-		// Tight enough to read as ONE snare unit strung under the bottom head.
-		// Spread wide, the three springs stopped being a set of wires and
-		// became three separate objects draped across the shell.
-		float band = rad * 0.13f;
+		// They arrive one at a time so the knob's whole travel does something:
+		// the centre wire from the moment WIRES leaves zero, the top at a third,
+		// the bottom at two thirds. A step rather than a fade, because a fade is
+		// the "different opacity" this drawing is meant to be rid of.
+		const float ON[3] = {0.f, 1.f / 3.f, 2.f / 3.f};   // centre, top, bottom
+		const float O[3]  = {0.f, -1.f, 1.f};              // across the band
+		float band = rad * 0.10f;
+		// ON THE BOTTOM HEAD, which is the plane at cy + shell -- where a snare
+		// actually is. Pushing them lower to get them clear of the shell was a
+		// mistake: below that plane there is no drum for them to be attached
+		// to, so they ran past the silhouette on both sides and floated.
 		float yb = cy + shell;
-		float halfEnd = 0.f;
+		// ATTACHED AT BOTH ENDS. Each wire is a CHORD of the bottom head, so its
+		// ends land on the rim ellipse -- which is the one place a snare wire is
+		// ever fixed. At this band width the chords are within half a percent of
+		// the full diameter, so they still read as spanning the drum edge to
+		// edge; they just stop ON the drum instead of crossing it.
+		// THEY BUZZ WHEN THE HEAD IS STRUCK, which is the whole reason a snare
+		// drum has them: the wires are not stretched tight against the head,
+		// they lie ON it loosely and rattle. So the vibration is a rattle and
+		// not a swing -- two modes, one of them high enough to read as a blur
+		// rather than as a wave, pinned to zero at both ends where the wire is
+		// held. It follows the same mode amplitudes the head's own colouring
+		// uses, scaled the way the spectrum readout already scales them, so the
+		// wires stop moving exactly when the drum stops sounding.
+		float e = 0.f;
+		if (module)
+			for (int k = 0; k < sfs::Drum::NM; k++) e = std::max(e, module->modeVis[k]);
+		float vib = clamp(e * 2.2f, 0.f, 1.f) * mm2px(0.55f);
+		wirePh += 0.9f;                       // per frame; a rattle, not a sway
 		for (int i = 0; i < 3; i++) {
-			if (A[i] < 0.01f) continue;
+			if (w < ON[i]) continue;
 			float o = O[i];
 			float rr = o * band / std::max(rad, 1.f);
 			float half = std::sqrt(std::max(0.f, 1.f - rr * rr)) * rad;
-			halfEnd = std::max(halfEnd, half);
 			float yy = yb + o * band * TILT;
-			// The coil: a sine across the wire's own axis. Its wavelength is set
-			// in millimetres rather than as a fixed number of turns, so a big
-			// drum shows more coils than a small one instead of the same spring
-			// stretched to fit.
-			float lam = mm2px(4.4f - 2.2f * tight);
-			float amp = mm2px(1.05f);
-			int steps = clamp((int)(2.f * half / (lam / 8.f)), 24, 420);
 			nvgBeginPath(args.vg);
-			for (int k = 0; k <= steps; k++) {
-				float t = (float)k / steps;
-				float x = cx - half + t * 2.f * half;
-				float ph = (x - (cx - half)) / std::max(lam, 1.f) * 2.f * (float)M_PI;
-				float y = yy + std::sin(ph) * amp;
-				if (k == 0) nvgMoveTo(args.vg, x, y);
-				else        nvgLineTo(args.vg, x, y);
+			if (vib < 0.15f) {                // at rest it is a straight line
+				nvgMoveTo(args.vg, cx - half, yy);
+				nvgLineTo(args.vg, cx + half, yy);
+			} else {
+				const int N = 64;
+				float ph = wirePh + (float)i * 2.1f;
+				for (int k = 0; k <= N; k++) {
+					float u = (float)k / N;                  // 0..1 along the wire
+					float env = std::sin(u * (float)M_PI);   // held at both ends
+					float d = std::sin(u * 9.f * (float)M_PI + ph) * 0.6f
+					        + std::sin(u * 23.f * (float)M_PI - ph * 1.7f) * 0.4f;
+					float x = cx - half + u * 2.f * half;
+					if (k == 0) nvgMoveTo(args.vg, x, yy + d * env * vib);
+					else        nvgLineTo(args.vg, x, yy + d * env * vib);
+				}
 			}
-			nvgStrokeColor(args.vg, nvgRGBAf(0.86f, 0.87f, 0.92f, 0.10f + 0.42f * A[i]));
-			nvgStrokeWidth(args.vg, 0.7f);
+			nvgStrokeColor(args.vg, nvgRGBf(0.42f, 0.44f, 0.52f));
+			nvgStrokeWidth(args.vg, 0.6f);
 			nvgStroke(args.vg);
-			// the straight core the coil is wound on, which is what keeps a
-			// sine from reading as a squiggle
-			nvgBeginPath(args.vg);
-			nvgMoveTo(args.vg, cx - half, yy);
-			nvgLineTo(args.vg, cx + half, yy);
-			nvgStrokeColor(args.vg, nvgRGBAf(0.72f, 0.74f, 0.82f, 0.18f * A[i]));
-			nvgStrokeWidth(args.vg, 0.5f);
-			nvgStroke(args.vg);
-		}
-		if (halfEnd <= 0.f) return;
-		// strainer and butt plate: the wires are held at both ends, and without
-		// them the springs just stop in mid air.
-		float aMax = std::max(A[0], std::max(A[1], A[2]));
-		for (int sgn = -1; sgn <= 1; sgn += 2) {
-			nvgBeginPath(args.vg);
-			nvgRect(args.vg, cx + sgn * halfEnd - (sgn < 0 ? 0.f : mm2px(1.2f)),
-			        yb - band * TILT - mm2px(0.6f), mm2px(1.2f),
-			        2.f * band * TILT + mm2px(1.2f));
-			nvgFillColor(args.vg, nvgRGBAf(0.72f, 0.74f, 0.80f, 0.20f + 0.40f * aMax));
-			nvgFill(args.vg);
 		}
 	}
 	void drawReadout(const DrawArgs& args, float cx) {

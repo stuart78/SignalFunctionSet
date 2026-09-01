@@ -143,7 +143,12 @@ struct Meter : Module {
 
 	// --- External clock measurement ---
 	int samplesSinceLastExtPulse = 0;
-	int extClockPpqnIndex = 2;
+	// 24 PPQN, the MIDI standard, because that is what a host sends and host
+	// sync is what this input is for. It defaulted to 4, which matches nothing
+	// a DAW emits: a fresh Meter fed MIDI clock measured an impossible tempo on
+	// every tick and fell back to its knob. Saved patches carry their own value,
+	// so this moves nothing that already works.
+	int extClockPpqnIndex = 6;
 	float measuredBpm = 120.f;
 	float measuredBpmRaw = 120.f;
 	// The smoothing runs on the PERIOD, not on the tempo. Averaging BPM
@@ -154,6 +159,16 @@ struct Meter : Module {
 	// eighth note off the host inside eight seconds.
 	float measuredSamplesPerQuarter = 0.f;
 	int measurementCount = 0;
+	// The clock is ticking steadily but the tempo it implies is impossible, so
+	// the PPQN setting does not match what the host is sending. Kept as state
+	// because the panel has to be able to SAY so: silently running on the knob
+	// with the sync light flashing is the one failure a user cannot diagnose.
+	bool extPpqnSuspect = false;
+	// Consecutive plausible intervals whose implied tempo is impossible. A
+	// COUNT, not a single reading: the gap across a stopped transport is also
+	// an interval at an impossible tempo, and it happens once, where a PPQN
+	// mismatch happens on every tick. Four ticks is 83 ms at 24 PPQN.
+	int extBadTicks = 0;
 	bool extClockHasMeasurement = false;
 	// True once a tick has been seen that the NEXT tick can be measured
 	// against. Cleared whenever the clock goes quiet, so the silence across a
@@ -345,6 +360,8 @@ struct Meter : Module {
 		extPulseValid = false;
 		measuredSamplesPerQuarter = 0.f;
 		measurementCount = 0;
+		extPpqnSuspect = false;
+		extBadTicks = 0;
 		extLockPending = true;
 		extPhaseOffset = 0.f;
 		extRefPhase = 0.f;
@@ -546,14 +563,33 @@ struct Meter : Module {
 					int ppqn = PPQN_OPTIONS[extClockPpqnIndex];
 					float samplesPerQuarter = (float)samplesSinceLastExtPulse * (float)ppqn;
 					float bpm = 60.f * args.sampleRate / samplesPerQuarter;
-					// Out of range means this was not a tick interval at all —
-					// it is the gap across a stopped transport, and the first
-					// tick after Start would otherwise be measured against the
-					// last tick before Stop. Clamping it read 30 BPM for one
-					// whole tick, which stretched every accumulator and left
-					// the clock a fixed ~15 ms off the host's grid for the
-					// rest of the session. Throw the interval away instead.
-					if (bpm >= 30.f && bpm <= 300.f) {
+					// IS THIS A TICK INTERVAL AT ALL? Judge the INTERVAL, not
+					// the tempo it implies.
+					//
+					// The question being asked is whether this gap is a tick or
+					// the silence across a stopped transport (the first tick
+					// after Start measured against the last tick before Stop),
+					// or a double-trigger. Neither of those depends on the PPQN
+					// setting — but a tempo window does, and testing the tempo
+					// made the PPQN setting decide whether ANY tick was ever
+					// accepted. With the menu on its old default of 4 and a host
+					// sending MIDI clock's 24, every genuine tick implied 720
+					// BPM, every interval was thrown away, extClockHasMeasurement
+					// never became true, and Meter ran at its BPM KNOB while the
+					// sync light flashed happily. Slower than the host, drifting
+					// for ever, and nothing on the panel said why.
+					//
+					// Two seconds is 30 BPM at 1 PPQN, the slowest tick any
+					// setting can legitimately produce; two milliseconds is
+					// faster than any of them can go.
+					float gapSec = (float)samplesSinceLastExtPulse / args.sampleRate;
+					bool isTick = gapSec >= 0.002f && gapSec <= 2.f;
+					// A steady tick whose tempo is impossible means the PPQN is
+					// wrong, and that is worth reporting rather than absorbing.
+					if (isTick && (bpm < 30.f || bpm > 300.f)) extBadTicks++;
+					else if (isTick)                           extBadTicks = 0;
+					extPpqnSuspect = extBadTicks >= 4;
+					if (isTick && bpm >= 30.f && bpm <= 300.f) {
 						measuredBpmRaw = bpm;
 						// Smooth per TICK, not per sample. The old per-sample
 						// filter reached the raw value in ~10 samples, so it
@@ -605,6 +641,8 @@ struct Meter : Module {
 			extPulseValid = false;
 			measuredSamplesPerQuarter = 0.f;
 			measurementCount = 0;
+			extPpqnSuspect = false;
+			extBadTicks = 0;
 		}
 
 		float effectiveBpm = (extClockConnected && extClockHasMeasurement) ? measuredBpm : bpmKnob;
@@ -1097,7 +1135,15 @@ void MeterDisplay::drawLayer(const DrawArgs& args, int layer) {
 		nvgFontSize(args.vg, 8.f);
 		nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 		nvgFillColor(args.vg, COL_TEXT_DIM);
-		std::string bpmStr = string::f("%.1f BPM", module->displayedBpm);
+		// A clock that is ticking but cannot be believed says so HERE, where the
+		// tempo is read, rather than being absorbed into a knob reading that
+		// looks perfectly normal. This is the whole difference between "Meter
+		// drifts against my DAW" and "Meter is set to the wrong PPQN".
+		bool suspect = module->extClockConnected && module->extPpqnSuspect;
+		std::string bpmStr = suspect
+			? string::f("%.1f BPM  PPQN?", module->displayedBpm)
+			: string::f("%.1f BPM", module->displayedBpm);
+		nvgFillColor(args.vg, suspect ? nvgRGB(0xEC, 0x65, 0x2E) : COL_TEXT_DIM);
 		nvgText(args.vg, 5.f, topY, bpmStr.c_str(), NULL);
 
 		// --- Sync indicator light (just to the right of BPM, only when ext clock connected) ---
@@ -1523,6 +1569,11 @@ struct MeterWidget : ModuleWidget {
 			menu->addChild(new MenuSeparator);
 			menu->addChild(createMenuLabel(
 				string::f("Detected: %.1f BPM", module->displayedBpm)));
+		} else if (module->extClockConnected && module->extPpqnSuspect) {
+			menu->addChild(new MenuSeparator);
+			menu->addChild(createMenuLabel("Clock is ticking, but not at this PPQN."));
+			menu->addChild(createMenuLabel("MIDI clock is 24 PPQN. Meter is running"));
+			menu->addChild(createMenuLabel("on its BPM knob until this matches."));
 		}
 	}
 };

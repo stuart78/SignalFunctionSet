@@ -13,6 +13,7 @@ Modules grouped by function:
 
 **Sound Sources**
 - [Operator](#operator): DX7-style 6-operator FM voice (.syx cartridges)
+  - [OP MORPH (Expander)](#op-morph-expander): the DX7 routing as a field you travel
 - [GSX](#gsx): Granular synthesis VCO (Truax 1985–86 lineage)
 - [Overtone](#overtone): Additive VCO with 8 togglable harmonics
 - [Intone](#intone): CHANT/FOF formant synthesis voice
@@ -22,6 +23,9 @@ Modules grouped by function:
 - [Slide](#slide): Electric lap steel, a steel bar across eight strings
   - [SLIDE XP (Expander)](#slide-xp-expander): the eight strings on eight jacks
 - [Chime](#chime): Eight-note drone machine with rotating resonator tubes
+- [Sigma](#sigma): Additive voice, up to 64 partials, after the Crumar GDS
+- [Kit](#kit): Struck membrane modelled mode by mode
+- [Wheel](#wheel): Hurdy-gurdy drone instrument, one wheel bowing six strings
 
 **Filters & Resonators**
 - [Band](#band): Harmonic bandpass bank (isolate individual harmonics)
@@ -48,6 +52,7 @@ Modules grouped by function:
 - [Drift](#drift): 4-channel chaotic LFO with phase spread
 - [Cycle](#cycle): Bar-synced quad LFO with morphing shapes
 - [Gravity](#gravity): Six-mode chaos & motion engine (pendulum / orbits / billiards / Pac-Man / turtle / patterns)
+- [Trace](#trace): A paper loop and four brushes, for CV you draw
 
 **Envelopes**
 - [Swell](#swell): Ping-driven additive A/D envelope
@@ -89,6 +94,29 @@ A 6-operator FM synth voice in the Yamaha DX7 lineage. Operator loads DX7 `.syx`
 **Outputs:** Audio (poly), VCO (poly), Env (poly).
 
 See [docs/operator-manual.md](docs/operator-manual.md) for the full manual.
+
+##### OP MORPH (Expander)
+
+<img src="screenshots/OpMorph.png" alt="OP MORPH panel" height="320"> 
+
+Place it to the **right** of Operator. It puts the DX7 operator routing on screen as a matrix, and gives you a field of sixteen of them to travel across.
+
+A DX7 algorithm is a stack machine over three buses, which turns out to be a fast way of evaluating something much simpler: a table of "how much of operator *i* is added to operator *j*'s phase", plus "how much of operator *i* reaches the output". All 32 evaluate in operator order with every modulator strictly before what it modulates, so the table is upper triangular: 15 modulation weights and 6 output weights. Once it's a table, it's something you can interpolate.
+
+**Features:**
+- **The field is a torus.** Sixteen slots on a 4×4 grid, an X/Y position blending the four nearest, and **both axes wrap**. That isn't decoration: on a square, x=0 and x=1 hold different routings, so wrapping past the edge would jump between two structures mid-note, and a routing discontinuity is a click. Tiling means you can travel in one direction forever and interpolate back into the first column with no seam.
+- **The two column groups feel nothing alike.** Columns 1–6 feed a phase input, so they're an FM *index*. Turning one up grows sidebands, it doesn't get louder. The OUT column feeds the output bus and is a plain *level*. An operator with both is modulating its neighbour and audible in its own right, which no stock DX7 algorithm does.
+- **Four routings Yamaha never shipped.** Only 11 of the 15 possible modulation edges appear anywhere in the 32 algorithms. No blend of stock algorithms can reach the other four, because a blend only produces edges one of its endpoints already has. Edit a slot's matrix and they're yours.
+- **STEP quantizes the movement rather than replacing it.** The path keeps running underneath and the clock snaps the output to the nearest slot, so whatever shape the turtle or the walk is drawing arrives on the beat. Linear is the exception: there a clock means one slot forward.
+- **Five movements:** Drift, Turtle, Random walk, Circle, Linear.
+
+**Controls:** Speed, Shape, Depth, Move, Step.
+**Inputs:** Speed, Shape, Depth and Move CV (Move at 1V per mode), Clock, Reset.
+**Outputs:** none. It drives Operator over the expander bus.
+
+**Context menu:** Slots, set a row at a time.
+
+See [docs/opmorph-manual.md](docs/opmorph-manual.md) for the full manual.
 
 #### GSX
 
@@ -355,6 +383,74 @@ An eight-note resonating drone machine, after a xylophone whose resonator tubes 
 **Outputs:** 8 × tube LFO (±5V), 8 × note audio, Mix L, Mix R, V/Oct (poly, 8ch), Gate (poly, 8ch, high while a note blooms).
 
 See [docs/chime-manual.md](docs/chime-manual.md) for the full manual.
+#### Sigma
+
+<img src="screenshots/Sigma.png" alt="Sigma panel" height="320"> 
+
+An additive voice after the Crumar GDS. Nothing here generates a waveform or filters anything away: the output is a sum of sines, and every control is a statement about what enters that sum. It's named for the summation sign. 16, 32 or 64 partials, sixteen voices.
+
+The GDS gave each oscillator a 16-stage amplitude *and* frequency envelope plus two velocity-interpolated envelope sets, 512 breakpoints per voice, which is why it needed a $30,000 computer to program. The bet here is that the behaviour survives **two numbers per partial**, envelope depth and envelope rate, because what makes a struck tone sound struck is that its high partials die *sooner*, not merely quieter.
+
+**Features:**
+- **Every macro is a curve across the partial index.** A macro doesn't set a value, it sets how that value varies from the first partial to the last. TILT spreads level, STRETCH spreads pitch (`f_n = n·f₀·√(1+B·n²)`, real string inharmonicity), WIDTH spreads pan, ENV RATE spreads envelope rate, ENV SPREAD spreads envelope *start time*, so the tone blooms upward, or the highs speak first and the fundamental builds underneath them.
+- **Velocity morphs the spectrum rather than scaling it.** Two complete level sets, SOFT and LOUD, with velocity crossfading between them. A quiet note is a different timbre, not a quieter copy of a loud one. Past halfway, MORPH SENS hardens the blend into a switch, which is how one preset puts two instruments under one keyboard.
+- **The spectral filter removes partials from the sum** rather than filtering the output.
+- **Five tabs over one shared spectrum** (LOUD, SOFT, PITCH, DEPTH, RATE), plus a bipolar 4×6 mod matrix, a one-cycle scope and a pan block. Hover anything to read what it is.
+- **21 presets**, grouped by the mechanism each exercises rather than by timbre. A preset is the cheapest way to find out whether a control works, and Marimba is what exposed the PITCH tab spanning two cents instead of two octaves.
+
+**Controls:** Tilt, Odd/Even, Width, Stretch, Morph, Cutoff, Res, A/D/S/R, Env rate spread, Env time spread, and three LFOs with rate, depth and spread.
+**Inputs:** Gate, V/Oct, Velocity (all polyphonic), VCA, three LFO syncs, and CV for every macro.
+**Outputs:** L, R.
+
+**Context menu:** Preset, Partials (16/32/64), Voice allocation, PITCH tab snapping, Touch response, LFO delay and random.
+
+> **The clicking was the note-on, not the attack.** `g = V.mEnv` is the VCA, and a note-on zeroed it outright, so retriggering a still-sounding voice threw the output to silence in one sample, measured at 0.55–0.94 of full scale on thirteen of fourteen presets. It now re-attacks from wherever it already is.
+
+See [docs/sigma-manual.md](docs/sigma-manual.md) for the full manual.
+#### Kit
+
+<img src="screenshots/Kit.png" alt="Kit panel" height="320"> 
+
+A struck membrane, modelled mode by mode. A drum head is a 2D wave equation on a disc and its solutions are the Bessel modes, so rather than run a mesh over the disc, Kit runs one resonator per mode. That's cheaper, and much more importantly it puts every parameter you'd want to play in plain sight: strike position becomes a per-mode gain you can evaluate in closed form, and muffling becomes the same evaluation used subtractively.
+
+**Features:**
+- **SIZE and TENSION are not a duplicate pair, and the reason is the whole design.** For an ideal membrane, radius and tension scale every mode by the same factor and leave the *ratios* untouched, so acoustically they're one control. What breaks that scale invariance is bending stiffness, the air cavity, and damping that depends on size. That's why MATERIAL and AIR exist, and it's why a small tight drum and a large slack one at the same pitch are different instruments.
+- **AIR closes the bottom of the shell.** At zero it's an open shell with a resonant head across it, which is a tom or a kick; wound up it bellies into a sealed bowl, which is a kettledrum. A kettledrum is exactly what the harmonic series AIR imposes belongs to. Same knob, same story, twice.
+- **Tooltips report quantities, not percentages.** A drum has a diameter, a head has a pitch, a beater has a weight and a contact time. SIZE reads inches and centimetres, EXCITER reads "hard mallet, 3.4 ms contact".
+- **Separate HEAD and WIRES outputs**, so the snare wires can take their own compressor or reverb, which is what a close-miked snare gets in practice.
+- **The head is drawn as it moves**, and you play it with the mouse. A taut head pulls its grid out toward the rim and a slack one lets it gather in the middle, which is what tension does to a real head's response.
+- **Ten instruments** in the menu: Tom, Floor tom, Timpani, Kick, Snare, Brush snare, Gong, Steel pan, Frame drum, Tabla. These are what the engine was measured against while it was built, so they're also the shortest route to hearing whether something has broken.
+
+**Controls:** Size, Tension, Material, Air, Decay, Tone, Exciter, Muffle, Couple, Reso, Bend, Weight, Wires, Tight, Level, Hit.
+**Inputs:** Gate, V/Oct, Velocity, Strike X, Strike Y, and CV for all eight voice controls.
+**Outputs:** Head, Wires, Mix.
+
+**Context menu:** Head view (flat or 3D), Instruments.
+
+See [docs/kit-manual.md](docs/kit-manual.md) for the full manual.
+
+#### Wheel
+
+<img src="screenshots/Wheel.png" alt="Wheel panel" height="320"> 
+
+A drone instrument after the hurdy-gurdy. One rosined wheel bows every string at once, and that is the whole idea: the wheel is not perfectly round, its rosin is uneven, and it has a seam where it was joined, so every revolution imposes the same ripple of level and brightness on all six voices together. Six oscillators with six LFOs sound like an organ. Six sharing one slightly irregular modulator sound like one object being played by one person.
+
+**Features:**
+- **The wheel is one bow, and the ripple is a fixed profile rather than noise.** Eccentricity, uneven rosin, and a narrow dip where the wheel was joined, in the same place every revolution. It moves level, brightness and rosin noise together, because one wheel is doing all three. CRANK sets the rate; patch CLOCK and one pulse locks one revolution, so the instrument runs in time with the patch.
+- **The dog is the rhythm section.** The trompette crosses a bridge with one loose foot, and a wrist stroke lifts it and makes it rattle. It is the difference between a hurdy-gurdy and a bagpipe, and a stroke also swells every other voice, which is half of why the accent lands.
+- **Rhythm is counted in strokes per turn of the wheel**, as the technique is. COUPS divides the revolution, and the strip along the foot of the display is that turn unwrapped: bar height is each stroke's strength from its position in the bar, the dashed line is the DOG threshold, and a stroke buzzes if its bar clears the line. Crank faster and every bar grows. The strip is the pattern; DOG thins whatever is left.
+- **Degrees, not semitones.** Each voice picks a scale degree, so the voicing stays in the key whatever the key is. ROOT and SCALE move all six together, and SCALE reads the plugin's polyphonic scale bus, so a Scala file or a non octave scale set on Key arrives intact.
+- **TEMPER snaps to just intonation**, which is how the instrument is tuned by ear. It will look as though it does nothing on a voicing of roots, octaves and fifths, and that is correct: equal temperament is already exact at the octave and within 2 cents at the fifth. It bites on thirds and sixths. The readout says what it is doing rather than what it is set to.
+- **Three ways to quieten a voice, doing three different jobs.** LEVEL is the mix, PRESS is how hard that string sits on the wheel and changes timbre before level, and the button takes the string off the wheel entirely. The button is the normalled value of that voice's GATE input.
+- **The display is a perspective render of the instrument's own geometry.** The wheel's plane is perpendicular to the strings and its axle runs along them, which is the only orientation that makes a sound. Only the top of the wheel is drawn, emerging through the slot in the soundboard, because only the top is visible. Click a string to take it off the wheel.
+
+**Controls:** Root, Scale, Crank, Coups, Press, Ripple, Dog, Temper, and per voice Degree or Octave, Level, Phase or Decay, Press, Octave, Wave, On.
+**Inputs:** Clock, Coup, CV for all eight global controls, and per voice Degree, Level, Phase or Decay, Press, Gate, Wave.
+**Outputs:** L, R, Poly (six channels), Wheel (the ripple as CV), Coup (a trigger per buzz).
+
+**Context menu:** Gate presses the string, gate press time, wheel spread, detune, rosin, body, stereo width.
+
+See [docs/wheel-manual.md](docs/wheel-manual.md) for the full manual.
 
 ### Filters & Resonators
 
@@ -875,6 +971,28 @@ A multi-mode chaos and motion engine. A single moving point, driven by one of si
 - Relaunch (kick), Clear drawing (Turtle/Pattern), Gate hold (tight/medium/gluey), Trail length
 
 See [docs/gravity-manual.md](docs/gravity-manual.md) for the full manual.
+#### Trace
+
+<img src="screenshots/Trace.png" alt="Trace panel" height="320"> 
+
+A paper loop and four brushes. You draw four CVs onto moving paper, or let the patch draw them, and four read heads play them back. Part Oramics, which read drawn shapes off moving film; part chart recorder, whose pens sit at different points along the drum, which is why the read offsets here are per lane rather than global.
+
+**Features:**
+- **The transport is uncoupled from the brush.** Every other draw-a-shape module is a static editor: you see the whole loop, edit it as an object, and playback is a cursor sweeping your artwork. Here the paper moves whether you're drawing or not, which is what makes it an instrument. It also gives three behaviours for free, decided by nothing but where the mouse is: left of NOW you're editing what just played, right of it you're composing the future with lead time, on it you're performing.
+- **Ink is a second dimension.** The brush lays down weight as well as position, so every lane carries two signals. Ink accumulates over repeated passes and pools where the line sits still, which makes the thickness track "how settled is this line": sustains heavy, transitions light, without anyone having drawn it.
+- **Events come from the shape, not the value.** Each lane classifies its slope as rising, falling or flat and fires on the transitions, so a scribble makes notes where it turns around and no quantization is involved.
+- **The paper is a length, not a duration.** LENGTH sets how many cells go round and SPEED sets how fast they pass the head, so speeding up shortens the loop rather than compressing what's drawn on it.
+- **Per-lane read offsets.** Copy one shape across all four lanes, spread the heads, and you have four phase-shifted reads of a single gesture.
+
+**Controls:** Speed, Length, Slew, Ink, Leak, Spread, Run, Reverse, Reset, and five brushes (four lanes plus erase).
+**Inputs:** Per lane, draw CV, thickness and head offset; globally Clock, Bar, Reset, Run, Reverse, and CV for Speed, Slew, Ink, Leak and Spread.
+**Outputs:** Per lane, Value, Value-at-offset and Ink; globally Loop.
+
+**Context menu:** Per lane, Range, Read (smooth or stepped), Quantize, Clear and Copy to lane; globally Stroke weight, Clocks per bar, Clear all paper.
+
+> **The brush can't be down while the paper runs backwards.** That's stated as a rule about state rather than "a direction change lifts the brush", because the state version already answers what happens if you press the mouse while reversed, where an edge rule has to answer that separately and gets it wrong. A brush writing onto paper moving the other way retraces over what it just laid down, so the stroke eats itself.
+
+See [docs/trace-manual.md](docs/trace-manual.md) for the full manual.
 
 ### Envelopes
 

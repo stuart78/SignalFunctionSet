@@ -46,6 +46,7 @@ SIZES = {
     "VCVButton": (18.0, 18.0), "VCVLightBezel": (21.26, 21.26),
     "VCVLightLatch": (18.0, 18.0), "VCVSlider": (19.843, 76.535),
     "ChimeExciteSlider": (30.48 * MM, 5.08 * MM),    # custom horizontal slider
+    "WheelPitchSlider": (6.4 * MM, 16.0 * MM), "WheelLevelSlider": (6.4 * MM, 26.0 * MM),
     "TinyLight": (1.0 * MM, 1.0 * MM), "SmallLight": (2.0 * MM, 2.0 * MM),
     "MediumLight": (3.0 * MM, 3.0 * MM), "LargeLight": (5.0 * MM, 5.0 * MM),
 }
@@ -387,13 +388,21 @@ def group_range(svg, gid):
     return None
 
 
-def art_shapes(elems, indent="    ", plates=(), upmm=MM):
-    """What the player SEES: the dark plates and the screens."""
+def art_shapes(elems, indent="    ", plates=(), upmm=MM, screens="filled"):
+    """What the player SEES: the dark plates and the screens.
+
+    `screens="none"` is for a module that draws its display straight onto the
+    faceplate with no slab behind it. This file is BOTH the designer's guide and
+    the panel Rack renders, so emitting the blue rect anyway would put the slab
+    back on every regeneration -- which it did, silently, the first time Wheel
+    was regenerated after its background was removed."""
     out = []
     pr, sr = PLATE_R_MM * upmm, SCREEN_R_MM * upmm
     for (x, y, w, h) in plates:
         out.append(f'{indent}<rect x="{x:.2f}" y="{y:.2f}" width="{w:.2f}" '
                    f'height="{h:.2f}" rx="{pr:.2f}" fill="{PLATE}"/>')
+    if screens == "none":
+        return out
     for k, cx, cy, w, h in elems:
         if k == "screen":
             out.append(f'{indent}<rect x="{cx-w/2:.2f}" y="{cy-h/2:.2f}" width="{w:.2f}" '
@@ -418,10 +427,10 @@ def guide_shapes(elems, indent="    ", upmm=MM):
     return out
 
 
-def splice(path, old, elems, plates=(), upmm=MM):
+def splice(path, old, elems, plates=(), upmm=MM, screens="filled"):
     """Rewrite the two layers this tool owns -- PanelArt and Reticules -- and
     leave every other layer of the designer's file alone."""
-    art = art_shapes(elems, "    ", plates, upmm)
+    art = art_shapes(elems, "    ", plates, upmm, screens)
     guides = guide_shapes(elems, "    ", upmm)
     out = old
     for gid in ("Screens", "PanelArt", "Reticules"):   # drop whatever is there now
@@ -481,14 +490,17 @@ MODULES = {
     "kit":     ("Kit",     "src/kit.cpp",     "res/kit.svg",     {}),
     "trace":   ("Trace",   "src/trace.cpp",   "res/trace.svg",   {"TR_LANES": 4}),
     "sigma":   ("Sigma",   "src/sigma.cpp",   "res/sigma.svg",   {"SG_PARTIALS": 16}),
+    "wheel":   ("Wheel",   "src/wheel.cpp",   "res/wheel.svg",   {"WH_V": 6, "WH_TRP": 5}),
 }
 
 # Panels whose artwork is hand-made and is now the SOURCE of the layout rather
 # than a target for it. Splicing generated reticules into these would draw
 # circles straight over the design. Named explicitly on the command line they
 # still run, so the guard is against the bare sweep, not against intent.
+NO_SCREEN_SLAB = {"wheel"}
+
 FINISHED = {"crystal", "chime", "loom", "slide", "slidex", "fill", "gravity", "key",
-            "slice"}
+            "slice", "kit", "trace", "sigma", "wheel"}
 
 if __name__ == "__main__":
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -518,5 +530,6 @@ if __name__ == "__main__":
         elems = [(k, x / MM * upmm, y / MM * upmm, w / MM * upmm, h / MM * upmm)
                  for (k, x, y, w, h) in collect(body, env, defs)]
         pl = [(x * upmm, y * upmm, w * upmm, h * upmm) for (x, y, w, h) in PLATES.get(key, [])]
-        nc, ns = splice(p, old, elems, pl, upmm)
+        nc, ns = splice(p, old, elems, pl, upmm,
+                        "none" if key in NO_SCREEN_SLAB else "filled")
         print(f"{key:8} {nc:3} controls, {ns} screen(s) -> {svg}  ({upmm:.4f} units/mm)")

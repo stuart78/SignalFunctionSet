@@ -49,3 +49,4 @@ extern Model* modelKit;
 extern Model* modelTrace;
 extern Model* modelSigma;
 extern Model* modelTouch;
+extern Model* modelWheel;

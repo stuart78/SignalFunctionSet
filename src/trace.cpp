@@ -139,8 +139,11 @@ struct Trace : Module {
 		RUN_PARAM, DIR_PARAM, RESET_PARAM,
 		BRUSH_PARAM,                          // 4 lane selects, then erase
 		SPREAD_PARAM = BRUSH_PARAM + 5,
-		// APPENDED. The new panel has a WRITE BUTTON where the write gate jack
-		// used to be. WRITE_INPUT stays in the enum, retired in place.
+		// RETIRED almost immediately. A 2026-08 panel briefly made WRITE a
+		// button; the next revision put the jack back, which is the better
+		// answer -- as a gate it can be armed by a clock or an envelope, so
+		// "record exactly one bar" is a patch rather than a hand movement.
+		// The slot stays because params serialise by index.
 		WRITE_PARAM,
 		PARAMS_LEN
 	};
@@ -367,7 +370,7 @@ struct Trace : Module {
 			configInput(OFFSET_INPUT + i, string::f("Lane %d head offset CV", i + 1));
 		}
 		configInput(WRITE_INPUT, "Write gate (retired -- no jack on the panel)");
-		configSwitch(WRITE_PARAM, 0.f, 1.f, 1.f, "Write", {"Off", "On"});
+		configSwitch(WRITE_PARAM, 0.f, 1.f, 1.f, "Write (retired)", {"Off", "On"});
 		configInput(LEAK_INPUT, "Leak CV");
 		configInput(CLOCK_INPUT, "Clock");
 		configInput(BAR_INPUT, "Bar");
@@ -593,11 +596,10 @@ struct Trace : Module {
 		// span handling and the edge tapers cope with it, so the restriction
 		// was buying nothing and costing a legitimate gesture.
 		bool writeOK = true;
-		// The jack is gone from the panel, so the button is what decides. The
-		// input is still read for any patch saved before the 2026-08 layout.
-		bool writeGate = params[WRITE_PARAM].getValue() > 0.5f
-		              && (!inputs[WRITE_INPUT].isConnected()
-		                  || inputs[WRITE_INPUT].getVoltage() >= 1.f);
+		// Unpatched means WRITE ON, so the lane inputs record by default and the
+		// jack is there to take that away on a schedule.
+		bool writeGate = !inputs[WRITE_INPUT].isConnected()
+		              || inputs[WRITE_INPUT].getVoltage() >= 1.f;
 
 		{
 			UiBrush ub; uint32_t g;
@@ -1561,7 +1563,10 @@ static const float TR_JY = 98.40f;      // their CV, directly beneath
 // assumed onto the knob columns, which put them up to 0.6mm out.
 static const float TR_BY = 121.30f;              // clock / bar / reset jacks
 static const float TR_RSTBX = 98.41f, TR_RSTBY = 121.40f;   // reset button
-static const float TR_WRX = 109.33f, TR_ERX = 120.75f, TR_BTNY = 121.00f;
+static const float TR_WRX = 108.56f;                        // WRITE, a jack again
+static const float TR_ERX = 120.75f;                        // ERASE, moved along
+static const float TR_LENX = 132.18f;                       // LENGTH, back on the panel
+static const float TR_BTNY = 121.00f;
 
 struct TraceWidget : ModuleWidget {
 	TraceWidget(Trace* module) {
@@ -1625,32 +1630,19 @@ struct TraceWidget : ModuleWidget {
 		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_MX[2], TR_BY)), module, Trace::RESET_INPUT));
 		addParam(createParamCentered<VCVButton>(mm2px(Vec(TR_RSTBX, TR_RSTBY)),
 		                                        module, Trace::RESET_PARAM));
-		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(
-			mm2px(Vec(TR_WRX, TR_BTNY)), module, Trace::WRITE_PARAM, Trace::BRUSH_LIGHT + 4));
+		addInput(createInputCentered<PJ301MPort>(mm2px(Vec(TR_WRX, TR_BY)), module,
+		                                         Trace::WRITE_INPUT));
 		// ERASE is the fifth brush, and it is RED: it latches, and a latched
 		// erase looks exactly like drawing that does not work.
 		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<RedLight>>>(
-			mm2px(Vec(TR_ERX, TR_BTNY)), module, Trace::BRUSH_PARAM + 4, Trace::DIR_LIGHT));
+			mm2px(Vec(TR_ERX, TR_BTNY)), module, Trace::BRUSH_PARAM + 4, Trace::BRUSH_LIGHT + 4));
+		// LENGTH is back on the panel, so it comes off the context menu.
+		addParam(createParamCentered<Trimpot>(mm2px(Vec(TR_LENX, TR_BTNY)),
+		                                      module, Trace::LENGTH_PARAM));
 
 	}
 
 	void appendContextMenu(Menu* menu) override {
-		// LENGTH HAS NO PLACE ON THE 2026-08 PANEL -- the art draws no guide for
-		// it. It is the paper loop's length, which is far too central to simply
-		// drop, so it lives here as a menu slider (the pattern Chance uses for
-		// GATE LEN and GLIDE) until the panel finds room for it again.
-		{
-			Trace* t = dynamic_cast<Trace*>(module);
-			if (t) {
-				struct TrSlider : ui::Slider {
-					TrSlider(Module* m, int id) {
-						quantity = m->paramQuantities[id]; box.size.x = 200.f;
-					}
-				};
-				menu->addChild(new TrSlider(t, Trace::LENGTH_PARAM));
-				menu->addChild(new MenuSeparator);
-			}
-		}
 		Trace* m = dynamic_cast<Trace*>(module);
 		if (!m) return;
 		menu->addChild(new MenuSeparator);

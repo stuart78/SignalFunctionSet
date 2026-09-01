@@ -52,7 +52,9 @@ BAR has no swing, so its single output is always on the grid.
 
 ### External Clock Sync
 
-Patch an external clock pulse train into the **EXT CLOCK** input and Meter measures the inter-pulse interval to derive BPM. The PPQN (pulses per quarter note) is selectable in the context menu (1, 2, 4, 8, 12, 16, or 24) — **MIDI clock is always 24**, so set it to 24 when the source is a DAW or a hardware sequencer.
+Patch an external clock pulse train into the **EXT CLOCK** input and Meter measures the inter-pulse interval to derive BPM. The PPQN (pulses per quarter note) is selectable in the context menu (1, 2, 4, 8, 12, 16, or 24). **MIDI clock is always 24**, which is the default.
+
+**If the PPQN does not match what the source is sending, Meter cannot know the tempo, and it says so.** A steady clock whose implied tempo is impossible (24 PPQN read as 4 implies 720 BPM at a host tempo of 120) is not a tempo Meter can guess its way out of: several PPQN settings give a plausible answer for any given tick interval, so there is nothing to auto-detect. After four such ticks the BPM readout turns orange and reads `PPQN?`, and the context menu says what is wrong. Until it matches, Meter runs on its **BPM knob** while the sync light keeps flashing. That combination, a flashing sync light and a tempo that is not the host's, is what a PPQN mismatch looks like, and it is why the readout now names it.
 
 When EXT CLOCK is patched and a measurement is available, the BPM knob is overridden and the on-screen BPM readout shows the measured value with a flashing sync indicator next to it.
 
@@ -130,7 +132,7 @@ All gate outputs are 1ms 10V pulses via `dsp::PulseGenerator`.
 
 ## Context Menu
 
-- **External Clock PPQN** selector (1, 2, 4, 8, 12, 16, 24)
+- **External Clock PPQN** selector (1, 2, 4, 8, 12, 16, 24; default 24, the MIDI standard)
 - **Apply time signature changes immediately** (default off: changes queue for next bar)
 - **Reset on play** (default off: Run after Stop resumes from current position)
 - **Detected: NN.N BPM** label when EXT clock is connected and measuring

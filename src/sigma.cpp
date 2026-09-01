@@ -82,7 +82,6 @@ static const char* SG_MODNAME[SG_MOD_N] = {"LVL", "PIT", "PAN", "TLT", "STR", "C
 // it is the one source that knows where it is in the NOTE.
 static const int SG_MODSRC = 4;
 static const char* SG_SRCNAME[SG_MODSRC] = {"LFO1", "LFO2", "LFO3", "ENV"};
-static const int SG_SCOPE = 512;
 
 // Sixteen voices sum, and a hard clamp is the harshest thing an overload can
 // do. Measured single-voice peaks run to 6.9V on Bell, and incoherent voices
@@ -216,6 +215,23 @@ struct Sigma : Module {
 	// same one.
 	enum Alloc { ALLOC_FIRST, ALLOC_ROLL };
 	int allocMode = ALLOC_FIRST;
+	// What the PITCH tab snaps to. Free is how it behaved; the other three
+	// exist because a partial retuned to 4x or 10x wants to land ON the ratio,
+	// and hunting +1200.0 cents by dragging a bar is not something anyone
+	// should have to do. The stored value is cents/2400 either way -- this only
+	// quantizes what a DRAG can produce.
+	enum PitchSnap { PSNAP_FREE, PSNAP_CENT, PSNAP_SEMI, PSNAP_OCT };
+	int pitchSnap = PSNAP_FREE;
+	float snapPitch(float v) const {
+		float cents = v * 2400.f;
+		switch (pitchSnap) {
+			case PSNAP_CENT: cents = std::round(cents); break;
+			case PSNAP_SEMI: cents = std::round(cents / 100.f) * 100.f; break;
+			case PSNAP_OCT:  cents = std::round(cents / 1200.f) * 1200.f; break;
+			default: break;
+		}
+		return clamp(cents / 2400.f, -1.f, 1.f);
+	}
 	int rollNext = 0;
 	float lfoPhase[3] = {};      // the shared periodic phase a locked voice tracks
 	// A deterministic per-voice generator. random::uniform() would make the
@@ -236,14 +252,11 @@ struct Sigma : Module {
 	int   nPartials = 16;
 	int   dispTab = 0;
 	float dispMorph = 1.f;
-	float dispF0 = 261.6f;             // for a scope that shows ONE cycle
 	float liveAmp[SG_MAXP] = {};   // amplitude in force, per partial
 	float liveEnv[SG_MAXP] = {};
 	float livePan[SG_MAXP] = {};
 	float liveCents[SG_MAXP] = {};
 	bool  liveOn = false;
-	float scope[SG_SCOPE] = {};
-	int   scopeIdx = 0; bool scopeFill = false; float scopePrev = 0.f;
 
 	// The knob is exponential over 0.02..30Hz; showing 0.30 told you nothing.
 	struct LfoHzQuantity : ParamQuantity {
@@ -1248,7 +1261,6 @@ struct Sigma : Module {
 			if (V.mStage == ST_IDLE && !V.on) continue;
 
 			float f0 = 261.6256f * std::pow(2.f, V.pitch);
-			if (c == dispVoice) dispF0 = f0;
 			// MORPH is the CENTRE of the timbre range; MORPH SENS is how much
 			// of it velocity commands. At sens 0.5 with morph at zero this is
 			// exactly the old `vel + morphK`.
@@ -1450,17 +1462,6 @@ struct Sigma : Module {
 		float trim = 1.6f * vca;
 		float fl = sgSoftClip(outL * trim);
 		float fr = sgSoftClip(outR * trim);
-		// Captured on a RISING ZERO CROSSING and then held: a free-running ring
-		// slides sideways at whatever the pitch happens to be, which reads as
-		// the module being unstable when it is the display that is.
-		if (!scopeFill) {
-			if (scopePrev <= 0.f && fl > 0.f) { scopeFill = true; scopeIdx = 0; }
-		}
-		if (scopeFill) {
-			scope[scopeIdx++] = fl;
-			if (scopeIdx >= SG_SCOPE) { scopeIdx = 0; scopeFill = false; }
-		}
-		scopePrev = fl;
 		outputs[L_OUTPUT].setVoltage(fl);
 		outputs[R_OUTPUT].setVoltage(fr);
 	}
@@ -1515,6 +1516,7 @@ struct Sigma : Module {
 		json_object_set_new(root, "tab", json_integer(dispTab));
 		json_object_set_new(root, "nPartials", json_integer(nPartials));
 		json_object_set_new(root, "allocMode", json_integer(allocMode));
+		json_object_set_new(root, "pitchSnap", json_integer(pitchSnap));
 		return root;
 	}
 	void dataFromJson(json_t* root) override {
@@ -1539,6 +1541,8 @@ struct Sigma : Module {
 			nPartials = clamp((int)json_integer_value(j), 1, SG_MAXP);
 		if (json_t* j = json_object_get(root, "allocMode"))
 			allocMode = clamp((int)json_integer_value(j), 0, 1);
+		if (json_t* j = json_object_get(root, "pitchSnap"))
+			pitchSnap = clamp((int)json_integer_value(j), 0, 3);
 	}
 };
 
@@ -1560,7 +1564,13 @@ struct Sigma : Module {
 
 static const float SG_DESIGN_W = 605.f;      // 160mm * 3.783, per screen-style
 static const int   SG_NTAB = 5;
-static const char* SG_TABNAME[SG_NTAB] = {"LEVEL", "SOFT", "PITCH", "DEPTH", "RATE"};
+// LOUD and SOFT, not LEVEL and SOFT. They are one control in two halves: the
+// spectrum you hear at full velocity and the spectrum you hear at none, with
+// velocity crossing between them. Calling the first "LEVEL" made it read as
+// "the levels" and the second as a softness amount, so the pairing -- the whole
+// idea -- was invisible. The MORPH bar along the foot is already labelled SOFT
+// at one end and LOUD at the other; now the tabs use the same two words.
+static const char* SG_TABNAME[SG_NTAB] = {"LOUD", "SOFT", "PITCH", "DEPTH", "RATE"};
 static const bool  SG_TABBIP[SG_NTAB]  = {false, false, true, true, false};
 static const NVGcolor SG_TABCOL[SG_NTAB] = {
 	nvgRGB(0x00, 0x97, 0xDE),   // LEVEL  blue
@@ -1589,15 +1599,19 @@ struct SigmaDisplay : OpaqueWidget {
 	float specH() const { return uH() - specY() - 14.f; }
 	float rx() const { return splitX() + 6.f; }
 	float rw() const { return SG_DESIGN_W - rx() - 4.f; }
-	// Not equal thirds. One cycle of a waveform needs almost no height, and the
-	// matrix is the block you actually edit, so it takes what the scope gives up.
-	float blkFrac(int i) const { return (i == 0) ? 0.22f : (i == 1) ? 0.33f : 0.45f; }
+	// TWO blocks, PAN over MOD. There was a third above them showing one cycle
+	// of the output, and it was the wrong thing to spend a quarter of the
+	// column on: a single cycle of a sum of sines is a picture of the spectrum
+	// you are already looking at, drawn worse. The matrix is the block you
+	// actually reach into, so it takes the whole of what the scope gave up and
+	// pan moves to the top.
+	float blkFrac(int i) const { return (i == 0) ? 0.28f : 0.72f; }
 	float blkY(int i) const {
 		float y = 4.f, t = uH() - 8.f;
 		for (int k = 0; k < i; k++) y += t * blkFrac(k);
 		return y;
 	}
-	float blkH(int i = 2) const { return (uH() - 8.f) * blkFrac(i); }
+	float blkH(int i = 1) const { return (uH() - 8.f) * blkFrac(i); }
 
 	float* tabArray(int t) const {
 		if (!module) return nullptr;
@@ -1637,11 +1651,11 @@ struct SigmaDisplay : OpaqueWidget {
 		return clamp(1.f - (uy - specY()) / std::max(specH(), 1.f), 0.f, 1.f);
 	}
 	int panIndexAt(float uy) const {
-		float h = blkH(1) - 12.f, y0 = blkY(1) + 9.f;
+		float h = blkH(0) - 12.f, y0 = blkY(0) + 9.f;
 		return clamp((int)((uy - y0) / std::max(h / np(), 0.5f)), 0, np() - 1);
 	}
 	void matrixCellAt(float ux, float uy, int& r, int& c, float& t) const {
-		float h = blkH(2) - 12.f, y0 = blkY(2) + 9.f, lw = 14.f;
+		float h = blkH(1) - 12.f, y0 = blkY(1) + 9.f, lw = 14.f;
 		float cw = (rw() - lw) / (float)SG_MOD_N, ch = h / (float)SG_MODSRC;
 		r = clamp((int)((uy - y0) / std::max(ch, 0.5f)), 0, SG_MODSRC - 1);
 		c = clamp((int)((ux - rx() - lw) / std::max(cw, 0.5f)), 0, SG_MOD_N - 1);
@@ -1668,10 +1682,9 @@ void SigmaDisplay::onButton(const ButtonEvent& e) {
 		}
 		dragKind = DRAG_BARS;
 	} else {
-		float b1 = blkY(1), b2 = blkY(2);
-		if (uy >= b2)      dragKind = DRAG_MATRIX;
-		else if (uy >= b1) dragKind = DRAG_PAN;
-		else { OpaqueWidget::onButton(e); return; }   // the scope is not editable
+		if (uy >= blkY(1))      dragKind = DRAG_MATRIX;
+		else if (uy >= blkY(0)) dragKind = DRAG_PAN;
+		else { OpaqueWidget::onButton(e); return; }
 	}
 	dragPos = e.pos;
 	dragHas = false;                 // a click has no trail to fill in
@@ -1687,8 +1700,6 @@ void SigmaDisplay::onDoubleClick(const DoubleClickEvent& e) {
 	if (ux < splitX()) {
 		if (uy < tabsH()) module->resetTab(clamp((int)(ux / (splitX() / SG_NTAB)), 0, SG_NTAB - 1));
 	} else if (uy < blkY(1)) {
-		return;                                     // the scope heads nothing
-	} else if (uy < blkY(2)) {
 		for (int p = 0; p < SG_MAXP; p++) module->pPan[p] = 0.f;
 	} else {
 		for (int r = 0; r < SG_MODSRC; r++)
@@ -1729,7 +1740,9 @@ void SigmaDisplay::applyAt(Vec p) {
 		float* arr = tabArray(module->dispTab);
 		if (!arr) return;
 		float t = barValueAt(uy);
-		arr[barIndexAt(ux)] = SG_TABBIP[module->dispTab] ? (t * 2.f - 1.f) : t;
+		float v = SG_TABBIP[module->dispTab] ? (t * 2.f - 1.f) : t;
+		if (module->dispTab == 2) v = module->snapPitch(v);   // PITCH latches
+		arr[barIndexAt(ux)] = v;
 	} else if (dragKind == DRAG_PAN) {
 		module->pPan[panIndexAt(uy)] = clamp((ux - rx()) / rw() * 2.f - 1.f, -1.f, 1.f);
 	} else if (dragKind == DRAG_MATRIX) {
@@ -1740,10 +1753,19 @@ void SigmaDisplay::applyAt(Vec p) {
 }
 
 static const char* SG_TABHELP[SG_NTAB] = {
-	"LEVEL - the loud spectrum. Velocity morphs toward it.",
-	"SOFT - the quiet spectrum. A quiet note is a different timbre, not a smaller one.",
-	"PITCH - cents per partial, a trim on top of STRETCH.",
-	"DEPTH - how much envelope each partial takes. Below zero it follows the inverse and blooms as the others fall.",
+	"LOUD - the spectrum at FULL velocity. One of a pair: velocity crossfades "
+	"between SOFT and this, so a hard note is a different timbre and not just a "
+	"bigger one. With nothing patched to VEL you are hearing this curve.",
+	"SOFT - the same partials at ZERO velocity, drawn separately. Play quietly "
+	"on a real instrument and you lose the top of the spectrum, not just level; "
+	"that is what the second curve is for. Storing both is the whole reason "
+	"MORPH and MORPH SENS exist.",
+	"PITCH - cents per partial, a trim on top of STRETCH, +/- two octaves. The "
+	"context menu can latch a drag to cents, semitones or octaves, which is how "
+	"you land exactly on 4x or 10x.",
+	"DEPTH - how much of the envelope each partial takes. The zero line is drawn "
+	"across the graph: above it the partial follows the envelope, below it "
+	"follows the INVERSE and blooms in as the others fall away.",
 	"RATE - envelope speed per partial. Faster highs is what makes a struck tone sound struck.",
 };
 
@@ -1793,7 +1815,7 @@ std::string SigmaDisplay::hoverAt(float ux, float uy) {
 		                 val.c_str(), live.c_str());
 	}
 	if (ux >= rx()) {
-		if (uy >= blkY(1) && uy < blkY(1) + blkH(1)) {
+		if (uy >= blkY(0) && uy < blkY(0) + blkH(0)) {
 			int i = panIndexAt(uy);
 			float pan = clamp(module->pPan[i], -1.f, 1.f);
 			const char* side = pan < -0.02f ? "L" : (pan > 0.02f ? "R" : "centre");
@@ -1802,7 +1824,7 @@ std::string SigmaDisplay::hoverAt(float ux, float uy) {
 			     : string::f("Partial %d   PAN  %.0f%% %s", i + 1,
 			                 std::fabs(pan) * 100.f, side);
 		}
-		if (uy >= blkY(2) && uy < blkY(2) + blkH(2)) {
+		if (uy >= blkY(1) && uy < blkY(1) + blkH(1)) {
 			int r, c; float t;
 			matrixCellAt(ux, uy, r, c, t);
 			static const char* DEST[SG_MOD_N] = {"level", "pitch", "pan",
@@ -1812,8 +1834,6 @@ std::string SigmaDisplay::hoverAt(float ux, float uy) {
 			     ? string::f("%s -> %s   off", SG_SRCNAME[r], DEST[c])
 			     : string::f("%s -> %s   %+.0f%%", SG_SRCNAME[r], DEST[c], v * 100.f);
 		}
-		if (uy >= blkY(0) && uy < blkY(0) + blkH(0))
-			return string::f("WAVE   one cycle at %.1f Hz", module->dispF0);
 	}
 	return "";
 }
@@ -1832,8 +1852,15 @@ void SigmaDisplay::step() {
 	// keep the readout live rather than leaving it at whatever it said when the
 	// drag started -- during an edit is exactly when you want to see the number.
 	if (dragKind != DRAG_NONE) {
+		// The zoom divisor is not optional. getAbsoluteOffset() maps a LOCAL
+		// vector to absolute coordinates and ZoomWidget scales it on the way, so
+		// the inverse needs the division too. Without it the drag readout named
+		// a partial further and further from the real one the further the
+		// pointer was from this widget's top-left corner.
 		float s = box.size.x / SG_DESIGN_W;
-		Vec p = APP->scene->mousePos.minus(getAbsoluteOffset(Vec(0, 0)));
+		float z = getAbsoluteZoom();
+		if (z <= 0.f) z = 1.f;
+		Vec p = APP->scene->mousePos.minus(getAbsoluteOffset(Vec(0, 0))).div(z);
 		hoverStr = hoverAt(p.x / s, p.y / s);
 	}
 	bool want = !hoverStr.empty();
@@ -1879,10 +1906,10 @@ void SigmaDisplay::drawLayer(const DrawArgs& args, int layer) {
 		}
 	}
 
-	// MORPH, along the foot and named at both ends. It was a bare bar tucked
-	// under the tabs: a meter with no units and no endpoints tells you a number
-	// is moving, not what the number means. SOFT on the left, LOUD on the
-	// right, and the marker sits between the two curves it is crossfading.
+	// MORPH, along the foot. Unlabelled: the tabs it crossfades between are
+	// named SOFT and LOUD a few millimetres above it, and repeating those two
+	// words at the ends of the bar said the same thing twice. The marker's
+	// colour still names the end it is nearest.
 	{
 		float mw = splitX() * 0.34f, mx = (splitX() - mw) * 0.5f;
 		float my = uH() - 6.f;
@@ -1895,14 +1922,6 @@ void SigmaDisplay::drawLayer(const DrawArgs& args, int layer) {
 		nvgRect(vg, (mx + (mw - 3.f) * t) * s, (my - 2.f) * s, 3.f * s, 5.5f * s);
 		nvgFillColor(vg, t < 0.5f ? SG_TABCOL[1] : SG_TABCOL[0]);
 		nvgFill(vg);
-		if (font && font->handle >= 0) {
-			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
-			nvgFillColor(vg, sfs::SCREEN_DIM);
-			nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-			nvgText(vg, (mx - 3.f) * s, (my + 1.f) * s, "SOFT", NULL);
-			nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-			nvgText(vg, (mx + mw + 3.f) * s, (my + 1.f) * s, "LOUD", NULL);
-		}
 	}
 
 	float y0 = specY(), h = specH();
@@ -1912,13 +1931,55 @@ void SigmaDisplay::drawLayer(const DrawArgs& args, int layer) {
 	// What the engine is doing right now, which is the thing the stored curves
 	// only describe indirectly once TILT, the envelope and the LFOs are through
 	// with them.
-	for (int i = 0; i < np(); i++) {
-		float a = clamp(module->liveAmp[i], 0.f, 1.f);
-		float bh = std::sqrt(a) * h;              // sqrt, so quiet partials show
+	// AN AREA, not a bar per partial. Sixty-four bars two pixels wide stopped
+	// being a spectrum and became a comb; and bars imply the partials are
+	// separate buckets when what they trace is one curve across the index --
+	// the same curve every macro in this module bends. Drawn the way Phase and
+	// Slice draw a waveform: a filled envelope with its outline on top.
+	{
 		nvgBeginPath(vg);
-		nvgRect(vg, (i * colW + 1.f) * s, (y0 + h - bh) * s, (colW - 2.f) * s, bh * s);
+		nvgMoveTo(vg, (colW * 0.5f) * s, (y0 + h) * s);
+		for (int i = 0; i < np(); i++) {
+			float a = clamp(module->liveAmp[i], 0.f, 1.f);
+			float bh = std::sqrt(a) * h;          // sqrt, so quiet partials show
+			nvgLineTo(vg, (i * colW + colW * 0.5f) * s, (y0 + h - bh) * s);
+		}
+		nvgLineTo(vg, ((np() - 1) * colW + colW * 0.5f) * s, (y0 + h) * s);
+		nvgClosePath(vg);
 		nvgFillColor(vg, nvgRGBA(0x0D, 0x59, 0x86, 0xCC));
 		nvgFill(vg);
+		nvgBeginPath(vg);
+		for (int i = 0; i < np(); i++) {
+			float a = clamp(module->liveAmp[i], 0.f, 1.f);
+			float bh = std::sqrt(a) * h;
+			float xx = (i * colW + colW * 0.5f) * s, yy = (y0 + h - bh) * s;
+			if (i == 0) nvgMoveTo(vg, xx, yy); else nvgLineTo(vg, xx, yy);
+		}
+		nvgStrokeColor(vg, nvgRGBA(0x2A, 0x8F, 0xC8, 0xFF));
+		nvgStrokeWidth(vg, 1.2f * s);
+		nvgStroke(vg);
+	}
+
+	// THE ZERO LINE, drawn only when the selected tab is bipolar. DEPTH and
+	// PITCH both cross zero and both mean something different either side of
+	// it -- below zero DEPTH follows the envelope INVERTED -- and there was
+	// nothing on screen saying where the crossing was. Labelled at the left so
+	// it cannot be mistaken for a grid line.
+	if (SG_TABBIP[clamp(module->dispTab, 0, SG_NTAB - 1)]) {
+		float zy = y0 + h * 0.5f;
+		nvgBeginPath(vg);
+		nvgMoveTo(vg, 0.f, zy * s);
+		nvgLineTo(vg, splitX() * s, zy * s);
+		nvgStrokeColor(vg, sfs::SCREEN_PMID);
+		nvgStrokeWidth(vg, 1.f * s);
+		nvgStroke(vg);
+		if (font && font->handle >= 0) {
+			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
+			nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
+			nvgFillColor(vg, sfs::SCREEN_DIM);
+			nvgText(vg, 2.f * s, (zy - 1.f) * s,
+			        module->dispTab == 3 ? "0  (below: inverted)" : "0", NULL);
+		}
 	}
 
 	// ── the stored curves, over the top ─────────────────────────────────────
@@ -1959,11 +2020,9 @@ void SigmaDisplay::drawLayer(const DrawArgs& args, int layer) {
 			        string::f("%d", i + 1).c_str(), NULL);
 	}
 
-	// ── divider ─────────────────────────────────────────────────────────────
-	nvgBeginPath(vg);
-	nvgRect(vg, (splitX() + 1.f) * s, 2.f * s, 1.f * s, (uH() - 4.f) * s);
-	nvgFillColor(vg, sfs::SCREEN_LINE);
-	nvgFill(vg);
+	// No divider. The blocks on the right carry their own headings and their
+	// own edges; a full-height rule between them and the spectrum drew a
+	// boundary the eye did not need.
 
 	auto blockLabel = [&](int i, const char* t) {
 		if (!font || font->handle < 0) return;
@@ -1973,30 +2032,10 @@ void SigmaDisplay::drawLayer(const DrawArgs& args, int layer) {
 		nvgText(vg, rx() * s, (blkY(i) + 5.f) * s, t, NULL);
 	};
 
-	// ── block 0: the waveform ───────────────────────────────────────────────
-	blockLabel(0, "WAVE");
+	// ── block 0: stereo placement ───────────────────────────────────────────
+	blockLabel(0, "PAN");
 	{
 		float by = blkY(0) + 9.f, bh = blkH(0) - 12.f;
-		// ONE CYCLE, from the pitch of the voice the screen is following. A
-		// window of fixed length shows a different number of cycles at every
-		// note, so the shape you are trying to read changes with what you play.
-		float per = APP->engine->getSampleRate() / std::max(module->dispF0, 20.f);
-		int n = clamp((int)per, 8, SG_SCOPE);
-		nvgBeginPath(vg);
-		for (int i = 0; i < n; i++) {
-			float xx = rx() + rw() * (float)i / (float)(n - 1);
-			float yy = by + bh * 0.5f - clamp(module->scope[i] * 0.1f, -1.f, 1.f) * bh * 0.5f;
-			if (i == 0) nvgMoveTo(vg, xx * s, yy * s); else nvgLineTo(vg, xx * s, yy * s);
-		}
-		nvgStrokeColor(vg, sfs::SCREEN_BLUE);
-		nvgStrokeWidth(vg, 1.2f);
-		nvgStroke(vg);
-	}
-
-	// ── block 1: stereo placement ───────────────────────────────────────────
-	blockLabel(1, "PAN");
-	{
-		float by = blkY(1) + 9.f, bh = blkH(1) - 12.f;
 		float rowH = bh / (float)np();
 		nvgBeginPath(vg);
 		nvgRect(vg, (rx() + rw() * 0.5f - 0.5f) * s, by * s, 1.f * s, bh * s);
@@ -2014,44 +2053,76 @@ void SigmaDisplay::drawLayer(const DrawArgs& args, int layer) {
 		}
 	}
 
-	// ── block 2: the mod matrix ─────────────────────────────────────────────
-	blockLabel(2, "MOD");
+	// ── block 1: the mod matrix ─────────────────────────────────────────────
+	blockLabel(1, "MOD");
 	{
-		float by = blkY(2) + 9.f, bh = blkH(2) - 12.f;
+		float by = blkY(1) + 9.f, bh = blkH(1) - 12.f;
 		float lw = 14.f;                                   // the LFO name gutter
-		float cw = (rw() - lw) / (float)SG_MOD_N, ch = bh / (float)SG_MODSRC;
+		float fx = rx() + lw, fw = rw() - lw;
+		float cw = fw / (float)SG_MOD_N, ch = bh / (float)SG_MODSRC;
+		// A LATTICE, ruled all the way across, rather than twenty-four separate
+		// tiles. The cells were drawn one at a time with a gap between them, so
+		// each zero line stopped at its own cell's edge and the block read as a
+		// scatter of little meters. Ruling the field in one piece -- one wash,
+		// then dark lines cut through it in both directions -- makes the six
+		// destinations line up as columns and the four sources as rows, which
+		// is what you are actually reading when you look for a route.
+		nvgBeginPath(vg);
+		nvgRect(vg, fx * s, by * s, fw * s, bh * s);
+		nvgFillColor(vg, sfs::SCREEN_PURP);
+		nvgFill(vg);
+		// the zero lines first, full width, so the dark rules cut them
+		for (int r = 0; r < SG_MODSRC; r++) {
+			nvgBeginPath(vg);
+			nvgRect(vg, fx * s, (by + r * ch + ch * 0.5f - 0.5f) * s, fw * s, 1.f * s);
+			nvgFillColor(vg, sfs::SCREEN_PMID);
+			nvgFill(vg);
+		}
+		nvgFillColor(vg, sfs::SCREEN_BG);
+		for (int c = 0; c <= SG_MOD_N; c++) {       // verticals, both edges in
+			nvgBeginPath(vg);
+			nvgRect(vg, (fx + c * cw - 0.5f) * s, by * s, 1.f * s, bh * s);
+			nvgFill(vg);
+		}
+		for (int r = 1; r < SG_MODSRC; r++) {       // horizontals, between rows
+			nvgBeginPath(vg);
+			nvgRect(vg, fx * s, (by + r * ch - 0.5f) * s, fw * s, 1.f * s);
+			nvgFill(vg);
+		}
 		for (int r = 0; r < SG_MODSRC; r++)
 			for (int c = 0; c < SG_MOD_N; c++) {
-				float x = rx() + lw + c * cw, y = by + r * ch;
-				nvgBeginPath(vg);
-				nvgRect(vg, (x + 0.5f) * s, (y + 0.5f) * s, (cw - 1.f) * s, (ch - 1.f) * s);
-				nvgFillColor(vg, sfs::SCREEN_PURP);
-				nvgFill(vg);
-				// FROM THE CENTRE, both ways. Filling from the floor in two
-				// colours makes you read the colour to know the sign, and two
-				// colours at a glance is exactly what a bipolar value should
-				// not need -- the direction of travel says it instead.
+				float x = fx + c * cw, y = by + r * ch;
 				float mid = y + ch * 0.5f;
-				nvgBeginPath(vg);
-				nvgRect(vg, (x + 1.f) * s, (mid - 0.5f) * s, (cw - 2.f) * s, 1.f * s);
-				nvgFillColor(vg, sfs::SCREEN_PMID);
-				nvgFill(vg);
+				// A DOT THAT RIDES THE LINE, not a bar that grows from it. A bar
+				// has area, and area reads as quantity even when it is zero-ish
+				// -- a cell at 5% still drew a visible slab, so an untouched
+				// matrix looked busy. A dot sitting ON the zero line is plainly
+				// off, and its distance from that line is the amount.
 				float v = clamp(module->mod[r][c], -1.f, 1.f);
-				if (std::fabs(v) > 0.01f) {
-					float fh = std::fabs(v) * (ch * 0.5f - 1.5f);
-					nvgBeginPath(vg);
-					nvgRect(vg, (x + 1.f) * s, (v > 0.f ? mid - fh : mid) * s,
-					        (cw - 2.f) * s, fh * s);
-					nvgFillColor(vg, v > 0.f ? sfs::SCREEN_BLUE : sfs::SCREEN_HOT);
-					nvgFill(vg);
+				float travel = ch * 0.5f - 2.6f;
+				float cy = mid - v * travel;
+				bool on = std::fabs(v) > 0.005f;
+				if (on) {                       // a stem back to zero, so the
+					nvgBeginPath(vg);           // eye can read the distance
+					nvgMoveTo(vg, (x + cw * 0.5f) * s, mid * s);
+					nvgLineTo(vg, (x + cw * 0.5f) * s, cy * s);
+					nvgStrokeColor(vg, nvgTransRGBA(v > 0.f ? sfs::SCREEN_BLUE
+					                                        : sfs::SCREEN_HOT, 150));
+					nvgStrokeWidth(vg, 1.f * s);
+					nvgStroke(vg);
 				}
+				nvgBeginPath(vg);
+				nvgCircle(vg, (x + cw * 0.5f) * s, cy * s, 2.f * s);
+				nvgFillColor(vg, on ? (v > 0.f ? sfs::SCREEN_BLUE : sfs::SCREEN_HOT)
+				                    : sfs::SCREEN_PMID);
+				nvgFill(vg);
 			}
 		if (font && font->handle >= 0) {
 			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 			nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 			nvgFillColor(vg, sfs::SCREEN_DIM);
 			for (int c = 0; c < SG_MOD_N; c++)
-				nvgText(vg, (rx() + lw + c * cw + cw * 0.5f) * s, (by - 4.f) * s,
+				nvgText(vg, (fx + c * cw + cw * 0.5f) * s, (by - 4.f) * s,
 				        SG_MODNAME[c], NULL);
 			nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 			for (int r = 0; r < SG_MODSRC; r++)
@@ -2081,13 +2152,30 @@ void SigmaDisplay::drawPreview(const DrawArgs& args, float s) {
 		}
 	}
 	float y0 = specY(), h = specH(), colW = splitX() / (float)np();
-	for (int i = 0; i < np(); i++) {
-		float a = 1.f / (1.f + 0.5f * i) * (0.75f + 0.25f * std::sin(i * 1.9f));
-		float bh = std::sqrt(clamp(a, 0.f, 1.f)) * h;
+	// The same AREA the live view draws. Two copies of a drawing is how a
+	// browser thumbnail comes to show a module that no longer exists -- this one
+	// was still bars for an hour after the live one stopped being.
+	{
+		auto amp = [&](int i) {
+			float a = 1.f / (1.f + 0.5f * i) * (0.75f + 0.25f * std::sin(i * 1.9f));
+			return std::sqrt(clamp(a, 0.f, 1.f)) * h;
+		};
 		nvgBeginPath(vg);
-		nvgRect(vg, (i * colW + 1.f) * s, (y0 + h - bh) * s, (colW - 2.f) * s, bh * s);
+		nvgMoveTo(vg, (colW * 0.5f) * s, (y0 + h) * s);
+		for (int i = 0; i < np(); i++)
+			nvgLineTo(vg, (i * colW + colW * 0.5f) * s, (y0 + h - amp(i)) * s);
+		nvgLineTo(vg, ((np() - 1) * colW + colW * 0.5f) * s, (y0 + h) * s);
+		nvgClosePath(vg);
 		nvgFillColor(vg, nvgRGBA(0x0D, 0x59, 0x86, 0xCC));
 		nvgFill(vg);
+		nvgBeginPath(vg);
+		for (int i = 0; i < np(); i++) {
+			float xx = (i * colW + colW * 0.5f) * s, yy = (y0 + h - amp(i)) * s;
+			if (i == 0) nvgMoveTo(vg, xx, yy); else nvgLineTo(vg, xx, yy);
+		}
+		nvgStrokeColor(vg, nvgRGBA(0x2A, 0x8F, 0xC8, 0xFF));
+		nvgStrokeWidth(vg, 1.2f * s);
+		nvgStroke(vg);
 	}
 	for (int t = 0; t < SG_NTAB; t++) {
 		nvgBeginPath(vg);
@@ -2103,34 +2191,18 @@ void SigmaDisplay::drawPreview(const DrawArgs& args, float s) {
 		nvgStrokeWidth(vg, t == 0 ? 2.f : 1.f);
 		nvgStroke(vg);
 	}
-	nvgBeginPath(vg);
-	nvgRect(vg, (splitX() + 1.f) * s, 2.f * s, 1.f * s, (uH() - 4.f) * s);
-	nvgFillColor(vg, sfs::SCREEN_LINE);
-	nvgFill(vg);
+	// no divider here either
+
 	if (font && font->handle >= 0) {
-		static const char* BN[3] = {"WAVE", "PAN", "MOD"};
+		static const char* BN[2] = {"PAN", "MOD"};
 		sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
 		nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 		nvgFillColor(vg, sfs::SCREEN_DIM);
-		for (int i = 0; i < 3; i++)
+		for (int i = 0; i < 2; i++)
 			nvgText(vg, rx() * s, (blkY(i) + 5.f) * s, BN[i], NULL);
 	}
 	{
-		float by = blkY(0) + 9.f, bh = blkH(0) - 12.f;
-		nvgBeginPath(vg);
-		for (int i = 0; i < 96; i++) {
-			float ph = (float)i / 95.f;
-			float yy = by + bh * 0.5f - std::sin(ph * 6.2831853f * 2.f)
-			                            * (0.6f - 0.3f * ph) * bh * 0.5f;
-			float xx = rx() + rw() * ph;
-			if (i == 0) nvgMoveTo(vg, xx * s, yy * s); else nvgLineTo(vg, xx * s, yy * s);
-		}
-		nvgStrokeColor(vg, sfs::SCREEN_BLUE);
-		nvgStrokeWidth(vg, 1.2f);
-		nvgStroke(vg);
-	}
-	{
-		float by = blkY(1) + 9.f, bh = blkH(1) - 12.f, rowH = bh / np();
+		float by = blkY(0) + 9.f, bh = blkH(0) - 12.f, rowH = bh / np();
 		nvgBeginPath(vg);
 		nvgRect(vg, (rx() + rw() * 0.5f - 0.5f) * s, by * s, 1.f * s, bh * s);
 		nvgFillColor(vg, sfs::SCREEN_PMID);
@@ -2145,16 +2217,52 @@ void SigmaDisplay::drawPreview(const DrawArgs& args, float s) {
 		}
 	}
 	{
-		float by = blkY(2) + 9.f, bh = blkH(2) - 12.f;
-		float cw = rw() / (float)SG_MOD_N, ch = bh / (float)SG_MODSRC;
+		// The same LATTICE the live view rules. Kept in step by hand, which is
+		// the standing hazard of having two copies of one drawing.
+		float by = blkY(1) + 9.f, bh = blkH(1) - 12.f, lw = 14.f;
+		float fx = rx() + lw, fw = rw() - lw;
+		float cw = fw / (float)SG_MOD_N, ch = bh / (float)SG_MODSRC;
+		nvgBeginPath(vg);
+		nvgRect(vg, fx * s, by * s, fw * s, bh * s);
+		nvgFillColor(vg, sfs::SCREEN_PURP);
+		nvgFill(vg);
+		for (int r = 0; r < SG_MODSRC; r++) {
+			nvgBeginPath(vg);
+			nvgRect(vg, fx * s, (by + r * ch + ch * 0.5f - 0.5f) * s, fw * s, 1.f * s);
+			nvgFillColor(vg, sfs::SCREEN_PMID);
+			nvgFill(vg);
+		}
+		nvgFillColor(vg, sfs::SCREEN_BG);
+		for (int c = 0; c <= SG_MOD_N; c++) {
+			nvgBeginPath(vg);
+			nvgRect(vg, (fx + c * cw - 0.5f) * s, by * s, 1.f * s, bh * s);
+			nvgFill(vg);
+		}
+		for (int r = 1; r < SG_MODSRC; r++) {
+			nvgBeginPath(vg);
+			nvgRect(vg, fx * s, (by + r * ch - 0.5f) * s, fw * s, 1.f * s);
+			nvgFill(vg);
+		}
 		for (int r = 0; r < SG_MODSRC; r++)
 			for (int c = 0; c < SG_MOD_N; c++) {
 				nvgBeginPath(vg);
-				nvgRect(vg, (rx() + c * cw + 0.5f) * s, (by + r * ch + 0.5f) * s,
-				        (cw - 1.f) * s, (ch - 1.f) * s);
-				nvgFillColor(vg, sfs::SCREEN_PURP);
+				nvgCircle(vg, (fx + c * cw + cw * 0.5f) * s,
+				          (by + r * ch + ch * 0.5f) * s, 2.f * s);
+				nvgFillColor(vg, sfs::SCREEN_PMID);
 				nvgFill(vg);
 			}
+		if (font && font->handle >= 0) {
+			sfs::screenFont(vg, font, sfs::TYPE_SCREEN_SMALL);
+			nvgFillColor(vg, sfs::SCREEN_DIM);
+			nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+			for (int c = 0; c < SG_MOD_N; c++)
+				nvgText(vg, (fx + c * cw + cw * 0.5f) * s, (by - 4.f) * s,
+				        SG_MODNAME[c], NULL);
+			nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+			for (int r = 0; r < SG_MODSRC; r++)
+				nvgText(vg, (rx() + 1.f) * s, (by + r * ch + ch * 0.5f) * s,
+				        SG_SRCNAME[r], NULL);
+		}
 	}
 }
 
@@ -2300,6 +2408,8 @@ struct SigmaWidget : ModuleWidget {
 			[=](int i) { m->nPartials = SG_COUNTS[clamp(i, 0, SG_NCOUNT - 1)]; }));
 		menu->addChild(createIndexPtrSubmenuItem("Voice allocation",
 			{"First available", "Rolling"}, &m->allocMode));
+		menu->addChild(createIndexPtrSubmenuItem("PITCH tab snaps to",
+			{"Free", "Cents", "Semitones", "Octaves"}, &m->pitchSnap));
 
 		// Menu sliders rather than panel knobs, the way Chance keeps GATE LEN
 		// and GLIDE off its panel: these are set once for a patch and then left,
