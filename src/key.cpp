@@ -38,7 +38,14 @@ static const int KEY_NCH     = 4;      // channels
 static const int KEY_MAXPOLY = 16;
 static const int KEY_NSUB    = 3;      // sub-scales
 static const int KEY_MAXDEG  = 64;     // Scala scales run well past twelve
-static const int KEY_EDITDEG = 24;     // degrees the sub-scale rows can reach
+// The sub-scale rows reach as far as the SCALE does. This was 24, which was
+// invisible on every canonical scale (the longest is twelve) and silently
+// truncated a Scala file: a 53-degree scale quantized correctly, because the
+// quantizer works off parent.iv[] up to KEY_MAXDEG, but its sub-scales could
+// only see the first 24 degrees and the strip only drew those. The report that
+// reached us was "Scala scales are capped at 24", which was the visible half of
+// it.
+static const int KEY_EDITDEG = KEY_MAXDEG;
 
 static const char* KEY_NOTES[12] =
 	{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
@@ -226,7 +233,10 @@ struct Key : Module {
 
 	KeyScale parent;                     // the selected scale
 	KeyScale sub[KEY_NSUB];              // parent filtered by each sub-scale mask
-	uint32_t subMask[KEY_NSUB] = {0, 0, 0};    // over parent DEGREE indices
+	// 64 bits, because KEY_MAXDEG is 64. As a uint32_t it could not represent a
+	// degree past 31 whatever KEY_EDITDEG said, so raising the cap alone would
+	// have moved the truncation rather than removed it.
+	uint64_t subMask[KEY_NSUB] = {0, 0, 0};    // over parent DEGREE indices
 	uint16_t subChrom[KEY_NSUB] = {0, 0, 0};   // free mode: SEMITONES from the root
 	int   keyGen = 0;                    // bumped whenever anything about the key moves
 
@@ -261,7 +271,10 @@ struct Key : Module {
 	bool  hasHeld[KEY_NCH][KEY_MAXPOLY] = {};
 	int   lastGen[KEY_NCH][KEY_MAXPOLY] = {};
 	dsp::PulseGenerator chgPulse[KEY_NCH][KEY_MAXPOLY];
-	dsp::SchmittTrigger trigIn;
+	// ONE TRIGGER PER CHANNEL. A mono cable still drives all four, because
+	// getPolyVoltage() hands channel 0 to every reader, so every existing patch
+	// behaves exactly as it did. A polyphonic cable addresses them separately.
+	dsp::SchmittTrigger trigIn[KEY_NCH];
 	float shownVolts[KEY_NCH] = {};
 	bool  shownActive[KEY_NCH] = {};
 
@@ -296,7 +309,7 @@ struct Key : Module {
 
 		configInput(ROOT_INPUT,  "Root CV (1V/oct, semitone-quantized)");
 		configInput(SCALE_INPUT, "Scale CV (1V per scale)");
-		configInput(TRIG_INPUT,  "Sample & hold trigger — when patched, notes update only on a trigger");
+		configInput(TRIG_INPUT,  "Sample & hold trigger (poly: one channel each) — when patched, notes update only on a trigger");
 		configOutput(ROOT_OUTPUT,  "Root CV (1V/oct) — drives any module's ROOT input");
 		configOutput(SCALE_OUTPUT, "Scale CV (1V per scale on channel 0; the full scale, "
 		                           "including microtonal and Scala, on the further channels)");
@@ -308,9 +321,9 @@ struct Key : Module {
 	// Seeded with three roles you actually reach for, expressed as degrees so
 	// they stay themselves through any change of scale.
 	void defaultSubs() {
-		subMask[0] = (1u << 0) | (1u << 2) | (1u << 4);              // triad
-		subMask[1] = (1u << 0) | (1u << 3) | (1u << 4);              // root, 4th, 5th
-		subMask[2] = (1u << 0) | (1u << 2) | (1u << 4) | (1u << 6);  // seventh chord
+		subMask[0] = (1ull << 0) | (1ull << 2) | (1ull << 4);              // triad
+		subMask[1] = (1ull << 0) | (1ull << 3) | (1ull << 4);              // root, 4th, 5th
+		subMask[2] = (1ull << 0) | (1ull << 2) | (1ull << 4) | (1ull << 6);  // seventh chord
 	}
 
 	void onReset() override {
@@ -421,7 +434,7 @@ struct Key : Module {
 			sub[k] = KeyScale();
 			sub[k].period = parent.period;
 			for (int d = 0; d < parent.n && d < KEY_EDITDEG; d++)
-				if (subMask[k] & (1u << d)) sub[k].iv[sub[k].n++] = parent.iv[d];
+				if (subMask[k] & (1ull << d)) sub[k].iv[sub[k].n++] = parent.iv[d];
 			if (freeSub && chromaticKey()) {
 				for (int s = 0; s < 12 && sub[k].n < KEY_MAXDEG; s++) {
 					if (!((subChrom[k] >> s) & 1)) continue;
@@ -475,13 +488,16 @@ struct Key : Module {
 			rebuild();
 		}
 
-		bool sampleNow = true;
-		if (inputs[TRIG_INPUT].isConnected())
-			sampleNow = trigIn.process(inputs[TRIG_INPUT].getVoltage(), 0.1f, 1.f);
-
+		bool trigPatched = inputs[TRIG_INPUT].isConnected();
 		float hystSemis = hysteresisCents / 100.f;
 
 		for (int c = 0; c < KEY_NCH; c++) {
+			// Each channel samples on its own trigger. The Schmitt has to be
+			// per channel as well as the voltage: one shared trigger would be
+			// consumed by whichever channel looked at it first, and the other
+			// three would never see the edge.
+			bool sampleNow = !trigPatched
+				|| trigIn[c].process(inputs[TRIG_INPUT].getPolyVoltage(c), 0.1f, 1.f);
 			const KeyScale& sc = scaleFor(c);
 			int nch = std::max(1, inputs[IN_INPUT + c].getChannels());
 			nch = std::min(nch, KEY_MAXPOLY);
@@ -561,7 +577,9 @@ struct Key : Module {
 		json_object_set_new(root, "roundMode", json_integer(roundMode));
 		json_object_set_new(root, "hysteresisCents", json_real(hysteresisCents));
 		json_t* sm = json_array();
-		for (int k = 0; k < KEY_NSUB; k++) json_array_append_new(sm, json_integer(subMask[k]));
+		// json_integer is int64, so a 64-bit mask round-trips bit-exactly even
+		// when the top bit is set and it reads back as negative.
+		for (int k = 0; k < KEY_NSUB; k++) json_array_append_new(sm, json_integer((json_int_t)subMask[k]));
 		json_object_set_new(root, "subMask", sm);
 		json_t* sc = json_array();
 		for (int k = 0; k < KEY_NSUB; k++) json_array_append_new(sc, json_integer(subChrom[k]));
@@ -595,7 +613,7 @@ struct Key : Module {
 				subChrom[k] = (uint16_t)json_integer_value(json_array_get(sc, k));
 		if (json_t* sm = json_object_get(root, "subMask"))
 			for (int k = 0; k < KEY_NSUB && k < (int)json_array_size(sm); k++)
-				subMask[k] = (uint32_t)json_integer_value(json_array_get(sm, k));
+				subMask[k] = (uint64_t)json_integer_value(json_array_get(sm, k));
 
 		if (json_t* j = json_object_get(root, "scalaLoaded")) scalaLoaded = json_boolean_value(j);
 		if (json_t* j = json_object_get(root, "scalaPath")) scalaPath = json_string_value(j);
@@ -703,7 +721,7 @@ struct KeyDisplay : OpaqueWidget {
 		if (row >= 0) {
 			e.consume(this);
 			if (!chromatic) {                        // cell IS the degree index
-				module->subMask[row] ^= (1u << cell);
+				module->subMask[row] ^= (1ull << cell);
 				module->rebuild();
 				return;
 			}
@@ -715,7 +733,7 @@ struct KeyDisplay : OpaqueWidget {
 			int deg = -1;
 			for (int d = 0; d < module->parent.n && d < KEY_EDITDEG; d++)
 				if (std::fabs(module->parent.iv[d] - (float)sfr) < 0.02f) deg = d;
-			if (deg >= 0) module->subMask[row] ^= (1u << deg);
+			if (deg >= 0) module->subMask[row] ^= (1ull << deg);
 			else if (module->freeSub) module->subChrom[row] ^= (uint16_t)(1u << sfr);
 			else return;                              // out of key, and not allowed
 			module->rebuild();

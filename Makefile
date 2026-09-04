@@ -19,6 +19,8 @@ LDFLAGS +=
 
 # Add .cpp files to the build
 SOURCES += $(wildcard src/*.cpp)
+# miniz (upstream, MIT) is C, not C++ — Play unzips .dslibrary packs with it.
+SOURCES += src/miniz.c
 
 # Vendored msfa FM engine (Google music-synthesizer-for-android, Apache-2.0),
 # used by the Bell module. See src/msfa/LICENSE.

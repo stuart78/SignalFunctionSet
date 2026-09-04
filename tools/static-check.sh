@@ -13,7 +13,7 @@
 # Hann table (issue #11), and clang-tidy caught a file-read loop that treated a
 # disk error as end-of-file and imported the truncated result (issue #12).
 #
-# Vendored third-party sources are filtered out. dr_wav.h and dr_flac.h alone
+# Vendored third-party sources are filtered out. dr_wav.h, dr_flac.h and miniz alone
 # produce well over a hundred style notes that are not ours to fix, and the
 # signal disappears underneath them. Everything under src/msfa is upstream
 # Google code and is reported but flagged, since we do sometimes patch it.
@@ -38,7 +38,7 @@ raw="$(cppcheck \
     -I "$ROOT/src" -I "$RACK_DIR/include" \
     "$ROOT/src" 2>&1 | grep "^src/\|^$ROOT/src/" | sed "s|^$ROOT/||")"
 
-ours="$(   printf '%s\n' "$raw" | grep -v "^src/dr_wav.h\|^src/dr_flac.h\|^src/msfa/" | grep . || true)"
+ours="$(   printf '%s\n' "$raw" | grep -v "^src/dr_wav.h\|^src/dr_flac.h\|^src/miniz\.\|^src/msfa/" | grep . || true)"
 vendored="$(printf '%s\n' "$raw" | grep    "^src/msfa/" | grep . || true)"
 
 if [ -n "$vendored" ]; then
