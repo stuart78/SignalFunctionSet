@@ -298,7 +298,8 @@ struct Key : Module {
 			configSwitch(SUB_PARAM + c, 0.f, (float)KEY_NSUB, 0.f,
 			             string::f("Channel %d scale", c + 1),
 			             {KEY_SUBLONG[0], KEY_SUBLONG[1], KEY_SUBLONG[2], KEY_SUBLONG[3]});
-			configInput(IN_INPUT + c, string::f("Channel %d pitch (1V/oct, poly)", c + 1));
+			configInput(IN_INPUT + c, string::f(
+				"Channel %d pitch (1V/oct, poly; normals from the channel to its left)", c + 1));
 			configOutput(OUT_OUTPUT + c, string::f("Channel %d quantized pitch", c + 1));
 			// RETIRED: the note-change triggers lost their jacks in the panel
 			// redesign. The enum slots stay, because outputs serialise by index and
@@ -309,7 +310,7 @@ struct Key : Module {
 
 		configInput(ROOT_INPUT,  "Root CV (1V/oct, semitone-quantized)");
 		configInput(SCALE_INPUT, "Scale CV (1V per scale)");
-		configInput(TRIG_INPUT,  "Sample & hold trigger (poly: one channel each) — when patched, notes update only on a trigger");
+		configInput(TRIG_INPUT,  "Sample & hold trigger (poly: channel N triggers Key channel N, last channel repeated) — when patched, notes update only on a trigger");
 		configOutput(ROOT_OUTPUT,  "Root CV (1V/oct) — drives any module's ROOT input");
 		configOutput(SCALE_OUTPUT, "Scale CV (1V per scale on channel 0; the full scale, "
 		                           "including microtonal and Scala, on the further channels)");
@@ -491,19 +492,47 @@ struct Key : Module {
 		bool trigPatched = inputs[TRIG_INPUT].isConnected();
 		float hystSemis = hysteresisCents / 100.f;
 
+		// ── the ins normal left to right ───────────────────────────────────────
+		// One cable in IN 1 feeds all four channels; a cable in IN 3 BREAKS the
+		// chain there, so 1-2 follow the first and 3-4 follow the second. That is
+		// the ordinary mult-in-the-panel behaviour, and it is what makes the poly
+		// TRIG worth having: one pitch source, four channels sampling it at four
+		// different moments, four sub-scales and four offsets off the same line.
+		// Without it, three of the four channels had no signal to sample and the
+		// per-channel trigger looked dead when it was working perfectly.
+		int src[KEY_NCH];
+		{
+			int last = -1;
+			for (int c = 0; c < KEY_NCH; c++) {
+				if (inputs[IN_INPUT + c].isConnected()) last = c;
+				src[c] = last;                      // -1 until the first cable
+			}
+		}
+		// A trigger cable narrower than four channels REPEATS ITS LAST CHANNEL
+		// rather than reading zeros off the end. getPolyVoltage only does that
+		// for a mono cable; on a 2-channel cable it reads voltages[2] and [3],
+		// which the engine holds at 0 V, so channels 3 and 4 would never see an
+		// edge again and would sit frozen on whatever they sampled first --
+		// silently, and for ever.
+		int trigCh = std::max(1, inputs[TRIG_INPUT].getChannels());
+
 		for (int c = 0; c < KEY_NCH; c++) {
 			// Each channel samples on its own trigger. The Schmitt has to be
 			// per channel as well as the voltage: one shared trigger would be
 			// consumed by whichever channel looked at it first, and the other
 			// three would never see the edge.
 			bool sampleNow = !trigPatched
-				|| trigIn[c].process(inputs[TRIG_INPUT].getPolyVoltage(c), 0.1f, 1.f);
+				|| trigIn[c].process(inputs[TRIG_INPUT].getVoltage(std::min(c, trigCh - 1)),
+				                     0.1f, 1.f);
 			const KeyScale& sc = scaleFor(c);
-			int nch = std::max(1, inputs[IN_INPUT + c].getChannels());
+			// Polyphony comes from whichever cable is feeding this channel, so a
+			// normalled channel is as polyphonic as the source it is reading.
+			Input& in4 = inputs[IN_INPUT + (src[c] < 0 ? c : src[c])];
+			int nch = std::max(1, in4.getChannels());
 			nch = std::min(nch, KEY_MAXPOLY);
 			outputs[OUT_OUTPUT + c].setChannels(nch);
 			outputs[CHG_OUTPUT + c].setChannels(nch);
-			shownActive[c] = inputs[IN_INPUT + c].isConnected();
+			shownActive[c] = (src[c] >= 0);
 
 			int off = (int)std::round(params[OFFSET_PARAM + c].getValue());
 			// A sub-scale change must invalidate held notes exactly as a key
@@ -511,7 +540,7 @@ struct Key : Module {
 			int gen = keyGen * 8 + (int)std::round(params[SUB_PARAM + c].getValue());
 
 			for (int p = 0; p < nch; p++) {
-				float in = inputs[IN_INPUT + c].getVoltage(p);
+				float in = (src[c] >= 0) ? in4.getVoltage(p) : 0.f;
 
 				if (sampleNow || !hasHeld[c][p] || lastGen[c][p] != gen) {
 					float semis = in * 12.f - (float)rootNote;

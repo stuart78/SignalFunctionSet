@@ -459,7 +459,8 @@
       "tags": [
         "Sequencer",
         "Utility"
-      ]
+      ],
+      "hidden": true
     },
     {
       "slug": "Wheel",
@@ -470,6 +471,39 @@
         "Polyphonic",
         "Synth voice"
       ]
+    },
+    {
+      "slug": "Helix",
+      "name": "Helix",
+      "description": "Barber-pole phaser whose notches climb the harmonic series and never stop.",
+      "tags": [
+        "Effect",
+        "Phaser",
+        "Filter"
+      ],
+      "hidden": true
+    },
+    {
+      "slug": "Brigade",
+      "name": "Brigade",
+      "description": "Bucket brigade whose buckets are frequency bands: content climbs the spectrum.",
+      "tags": [
+        "Effect",
+        "Filter",
+        "Delay"
+      ],
+      "hidden": true
+    },
+    {
+      "slug": "Spool",
+      "name": "Spool",
+      "description": "Four short tapes played by gates; the tape never rewinds when you stop.",
+      "tags": [
+        "Sampler",
+        "Sequencer",
+        "Effect"
+      ],
+      "hidden": true
     }
   ]
 }

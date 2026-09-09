@@ -7,6 +7,7 @@
 #   ./h 1     # retrigger step per preset -- the VCA discontinuity
 #   ./h 2     # attack time vs one cycle of each partial's own frequency
 #   ./h 0     # summed peak level per preset, against the +/-10V clamp
+#   ./h 8     # RATE: the tab's multiplier, the ENV RATE spread, sub-cycle decays
 import re, sys, os
 SRC = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src', 'sigma.cpp')).read()
 OUT = os.getcwd()          # writes h.cpp beside you, not into tools/
@@ -377,6 +378,79 @@ int main(int argc, char** argv) {
 		for (float v : {3.f, 6.f, 6.92f, 10.82f, 13.84f, 27.7f})
 			printf("  %%5.2f  %%5.2f      %%5.2f\n", v, sgSoftClip(v), v > 10.f ? 10.f : v);
 	}
+	else 	if (mode == 8) {
+		// ---- RATE, three questions.
+		//
+		// (1) Does the RATE tab do what its tooltip claims? It reads
+		//     "0.25x .. 4x" with centre 1x.
+		// (2) Does ENV RATE leave the ATTACK alone? Its whole meaning is
+		//     "highs die sooner", and it used to multiply the attack too.
+		// (3) Does the spread ever make a DECAY shorter than one cycle of the
+		//     partial that is decaying? That is the same failure the attack
+		//     had: an envelope segment shorter than a cycle is a step, however
+		//     smooth the maths.
+		float dt = 1.f / 48000.f;
+		printf("(1) RATE tab multiplier, from the extracted formula\n");
+		{
+			float envRate = 0.f; int p = 0;
+			for (int k = 0; k <= 4; k++) {
+				m.pRate[0] = (float)k * 0.25f;
+				%(ratechain_body)s
+				printf("    pRate %%.2f -> rateOwn %%.2fx   rateDie %%.2fx\n",
+				       m.pRate[0], rateOwn, rateDie);
+			}
+		}
+
+		printf("\n(2) attack time, ENV RATE 0 vs 1 (must be identical)\n");
+		for (int i = 0; i < SG_NPRESET; i++) {
+			m.loadPreset(i);
+			float A = Sigma::knobTime(m.params[Sigma::ATTACK_PARAM].getValue(), 0.001f, 8.f);
+			float D = Sigma::knobTime(m.params[Sigma::DECAY_PARAM].getValue(),  0.005f, 12.f);
+			float S = m.params[Sigma::SUSTAIN_PARAM].getValue();
+			float R = Sigma::knobTime(m.params[Sigma::RELEASE_PARAM].getValue(),0.005f, 16.f);
+			int top = m.nPartials - 1;
+			float t[2];
+			for (int e = 0; e < 2; e++) {
+				float envRate = (float)e; int p = top;
+				%(ratechain_body)s
+				float env = 0.f, rel = 0.f; int st = ST_ATT; int n = 0;
+				while (st == ST_ATT && n < 48000 * 20) { Sigma::advance(env, st, rel, rateOwn, rateDie, dt, A, D, S, R); n++; }
+				t[e] = (float)n * dt;
+			}
+			if (std::fabs(t[0] - t[1]) > 1e-9f)
+				printf("    %%-16s ATTACK MOVED: %%.4f ms -> %%.4f ms  <-- BUG\n",
+				       NAME[i], t[0]*1000.f, t[1]*1000.f);
+		}
+		printf("    (no lines above = attack is independent of ENV RATE)\n");
+
+		printf("\n(3) decay of the top partial vs one cycle of its own pitch\n");
+		printf("    preset            np   envRate  decay(ms)  cycles  \n");
+		for (int i = 0; i < SG_NPRESET; i++) {
+			m.loadPreset(i);
+			float A = Sigma::knobTime(m.params[Sigma::ATTACK_PARAM].getValue(), 0.001f, 8.f);
+			float D = Sigma::knobTime(m.params[Sigma::DECAY_PARAM].getValue(),  0.005f, 12.f);
+			float S = m.params[Sigma::SUSTAIN_PARAM].getValue();
+			float R = Sigma::knobTime(m.params[Sigma::RELEASE_PARAM].getValue(),0.005f, 16.f);
+			// A preset with full sustain has NO decay segment: the envelope goes
+			// attack straight to sustain, and "time until the decay ends" is one
+			// sample. Reporting that as a sub-cycle decay is crying wolf, and a
+			// checker that cries wolf is how a real finding gets missed.
+			if (S >= 0.999f) { printf("    %%-16s  %%3d     --      (sustain 1.0, no decay segment)\n", NAME[i], m.nPartials); continue; }
+			for (int e = 0; e < 2; e++) {
+				float envRate = e ? 1.f : m.params[Sigma::ENVRATE_PARAM].getValue();
+				int p = m.nPartials - 1;
+				%(ratechain_body)s
+				// straight to the decay segment: this is about the decay only
+				float env = 1.f, rel = 0.f; int st = ST_DEC; int n = 0;
+				while (st == ST_DEC && n < 48000 * 30) { Sigma::advance(env, st, rel, rateOwn, rateDie, dt, A, D, S, R); n++; }
+				float secs = (float)n * dt;
+				float cyc = secs * (float)(p + 1) * 261.6f;
+				printf("    %%-16s  %%3d   %%5.2f    %%8.2f  %%7.1f%%s\n",
+				       NAME[i], m.nPartials, envRate, secs*1000.f, cyc,
+				       cyc < 1.f ? "   <-- sub-cycle decay" : "");
+			}
+		}
+	}
 	else 	if (mode == 2) {
 		// ---- ATTACK: how long the VCA takes to open, and how that compares
 		// with one cycle of a middle C. An attack much shorter than a cycle is
@@ -479,5 +553,6 @@ lc = levelchain.replace('V.envMax[p]', 'V_emax_p').replace('V.env[p]', 'V_env_p'
 open(os.path.join(OUT,'h.cpp'),'w').write(H % dict(
     consts=consts, moddest=moddest, paramenum=paramenum, defaultFor=defaultFor,
     initSpec=initSpec, stage=stage, helpers=helpers, loadpre=loadpre, advance=advance, softclip=softclip, vrandfn=vrandfn, gatepass=gatepass,
-    levelchain_body=lc))
+    levelchain_body=lc,
+    ratechain_body=ratechain.replace('pRate[p]', 'm.pRate[p]')))
 print("generated; extracted %d blocks verbatim" % 9)

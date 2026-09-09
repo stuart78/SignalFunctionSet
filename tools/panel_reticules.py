@@ -462,6 +462,17 @@ PLATES = {
     "chime": [(hp(7.25), hp(13.5), hp(20.0), hp(6.0)),   # the eight note out rows
               (hp(22.25), hp(21.5), hp(5.0), hp(3.25))], # the stereo mix pair
     "crystal": [],
+    # the three outputs at the foot, so they read as a group against the
+    # three inputs beside them
+    # PHASE is an OUTPUT, so it belongs on the plate with the other two.
+    # Left off it, its label was drawn in the on-plate white and vanished
+    # into the light panel.
+    "helix": [(41.0, 103.5, 39.0, 13.0)],
+    "brigade": [(41.0, 103.5, 39.0, 13.0)],
+    # only the MIX pair. The per-tape outs are interleaved with their inputs so
+    # each tape keeps its own column, and a plate over that row would cover four
+    # inputs too.
+    "loop": [(78.9, 111.5, 25.5, 15.0)],
     "fill": [(117.0, 8.0, 43.0, 116.0)],           # swing + the three output columns
     "chance": [],
     # the four channels read as one block, so they sit on one plate
@@ -490,6 +501,9 @@ MODULES = {
     "kit":     ("Kit",     "src/kit.cpp",     "res/kit.svg",     {}),
     "trace":   ("Trace",   "src/trace.cpp",   "res/trace.svg",   {"TR_LANES": 4}),
     "sigma":   ("Sigma",   "src/sigma.cpp",   "res/sigma.svg",   {"SG_PARTIALS": 16}),
+    "helix":   ("Helix",   "src/helix.cpp",   "res/helix.svg",   {}),
+    "brigade": ("Brigade", "src/brigade.cpp", "res/brigade.svg", {}),
+    "spool":   ("Spool",   "src/spool.cpp",   "res/spool.svg",   {}),
     "wheel":   ("Wheel",   "src/wheel.cpp",   "res/wheel.svg",   {"WH_V": 6, "WH_TRP": 5}),
 }
 
@@ -499,8 +513,13 @@ MODULES = {
 # still run, so the guard is against the bare sweep, not against intent.
 NO_SCREEN_SLAB = {"wheel"}
 
+# Panels whose ART is now the specification: the designer has drawn them, their
+# screens and plates are flattened into the export, and regenerating over one
+# lays a SECOND screen on top of the designer's. opmorph and spool joined the
+# list in 2026-09 -- opmorph twice picked up a stray #1a1a32 rect from a run
+# aimed at another panel, which is exactly the failure this set exists to stop.
 FINISHED = {"crystal", "chime", "loom", "slide", "slidex", "fill", "gravity", "key",
-            "slice", "kit", "trace", "sigma", "wheel"}
+            "slice", "kit", "trace", "sigma", "wheel", "opmorph", "spool"}
 
 if __name__ == "__main__":
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -157,6 +157,18 @@ struct Kit : Module {
 	float dispStiff = 0.3f;
 	float modeVis[sfs::Drum::NM] = {0.f};
 	int   headView = 1;                  // 0 = flat rings, 1 = 3D surface
+	// Two mics over the head instead of a pickup on it: see membrane.hpp. Every
+	// output goes polyphonic, 2 channels, left on 0 and right on 1 -- which is
+	// what every stereo module in Rack means by a poly cable, and it keeps the
+	// panel exactly as it is rather than growing three more jacks.
+	bool  stereo = false;
+	// The mic geometry belongs to the engine and the display writes to it
+	// directly -- four floats, each written atomically, and the worst a race
+	// can do is leave one control tick reading one new coordinate beside one
+	// old one, which is a position on the head like any other. This is what
+	// NOTICES, so that a drag re-solves the air path (arrival times and the
+	// distance law) instead of leaving it on the geometry of the last strike.
+	float micSeen[4] = {0.f, 0.f, 0.f, 0.f};
 
 	Kit() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
@@ -224,6 +236,13 @@ struct Kit : Module {
 			if (inputs[VOCT_INPUT].isConnected())
 				f0 *= std::pow(2.f, inputs[VOCT_INPUT].getVoltage());
 			drum.f0 = clamp(f0, 12.f, 4000.f);
+			// The one place a drum's ABSOLUTE size matters. Everything about the
+			// modes is scale-invariant -- that is the whole argument for SIZE and
+			// TENSION being one control -- but the speed of sound is not a ratio,
+			// so the distance from the strike to each mic is real metres and a
+			// 22-inch kick images far wider than a 6-inch splash. Same expression
+			// the SIZE tooltip prints, halved to a radius.
+			drum.radiusM = 6.f * std::pow(22.f / 6.f, size) * 0.0127f;
 
 			drum.stiff    = pv(STIFF_PARAM, STIFF_INPUT);
 			drum.air      = pv(AIR_PARAM, AIR_INPUT);
@@ -258,6 +277,12 @@ struct Kit : Module {
 			// updateModes() computes. The other order used last frame's layout.
 			drum.updateModes();
 			drum.updateStrike();
+			if (micSeen[0] != drum.micR[0]   || micSeen[1] != drum.micR[1]
+			 || micSeen[2] != drum.micAng[0] || micSeen[3] != drum.micAng[1]) {
+				micSeen[0] = drum.micR[0];   micSeen[1] = drum.micR[1];
+				micSeen[2] = drum.micAng[0]; micSeen[3] = drum.micAng[1];
+				drum.updateMics();
+			}
 			dispEnergy = drum.energy;
 			for (int k = 0; k < sfs::Drum::NM; k++)
 				modeVis[k] = std::fabs(drum.lo[k].value()) * drum.outGain;
@@ -291,13 +316,18 @@ struct Kit : Module {
 			uiFlash = 1.f;
 		}
 
-		float head, snare;
-		drum.process(head, snare);
+		float head[2], snare[2];
+		drum.process(head, snare, stereo);
 		float lvl = params[LEVEL_PARAM].getValue();
-		float mix = (head + snare) * lvl;
-		outputs[OUT_OUTPUT].setVoltage(sfs::softClip(mix * 5.f));
-		outputs[HEAD_OUTPUT].setVoltage(sfs::softClip(head * lvl * 5.f));
-		outputs[SNARE_OUTPUT].setVoltage(sfs::softClip(snare * lvl * 5.f));
+		int nch = stereo ? 2 : 1;
+		outputs[OUT_OUTPUT].setChannels(nch);
+		outputs[HEAD_OUTPUT].setChannels(nch);
+		outputs[SNARE_OUTPUT].setChannels(nch);
+		for (int c = 0; c < nch; c++) {
+			outputs[OUT_OUTPUT].setVoltage(sfs::softClip((head[c] + snare[c]) * lvl * 5.f), c);
+			outputs[HEAD_OUTPUT].setVoltage(sfs::softClip(head[c] * lvl * 5.f), c);
+			outputs[SNARE_OUTPUT].setVoltage(sfs::softClip(snare[c] * lvl * 5.f), c);
+		}
 
 		uiFlash -= uiFlash * 6.f * args.sampleTime;
 		lights[STRIKE_LIGHT].setBrightness(uiFlash);
@@ -329,14 +359,39 @@ struct Kit : Module {
 	json_t* dataToJson() override {
 		json_t* r = json_object();
 		json_object_set_new(r, "headView", json_integer(headView));
+		json_object_set_new(r, "stereo", json_boolean(stereo));
+		// Where the pair is standing is part of the patch, not a preference:
+		// two Kits in one rack want their mics in different places.
+		json_t* mp = json_array();
+		for (int c = 0; c < 2; c++) json_array_append_new(mp, json_real(drum.micR[c]));
+		for (int c = 0; c < 2; c++) json_array_append_new(mp, json_real(drum.micAng[c]));
+		json_object_set_new(r, "mics", mp);
 		return r;
 	}
 	void dataFromJson(json_t* r) override {
 		if (json_t* j = json_object_get(r, "headView"))
 			headView = clamp((int)json_integer_value(j), 0, 1);
+		if (json_t* j = json_object_get(r, "stereo"))
+			stereo = json_boolean_value(j);
+		if (json_t* mp = json_object_get(r, "mics")) {
+			if (json_array_size(mp) == 4) {
+				for (int c = 0; c < 2; c++)
+					drum.micR[c] = clamp((float)json_real_value(json_array_get(mp, c)),
+					                     0.10f, 0.92f);
+				for (int c = 0; c < 2; c++)
+					drum.micAng[c] = (float)json_real_value(json_array_get(mp, 2 + c));
+			}
+		}
 	}
 
-	void onReset() override { drum.clear(); }
+	// The tuned default pair, taken from a fresh engine rather than retyped --
+	// the numbers were measured, and a second copy of them here is a second
+	// thing to forget to update.
+	void resetMics() {
+		sfs::Drum d;
+		for (int c = 0; c < 2; c++) { drum.micR[c] = d.micR[c]; drum.micAng[c] = d.micAng[c]; }
+	}
+	void onReset() override { drum.clear(); resetMics(); }
 	void onSampleRateChange() override { drum.sr = APP->engine->getSampleRate(); drum.clear(); }
 };
 
@@ -637,6 +692,7 @@ struct KitDisplay : OpaqueWidget {
 		if (module && module->headView == 1) {
 			drawHead3D(args);
 			drawScope(args);
+			drawMics(args);
 			drawStrikeMark(args, head3Cx(), head3Cy(), head3Rad());
 			drawReadout(args, head3Cx());
 			return;
@@ -672,6 +728,7 @@ struct KitDisplay : OpaqueWidget {
 			nvgFill(args.vg);
 		}
 
+		drawMics(args);
 		drawStrikeMark(args, cx, cy, rad);
 		drawReadout(args, cx);
 	}
@@ -707,6 +764,102 @@ struct KitDisplay : OpaqueWidget {
 			                                 (hard - 0.35f) / 0.65f * (0.5f + f * 0.5f)));
 			nvgStrokeWidth(args.vg, 0.8f + hard);
 			nvgStroke(args.vg);
+		}
+	}
+
+	// The two mics, and the two paths from the strike to them. The paths are the
+	// point: their LENGTH DIFFERENCE is the whole stereo image -- a few tenths
+	// of a millisecond and a decibel or two -- so drawing the mics without them
+	// would be a picture of the setup rather than of the mechanism. The nearer
+	// path is drawn brighter, which is also which side the drum is on.
+	//
+	// They are DRAGGABLE, and drawn on the head rather than set from knobs
+	// because that is where the answer is: how a pair sounds is a fact about
+	// where it is relative to the strike, and the panel has no free control to
+	// say that with anyway.
+	int micDrag = -1, micHover = -1;
+
+	// Where mic c lands on the screen, in the head's own projection.
+	Vec micPos(int c) const {
+		float cx, cy, rad, sq;
+		headFrame(cx, cy, rad, sq);
+		float r = module->drum.micR[c], a2 = module->drum.micAng[c];
+		return Vec(cx + std::cos(a2) * r * rad, cy + std::sin(a2) * r * rad * sq);
+	}
+	// Which mic is under the cursor, or -1. The grab radius is a little wider
+	// than the mark is drawn, since the mark is small; the cost is a 2.4 mm
+	// patch of head that grabs instead of striking, and only when stereo is on.
+	int micAt(Vec p) const {
+		if (!module || !module->stereo) return -1;
+		int best = -1;
+		float bestD = mm2px(2.4f) * mm2px(2.4f);
+		for (int c = 0; c < 2; c++) {
+			Vec m = micPos(c);
+			float dx = p.x - m.x, dy = p.y - m.y, d = dx * dx + dy * dy;
+			if (d <= bestD) { bestD = d; best = c; }
+		}
+		return best;
+	}
+	void placeMic(int c, Vec p) {
+		if (!module) return;
+		float cx, cy, rad, sq;
+		headFrame(cx, cy, rad, sq);
+		float x = (p.x - cx) / rad, y = (p.y - cy) / (rad * sq);
+		float r = std::sqrt(x * x + y * y);
+		// The travel stops short of both ends, because both are degenerate
+		// rather than extreme. Every mode is nodal at the rim, so a mic there
+		// hears almost nothing; dead centre only the m = 0 monopoles exist, and
+		// they have no angular shape, so a mic at the middle is a mono mic
+		// wherever the other one is.
+		r = clamp(r, 0.10f, 0.92f);
+		module->drum.micR[c] = r;
+		module->drum.micAng[c] = (r > 1e-4f) ? std::atan2(y, x) : 0.f;
+	}
+
+	void drawMics(const DrawArgs& args) {
+		if (!module || !module->stereo) return;
+		float cx, cy, rad, sq;
+		headFrame(cx, cy, rad, sq);
+		float sr = module->dispR, sa = module->dispA;
+		float sx = cx + std::cos(sa) * sr * rad, sy = cy + std::sin(sa) * sr * rad * sq;
+		// Which is nearer, in the same three dimensions the engine uses -- the
+		// mics are above the head, so the flat picture cannot answer it.
+		float d[2];
+		for (int c = 0; c < 2; c++) {
+			float dx = module->drum.micR[c] * std::cos(module->drum.micAng[c])
+			         - sr * std::cos(sa);
+			float dy = module->drum.micR[c] * std::sin(module->drum.micAng[c])
+			         - sr * std::sin(sa);
+			d[c] = std::sqrt(dx * dx + dy * dy + module->drum.micH * module->drum.micH);
+		}
+		for (int c = 0; c < 2; c++) {
+			Vec m = micPos(c);
+			bool near = d[c] <= d[1 - c];
+			bool live = (micDrag == c) || (micDrag < 0 && micHover == c);
+			nvgBeginPath(args.vg);
+			nvgMoveTo(args.vg, sx, sy);
+			nvgLineTo(args.vg, m.x, m.y);
+			nvgStrokeColor(args.vg, nvgRGBAf(0.55f, 0.62f, 0.78f, near ? 0.42f : 0.16f));
+			nvgStrokeWidth(args.vg, near ? 1.0f : 0.7f);
+			nvgStroke(args.vg);
+
+			float rr = mm2px(live ? 1.9f : 1.5f);
+			nvgBeginPath(args.vg);
+			nvgCircle(args.vg, m.x, m.y, rr);
+			nvgFillColor(args.vg, nvgRGBAf(0.10f, 0.10f, 0.20f, 0.75f));
+			nvgFill(args.vg);
+			float al = live ? 1.f : (near ? 0.95f : 0.55f);
+			nvgStrokeColor(args.vg, nvgRGBAf(0.62f, 0.70f, 0.86f, al));
+			nvgStrokeWidth(args.vg, live ? 1.4f : 1.f);
+			nvgStroke(args.vg);
+			if (font && font->handle >= 0) {
+				sfs::screenFont(args.vg, font, sfs::TYPE_SCREEN_SMALL);
+				nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+				nvgFillColor(args.vg, nvgRGBAf(0.75f, 0.81f, 0.94f, al));
+				// Nudged up: ALIGN_MIDDLE centres the ascender-to-descender band,
+				// not the cap height, so a bare capital sits low in its circle.
+				nvgText(args.vg, m.x, m.y - mm2px(0.12f), c == 0 ? "L" : "R", NULL);
+			}
 		}
 	}
 
@@ -815,8 +968,25 @@ struct KitDisplay : OpaqueWidget {
 		nvgText(args.vg, box.size.x - mm2px(1.4f), mm2px(1.2f),
 		        string::f("%.0f%% out", pct).c_str(), NULL);
 		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
-		nvgFillColor(args.vg, sfs::SCREEN_PMID);
-		nvgText(args.vg, cx, box.size.y - mm2px(1.f), "CLICK THE HEAD TO PLAY", NULL);
+		// The bottom line is the only place the mics are discoverable: they are
+		// two small marks on a surface whose whole job is to be clicked, so
+		// nothing about them says "and these move" until it is written down.
+		// While one is held it reports itself instead -- an angle you are
+		// dragging is worth more than an instruction you have already followed.
+		int live = (micDrag >= 0) ? micDrag : (module->stereo ? micHover : -1);
+		if (live >= 0) {
+			float a2 = module->drum.micAng[live] * 180.f / (float)M_PI;
+			while (a2 < 0.f) a2 += 360.f;
+			nvgFillColor(args.vg, sfs::SCREEN_DIM);
+			nvgText(args.vg, cx, box.size.y - mm2px(1.f),
+			        string::f("%s MIC   %.0f%% OUT   %.0f DEG", live == 0 ? "LEFT" : "RIGHT",
+			                  module->drum.micR[live] * 100.f, a2).c_str(), NULL);
+		} else {
+			nvgFillColor(args.vg, sfs::SCREEN_PMID);
+			nvgText(args.vg, cx, box.size.y - mm2px(1.f),
+			        module->stereo ? "CLICK THE HEAD TO PLAY   DRAG L AND R TO MOVE THE MICS"
+			                       : "CLICK THE HEAD TO PLAY", NULL);
+		}
 	}
 
 	// The browser thumbnail. Without this the module is a dark slab in the
@@ -853,20 +1023,26 @@ struct KitDisplay : OpaqueWidget {
 		nvgFill(args.vg);
 	}
 
-	void hit(Vec p, float vel) {
-		if (!module) return;
-		// THE 3D VIEW HAS ITS OWN GEOMETRY and this was still inverting the flat
-		// one: a different centre, a different radius, and no tilt at all. So a
-		// click right of centre mapped past the rim, clamped, and landed on the
-		// edge -- or missed the head entirely and played nothing. The projection
-		// is X = cx + x*r and Y = cy + y*r*TILT, so undoing it means dividing the
-		// vertical by the tilt as well.
-		float cx, cy, rad, sq;
-		if (module->headView == 1) {
+	// THE 3D VIEW HAS ITS OWN GEOMETRY, and every part of this widget that maps
+	// between the head and the screen has to use the same one -- the mode rings,
+	// the mic marks, a click that strikes and a drag that moves a mic. It lived
+	// inside hit() and was already wrong there once: that inverted the FLAT
+	// projection while the 3D view was showing, so a click right of centre
+	// mapped past the rim, clamped, and landed on the edge. The projection is
+	// X = cx + x*r and Y = cy + y*r*TILT, so undoing it means dividing the
+	// vertical by the tilt as well.
+	void headFrame(float& cx, float& cy, float& rad, float& sq) const {
+		if (module && module->headView == 1) {
 			cx = head3Cx(); cy = head3Cy(); rad = head3Rad(); sq = TILT;
 		} else {
 			cx = headCx(); cy = box.size.y * 0.5f; rad = headRad() * 0.93f; sq = 1.f;
 		}
+	}
+
+	void hit(Vec p, float vel) {
+		if (!module) return;
+		float cx, cy, rad, sq;
+		headFrame(cx, cy, rad, sq);
 		float x = (p.x - cx) / rad, y = (p.y - cy) / (rad * sq);
 		float r = std::sqrt(x * x + y * y);
 		if (r > 1.f) { x /= r; y /= r; }
@@ -878,6 +1054,12 @@ struct KitDisplay : OpaqueWidget {
 
 	void onButton(const ButtonEvent& e) override {
 		if (e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+			// A mic under the cursor is grabbed rather than struck. Tested
+			// FIRST, and it has to be: the head is a play surface everywhere,
+			// so anything drawn on it that you can also move must claim the
+			// press before the strike does.
+			int m = micAt(e.pos);
+			if (m >= 0) { micDrag = m; e.consume(this); return; }
 			// Velocity from where you land: the rim is where you play rimshots,
 			// and it saves a modifier key.
 			hit(e.pos, 0.85f);
@@ -888,16 +1070,34 @@ struct KitDisplay : OpaqueWidget {
 		OpaqueWidget::onButton(e);
 	}
 	// Dragging across the head keeps striking, which is how you get a roll out
-	// of a mouse.
+	// of a mouse -- unless the drag started on a mic, in which case it moves it.
 	void onDragHover(const DragHoverEvent& e) override {
 		if (e.origin == this) {
-			Vec d = e.pos.minus(dragFrom);
-			if (std::sqrt(d.x * d.x + d.y * d.y) > mm2px(2.2f)) {
-				hit(e.pos, 0.45f);
-				dragFrom = e.pos;
+			if (micDrag >= 0) {
+				placeMic(micDrag, e.pos);
+			} else {
+				Vec d = e.pos.minus(dragFrom);
+				if (std::sqrt(d.x * d.x + d.y * d.y) > mm2px(2.2f)) {
+					hit(e.pos, 0.45f);
+					dragFrom = e.pos;
+				}
 			}
 		}
 		OpaqueWidget::onDragHover(e);
+	}
+	// Not onButton's release: a drag that ends outside the widget never sends
+	// one here, and the mic would stay stuck to the cursor.
+	void onDragEnd(const DragEndEvent& e) override {
+		micDrag = -1;
+		OpaqueWidget::onDragEnd(e);
+	}
+	void onHover(const HoverEvent& e) override {
+		micHover = micAt(e.pos);
+		OpaqueWidget::onHover(e);
+	}
+	void onLeave(const LeaveEvent& e) override {
+		micHover = -1;
+		OpaqueWidget::onLeave(e);
 	}
 };
 
@@ -911,6 +1111,11 @@ struct KitWidget : ModuleWidget {
 		// change broke something.
 		menu->addChild(createIndexPtrSubmenuItem("Head view",
 			{"Flat", "3D"}, &m->headView));
+		menu->addChild(createBoolPtrMenuItem("Stereo (2-channel poly outputs)", "",
+		                                     &m->stereo));
+		menu->addChild(createMenuItem("Reset mic positions", "",
+		                              [=]() { m->resetMics(); },
+		                              !m->stereo));
 		menu->addChild(createSubmenuItem("Instruments", "", [=](Menu* sub) {
 			for (int i = 0; i < KIT_NPRESET; i++) {
 				int idx = i;

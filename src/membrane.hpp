@@ -170,6 +170,10 @@ struct Mallet {
 // notes sound like a different instrument rather than a quieter one.
 struct SnareWires {
 	float env = 0.f, buzz = 0.f, lp = 0.f, hp = 0.f, prev = 0.f;
+	// The seed is per instance because a stereo pair runs two of these. Twenty
+	// strands are not one noise source: two mics over the snare hear different
+	// strands, so the two must not share a stream or the buzz collapses to the
+	// centre while the drum around it is wide.
 	uint32_t rng = 0x9e3779b9u;
 
 	inline float noise() {
@@ -212,7 +216,9 @@ struct Drum {
 	float t60lo[NM] = {0.f}, t60hi[NM] = {0.f};
 	float ratio[NM] = {0.f};
 	Mallet mallet;
-	SnareWires wires;
+	SnareWires wires[2];
+	// The two wire sets must not share a noise stream -- see SnareWires.
+	Drum() { wires[1].rng = 0x85ebca6bu; }
 
 	float sr = 48000.f;
 	// set by the host
@@ -229,6 +235,112 @@ struct Drum {
 	float snareAmt = 0.f, snareThr = 0.25f, snareTight = 0.25f;
 
 	float energy = 0.f, headDisp = 0.f;
+
+	// ── the stereo pair ─────────────────────────────────────────────────────
+	// WHERE THE DRUM IS LISTENED TO, as against where it is hit. In mono the
+	// bank taps the head at the strike point, which is why gain[] serves at both
+	// ends. Two taps at two places is what a stereo pair over a real drum is,
+	// and it costs one extra number per mode: mode k reads
+	// J_m(j_mn * r_mic) * cos(m * (theta_mic - theta_strike)), the same closed
+	// form the strike and the muffle already use.
+	//
+	// It is also the first thing here that makes the strike ANGLE audible. A
+	// disc is rotationally symmetric, so with ONE listening point the angle
+	// cannot matter and only the radius is a tone control (see the note above
+	// Drum). A second point breaks the symmetry, so in stereo mode moving the
+	// strike round the head sweeps the image -- with no panner anywhere.
+	//
+	// NOT MIRRORED, deliberately, and this is the whole of why the positions
+	// look arbitrary. cos(m * dtheta) is EVEN, so a pair mirrored about some
+	// axis returns exactly the same signal at both taps for any strike ON that
+	// axis -- and Kit's default strike is straight up the head. A tidy mirrored
+	// pair would therefore put the factory patch on the one line where stereo
+	// mode collapses to mono. Asymmetric in angle AND radius, the only place the
+	// two channels agree is the dead centre, where the strike really is
+	// rotationally symmetric and mono really is the right answer.
+	// BOTH AT THE SAME RADIUS, which is not tidiness. An m = 0 mode is a
+	// monopole: it has no angular shape, so it reads IDENTICALLY at every point
+	// on the head and no placement can ever decorrelate it. Two taps at
+	// different radii therefore do not separate the monopoles, they only make
+	// one channel louder than the other -- measured at 2.8 dB of permanent
+	// lean, for nothing. Equal radii, and every difference between the channels
+	// is angular.
+	//
+	// And the monopoles are most of the sound: measured over the ten
+	// instruments, 69-93% of the energy sits at m = 0, so the head alone is
+	// worth about -12 dB of side, with the fundamental dead centre. That is
+	// honest -- a drum's low thump IS mono in a real pair -- but it is not an
+	// image, which is what the air below is for.
+	// 150 degrees apart, with the pair's centre line 30 degrees off the default
+	// strike. Both halves of that are measurements, not taste (harness mode
+	// `grid`): the separation is what sets the width, and it flattens out past
+	// about 150; the offset decides where the pair's NULL falls. Two points on
+	// a disc always have a perpendicular bisector, and a strike along it is
+	// equidistant from both mics AND angularly symmetric between them, so it
+	// reads identically at each -- there are always two directions on the head
+	// where the drum is dead centre. That is a position like any other, but it
+	// must not be the one every instrument here ships pointing at. 30 degrees
+	// off puts the factory strike 60 degrees clear of it: audibly stereo out of
+	// the box, and only 3 dB off centre.
+	float micR[2]   = {0.60f, 0.60f};
+	float micAng[2] = {3.40f, 0.79f};         // radians; cos < 0 is screen-left
+	float tap[2][NM] = {{0.f}};
+
+	// ── the mics are in the AIR, not on the skin ────────────────────────────
+	// The taps above are the head's motion under each mic, and on their own
+	// they are a pair of contact pickups: no arrival time, no distance. What
+	// makes a spaced pair over a real drum wide is that the strike is somewhere
+	// on the head and the two mics are at different distances FROM IT -- a few
+	// tenths of a millisecond apart, and a little different in level. On a
+	// struck instrument that transient cue is most of what the ear localises
+	// with, and it is the half of the image the monopoles can carry.
+	//
+	// It also means the drum MOVES when you move the strike, which nothing else
+	// in Kit does and which no panner could fake: hit the left of the head and
+	// the drum is on the left, in both channels' timing.
+	//
+	// This is the one place the drum's ABSOLUTE size matters. Everything else
+	// here is scale-invariant (see the top of the file) -- but the speed of
+	// sound is not a ratio, so a 22-inch kick images nearly four times as wide
+	// as a 6-inch splash. radiusM is metres, set from SIZE by the host.
+	float radiusM = 0.14f;
+	// How high the mics sit, in radii. It is the level half of the image and
+	// almost none of the width: from 0.3 to 1.5 radii the swing across the head
+	// goes from 11 dB to under 2, while the side energy moves by half a
+	// decibel. 0.7 gives a drum that travels about 5 dB corner to corner.
+	float micH = 0.70f;
+	static const int MICDL = 512;     // ~2.6 ms at 192k; the span is under 1 ms
+	float dline[2][2][MICDL] = {{{0.f}}};   // [channel][head, snare]
+	int   dwrite = 0;
+	// Latched at the STRIKE, and read through a short crossfade. Sliding them
+	// would be a doppler on whatever is still ringing; jumping them without the
+	// fade would be a splice, which a fresh transient masks in almost every
+	// case but not under a quiet stroke on a loud tail.
+	float micDelay[2] = {0.f, 0.f}, micLvl[2] = {1.f, 1.f};
+	float micDelayOld[2] = {0.f, 0.f}, micLvlOld[2] = {1.f, 1.f};
+	float micXfade = 1.f;             // 1 = settled on the new geometry
+	float micXrate = 1.f;
+
+	// Distance from the strike point to each mic, and what that does to the
+	// two channels: the nearer mic is the reference, so one channel is always
+	// undelayed and at unity and Kit stays a zero-latency module.
+	void updateMics() {
+		float sx = strikeR * std::cos(strikeAng), sy = strikeR * std::sin(strikeAng);
+		float d[2];
+		for (int c = 0; c < 2; c++) {
+			float dx = micR[c] * std::cos(micAng[c]) - sx;
+			float dy = micR[c] * std::sin(micAng[c]) - sy;
+			d[c] = radiusM * std::sqrt(dx * dx + dy * dy + micH * micH);
+		}
+		float dmin = std::min(d[0], d[1]);
+		for (int c = 0; c < 2; c++) {
+			micDelayOld[c] = micDelay[c]; micLvlOld[c] = micLvl[c];
+			micDelay[c] = std::min((float)(MICDL - 2), (d[c] - dmin) / 343.f * sr);
+			micLvl[c]   = dmin / d[c];              // 1/r, normalised to the near mic
+		}
+		micXfade = 0.f;
+		micXrate = 1.f / std::max(1.f, 0.002f * sr);   // 2 ms
+	}
 	// EXCITATION TILT, the thing this bank was missing. A force impulse gives a
 	// mode initial VELOCITY, not displacement, so its amplitude goes as
 	// J*phi(x)/(m*omega) -- a 6 dB/octave rolloff. Injecting the force straight
@@ -331,17 +443,54 @@ struct Drum {
 		}
 	}
 
-	// Where the strike lands. Radius alone, for the reason at the top.
+	// Where the strike lands, and where the drum is heard from. Radius alone
+	// decides the strike, for the reason at the top; the taps are the one place
+	// the angle enters.
 	// Call AFTER updateModes(): the tilt needs ratio[], which that computes.
 	void updateStrike() {
 		const MembraneShapes& sh = membraneShapes();
 		float r0 = ratio[0] > 1e-6f ? ratio[0] : 1.f;
 		for (int k = 0; k < NM; k++) {
-			float g = sh.at(k, strikeR);
+			// The excitation tilt applies ONCE here and once again wherever the
+			// signal is tapped -- gain[] injects and, in mono, also listens, so
+			// the total is tilt twice. The stereo taps carry exactly one tilt
+			// each for that reason: switching to stereo must not change the
+			// spectral slope, only where it is heard from.
+			float t = 1.f;
 			if (tilt > 0.f && ratio[k] > 1e-6f)
-				g *= std::pow(r0 / ratio[k], tilt);
-			gain[k] = g;
+				t = std::pow(r0 / ratio[k], tilt);
+			gain[k] = sh.at(k, strikeR) * t;
+			int m = MEMBRANE_MODES[k].m;
+			for (int c = 0; c < 2; c++)
+				tap[c][k] = sh.at(k, micR[c]) * t
+				          * (m ? std::cos(m * (micAng[c] - strikeAng)) : 1.f);
 		}
+		// Level, matched to mono. A pair of mics up in the air really is quieter
+		// than a pickup sitting on the spot you hit -- measured at 5.3 dB down
+		// for a strike dead centre -- but "the stereo switch drops the level"
+		// is a wart, not a feature. It is COMMON to both channels, so it sets
+		// the level and never the image, and the strike position goes on
+		// changing the loudness exactly as much as it does in mono.
+		//
+		// ENERGY, not the first sample. Matching the transient is one line
+		// shorter and it is wrong: the taps redistribute the strike across modes
+		// that ring for very different lengths, so an impulse match left the
+		// frame drum 7.9 dB loud over a second. The modes are at different
+		// frequencies and so very nearly orthogonal in time, which makes the
+		// total energy a sum per mode of amplitude squared by decay -- and t60
+		// is sitting right there from updateModes().
+		float num = 0.f, den = 0.f;
+		for (int k = 0; k < NM; k++) {
+			float g2 = gain[k] * gain[k], t60 = t60lo[k];
+			den += g2 * g2 * t60;
+			num += g2 * 0.5f * (tap[0][k] * tap[0][k] + tap[1][k] * tap[1][k]) * t60;
+		}
+		// Clamped: nothing stops a tap set from coming out near-orthogonal to
+		// the strike, and an unbounded 1/num would answer that with a bang.
+		float comp = (num > 1e-12f) ? std::sqrt(den / num) : 1.f;
+		if (comp < 0.4f) comp = 0.4f;
+		if (comp > 2.5f) comp = 2.5f;
+		for (int k = 0; k < NM; k++) { tap[0][k] *= comp; tap[1][k] *= comp; }
 	}
 
 	// hardness 0..1 spans felt to wood. Contact time follows from mass and
@@ -360,39 +509,103 @@ struct Drum {
 		const float MREF = 0.05f - 0.035f * 0.75f;                // the default EXCITER
 		beaterComp = std::pow(MREF / std::max(mallet.mass, 1e-4f), 0.7f);
 		mallet.strike(vel, 0.0015f);
+		updateMics();          // where this hit is, relative to the two mics
+
 	}
 
-	// One sample. head/snare come back separately so the panel can offer both.
-	void process(float& headOut, float& snareOut) {
+	// One sample, into nch channels. head/snare come back separately so the
+	// panel can offer both.
+	//
+	// Templated on the channel count rather than branched inside the loop: the
+	// mono build then compiles to precisely the arithmetic it had before this
+	// existed, in the same order, so turning stereo OFF is not a different
+	// instrument that happens to be close.
+	template <bool ST>
+	inline void run(float* headOut, float* snareOut) {
 		float dt = 1.f / sr;
 		float F = mallet.process(headDisp, dt) * fimp * beaterComp;
 
-		float sum = 0.f, resoSum = 0.f, disp = 0.f;
+		float sum[2] = {0.f, 0.f}, resoSum[2] = {0.f, 0.f}, disp = 0.f, ref = 0.f;
 		for (int k = 0; k < NM; k++) {
 			if (F != 0.f) { lo[k].hit(F * gain[k]); hi[k].hit(F * gain[k] * 0.6f); }
 			float a = lo[k].process(), b = hi[k].process();
-			sum     += (a + b * 0.7f) * gain[k];
-			resoSum += b * gain[k];
-			disp    += a * gain[k];
+			if (ST) {
+				float ab = a + b * 0.7f;
+				sum[0] += ab * tap[0][k]; resoSum[0] += b * tap[0][k];
+				sum[1] += ab * tap[1][k]; resoSum[1] += b * tap[1][k];
+				// The strike-point reading, kept even though nothing listens
+				// there in stereo. BEND is driven by it, and a pitch envelope
+				// that changed shape when you switched the output to stereo
+				// would be a bug wearing a feature's clothes.
+				ref += ab * gain[k];
+			} else {
+				sum[0] += (a + b * 0.7f) * gain[k];
+				resoSum[0] += b * gain[k];
+			}
+			disp += a * gain[k];
 		}
 		headDisp = disp;                    // metres, same unit as the mallet
-		energy += (std::fabs(sum) - energy) * 0.002f;
+		energy += (std::fabs(ST ? ref : sum[0]) - energy) * 0.002f;
 
 		// SQUARED, and far quieter. Linear at gain 3 put the wires above the head
 		// at the very first notch of the knob -- 1.24x its level at 0.125 -- so
 		// there was no such thing as a light dusting of snare. Squared, the
 		// bottom of the travel is the whisper it should be and the top still
 		// buries the drum if you want it to.
-		snareOut = snareAmt > 0.f
-		         ? wires.process(resoSum * outGain, snareThr, snareTight, sr)
-		           * snareAmt * snareAmt * 0.30f
-		         : 0.f;
-		headOut = sum * outGain;
+		for (int c = 0; c < (ST ? 2 : 1); c++) {
+			snareOut[c] = snareAmt > 0.f
+			            ? wires[c].process(resoSum[c] * outGain, snareThr, snareTight, sr)
+			              * snareAmt * snareAmt * 0.30f
+			            : 0.f;
+			headOut[c] = sum[c] * outGain;
+		}
+		if (ST) airPath(headOut, snareOut);
+	}
+	// The trip from the head to the two mics. Both signals per channel go
+	// through it together -- they left the same drum at the same moment.
+	inline void airPath(float* headOut, float* snareOut) {
+		dwrite = (dwrite + 1) & (MICDL - 1);
+		for (int c = 0; c < 2; c++) {
+			dline[c][0][dwrite] = headOut[c];
+			dline[c][1][dwrite] = snareOut[c];
+		}
+		if (micXfade < 1.f) { micXfade += micXrate; if (micXfade > 1.f) micXfade = 1.f; }
+		for (int c = 0; c < 2; c++) {
+			float g = micLvlOld[c] + (micLvl[c] - micLvlOld[c]) * micXfade;
+			for (int j = 0; j < 2; j++) {
+				float a = tapDelay(c, j, micDelay[c]);
+				if (micXfade < 1.f) {
+					float b = tapDelay(c, j, micDelayOld[c]);
+					a = b + (a - b) * micXfade;
+				}
+				(j == 0 ? headOut : snareOut)[c] = a * g;
+			}
+		}
+	}
+	inline float tapDelay(int c, int j, float d) const {
+		int i = (int)d;
+		float f = d - i;
+		const float* L = dline[c][j];
+		float a = L[(dwrite - i + MICDL) & (MICDL - 1)];
+		float b = L[(dwrite - i - 1 + MICDL) & (MICDL - 1)];
+		return a + (b - a) * f;
+	}
+	void process(float* headOut, float* snareOut, bool stereo) {
+		if (stereo) run<true>(headOut, snareOut); else run<false>(headOut, snareOut);
 	}
 
 	void clear() {
 		for (int k = 0; k < NM; k++) { lo[k].clear(); hi[k].clear(); }
-		mallet.reset(); wires.clear(); energy = 0.f; headDisp = 0.f;
+		mallet.reset();
+		for (int c = 0; c < 2; c++) wires[c].clear();
+		std::memset(dline, 0, sizeof dline);
+		micXfade = 1.f;
+		// The mic delays are in SAMPLES, and clear() is what a sample-rate
+		// change calls. Re-solving them here means they are never left over
+		// from the old rate waiting for the next strike to correct them.
+		updateMics();
+		micXfade = 1.f;
+		energy = 0.f; headDisp = 0.f;
 	}
 };
 

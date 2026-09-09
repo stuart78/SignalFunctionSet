@@ -250,6 +250,32 @@ struct Loom : Module {
 	};
 	enum LightId { AUTO_LIGHT, LIGHTS_LEN };
 
+	// ── how a V/OCT + GATE pair is voiced ───────────────────────────────────
+	// A gate used to STRUM: every enabled string plucked, spread across the
+	// nut. That is right for a chord and wrong for a melody, which is what a
+	// V/OCT cable means -- eight strings ring on every note and the line
+	// disappears into its own accompaniment.
+	//
+	// NEAREST plays ONE string: the one whose own tuning is closest to the note
+	// asked for, retuned to hit it exactly. That is what a player does, and it
+	// is why the choice matters musically rather than being a convenience: the
+	// string that gets the note keeps its own decay, stiffness, pick position
+	// and pickup comb, so a melody moves between the instrument's own voices
+	// instead of being transposed as a block.
+	enum VoiceMode { VOICE_NEAREST, VOICE_STRUM };
+	int voiceMode = VOICE_NEAREST;
+	// How far each string has been bent from its own tuning to reach the note
+	// it was last given. Per string, and it PERSISTS while the string rings, so
+	// a note already sounding keeps the pitch it was played at when the next
+	// note lands somewhere else.
+	float noteOff[LOOM_N] = {};
+	int   lastNearest = -1;
+
+	// Whether patching a string's own output takes it out of the stereo mix.
+	// Off by default: the mix is the instrument, and a player reaching for one
+	// string's jack is not always saying "and remove it from everything else".
+	bool soloOnPatch = false;
+
 	// ── per-string attributes: screen-edited, so plain state + JSON (as Beat) ──
 	float tune[LOOM_N]     = {};
 	float decayOff[LOOM_N] = {};    // 0..1 → ×0.25 .. ×4 of the global decay
@@ -568,7 +594,13 @@ struct Loom : Module {
 			rootSemis += std::round(inputs[ROOT_CV_INPUT].getVoltage() * 12.f);
 		float oct = params[OCT_PARAM].getValue();
 		if (inputs[OCT_CV_INPUT].isConnected()) oct += inputs[OCT_CV_INPUT].getVoltage();
-		float basePitch = oct + rootSemis / 12.f + inputs[VOCT_INPUT].getVoltage();
+		// In NEAREST, V/OCT is the note being ASKED FOR, not a transposition of
+		// the whole instrument. If it went on transposing, every string would
+		// move with it and "which string is closest" would have the same answer
+		// for ever.
+		float voct = inputs[VOCT_INPUT].getVoltage();
+		bool nearestOn = (voiceMode == VOICE_NEAREST) && inputs[VOCT_INPUT].isConnected();
+		float basePitch = oct + rootSemis / 12.f + (nearestOn ? 0.f : voct);
 
 		// ── triggers ───────────────────────────────────────────────────────────
 		if (resetTrig.process(inputs[RESET_INPUT].getVoltage(), 0.1f, 1.f)
@@ -577,8 +609,31 @@ struct Loom : Module {
 		}
 
 		bool globalGate = inputs[GATE_INPUT].getVoltage() >= 1.f;
-		if (gateTrig.process(inputs[GATE_INPUT].getVoltage(), 0.1f, 1.f))
-			strum(1.f, -1.f);
+		if (gateTrig.process(inputs[GATE_INPUT].getVoltage(), 0.1f, 1.f)) {
+			if (nearestOn) {
+				// The note wanted, in the same semitone frame the strings are
+				// measured in: base plus V/OCT. Each string's own pitch is base
+				// plus its tuning, so the comparison is tuning against V/OCT.
+				float want = (oct + rootSemis / 12.f + voct) * 12.f;
+				int best = -1; float bestD = 1e9f;
+				for (int i = 0; i < LOOM_N; i++) {
+					if (!enabled[i]) continue;
+					float own = (oct + rootSemis / 12.f) * 12.f + tuneOf(i);
+					float d = std::fabs(want - own);
+					if (d < bestD) { bestD = d; best = i; }
+				}
+				if (best >= 0) {
+					// Bend that string to the note. Its own tuning stays where
+					// it is -- this is an offset, so the tuning the screen shows
+					// is still the truth about the instrument.
+					noteOff[best] = want - ((oct + rootSemis / 12.f) * 12.f + tuneOf(best));
+					lastNearest = best;
+					pluck(best, velFor(best), -1.f);
+				}
+			} else {
+				strum(1.f, -1.f);
+			}
+		}
 
 		bool autoOn = params[AUTO_PARAM].getValue() > 0.5f;
 		lights[AUTO_LIGHT].setBrightness(autoOn ? 1.f : 0.f);
@@ -623,7 +678,12 @@ struct Loom : Module {
 			// per-string gate
 			float gv = inputs[STRING_GATE_INPUT + i].getVoltage();
 			if (strTrig[i].process(gv, 0.1f, 1.f)) pluck(i, velFor(i), -1.f);
-			s.gateHeld = enabled[i] && (globalGate || gv >= 1.f);
+			// A held global gate sustains only the string it actually played.
+			// Holding all eight is what made a bowed melody sound like a bowed
+			// chord: the exciter runs while gateHeld is true, so every string
+			// would go on being bowed under a single note.
+			bool heldByGlobal = globalGate && (!nearestOn || i == lastNearest);
+			s.gateHeld = enabled[i] && (heldByGlobal || gv >= 1.f);
 			if (s.sustainTimer > 0.f) s.sustainTimer -= args.sampleTime;
 
 			// scheduled strum arrival
@@ -641,7 +701,7 @@ struct Loom : Module {
 			}
 
 			// ── geometry of the loop ───────────────────────────────────────────
-			float semis = basePitch * 12.f + tuneOf(i);
+			float semis = basePitch * 12.f + tuneOf(i) + noteOff[i];
 			float freq = dsp::FREQ_C4 * std::pow(2.f, semis / 12.f);
 			freq = clamp(freq, 20.f, std::min(8000.f, sr * 0.24f));
 
@@ -856,10 +916,17 @@ struct Loom : Module {
 			bridge += y;
 			motion += s.brLp;
 
-			float p = ((float)i / (float)(LOOM_N - 1) * 2.f - 1.f) * stereoWidth;
-			float th = (p + 1.f) * (float)M_PI_4;
-			mixL += y * std::cos(th);
-			mixR += y * std::sin(th);
+			// Taken out of the MIX only. `bridge` and `motion` above are the
+			// coupling bus -- what the strings do to each other through the
+			// bridge is physics, and it cannot depend on where a cable is
+			// patched. Removing a string from those as well would detune and
+			// thin every other string the moment you took its output.
+			if (!(soloOnPatch && outputs[STRING_OUTPUT + i].isConnected())) {
+				float p = ((float)i / (float)(LOOM_N - 1) * 2.f - 1.f) * stereoWidth;
+				float th = (p + 1.f) * (float)M_PI_4;
+				mixL += y * std::cos(th);
+				mixR += y * std::sin(th);
+			}
 
 			outputs[STRING_OUTPUT + i].setVoltage(loomSoftClip(y * LOOM_OUT_GAIN));
 
@@ -920,6 +987,8 @@ struct Loom : Module {
 		json_t* root = json_object();
 		json_object_set_new(root, "tab", json_integer(tab));
 		json_object_set_new(root, "quantScale", json_integer(quantScale));
+		json_object_set_new(root, "voiceMode", json_integer(voiceMode));
+		json_object_set_new(root, "soloOnPatch", json_boolean(soloOnPatch));
 		json_object_set_new(root, "stereoWidth", json_real(stereoWidth));
 		json_object_set_new(root, "mouseMode", json_integer(mouseMode));
 		json_object_set_new(root, "hoverInBackground", json_boolean(hoverInBackground));
@@ -943,6 +1012,15 @@ struct Loom : Module {
 
 	void dataFromJson(json_t* root) override {
 		if (json_t* j = json_object_get(root, "tab")) tab = clamp((int)json_integer_value(j), 0, 6);
+		// A patch saved before this existed strummed on every gate, so it comes
+		// back strumming. Only a NEW Loom defaults to nearest -- changing what a
+		// saved patch does when it is reopened is not a default, it is an edit
+		// someone did not make.
+		voiceMode = VOICE_STRUM;
+		if (json_t* j = json_object_get(root, "voiceMode"))
+			voiceMode = clamp((int)json_integer_value(j), 0, 1);
+		if (json_t* j = json_object_get(root, "soloOnPatch"))
+			soloOnPatch = json_boolean_value(j);
 		if (json_t* j = json_object_get(root, "quantScale"))
 			quantScale = clamp((int)json_integer_value(j), -1, sfs::NUM_SCALES - 1);
 		if (json_t* j = json_object_get(root, "stereoWidth")) stereoWidth = json_number_value(j);
@@ -1436,6 +1514,13 @@ struct LoomWidget : ModuleWidget {
 	void appendContextMenu(Menu* menu) override {
 		Loom* m = dynamic_cast<Loom*>(this->module);
 		assert(m);
+		menu->addChild(new MenuSeparator);
+
+		menu->addChild(createIndexPtrSubmenuItem("V/OCT + GATE plays",
+			{"The nearest string, retuned to the note", "All strings (strum)"},
+			&m->voiceMode));
+		menu->addChild(createBoolPtrMenuItem(
+			"A patched string output leaves the mix", "", &m->soloOnPatch));
 		menu->addChild(new MenuSeparator);
 
 		menu->addChild(createSubmenuItem("Tuning", "", [=](Menu* sub) {
